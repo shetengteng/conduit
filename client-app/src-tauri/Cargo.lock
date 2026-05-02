@@ -389,6 +389,7 @@ name = "conduit-client"
 version = "0.1.0"
 dependencies = [
  "env_logger",
+ "libc",
  "log",
  "once_cell",
  "portpicker",

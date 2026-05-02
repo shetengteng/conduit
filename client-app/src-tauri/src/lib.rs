@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+mod autostart;
 mod commands;
 mod error;
 mod healthz;
@@ -48,6 +50,9 @@ pub fn run() {
             commands::open_external,
             commands::show_main_window,
             commands::quit_app,
+            commands::autostart_status,
+            commands::autostart_enable,
+            commands::autostart_disable,
         ])
         .setup(move |app| {
             tray::setup(app)?;

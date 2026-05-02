@@ -1,21 +1,20 @@
 <script setup lang="ts">
 /**
- * 设置页 —— M-δ.partial。
+ * 设置页 —— M-δ。
  *
- * 真正可用的 4 块:
- *   1. 运行时信息 (端口 + healthz 自检) - 沿用 M-α
- *   2. 手动添加 server (输入 host:port, 直接 POST /api/connect/{server_id})
- *      用于 mDNS 不通(跨网段 / 沙箱)的兜底场景
- *   3. 路由缓存快速操作 (清空)
- *   4. 历史 server 重置 (清掉 known-servers.json)
+ * 块:
+ *   1. 运行时信息 (端口)
+ *   2. 开机自启开关 (调用 Rust 命令写 ~/Library/LaunchAgents/com.conduit.client.plist)
+ *   3. 手动连接 server (mDNS 不通时兜底)
+ *   4. 路由缓存维护 (清空)
+ *   5. 诊断入口 (跳到独立诊断页)
  *
- * 暂不支持(留 M-δ 完整版):
- *   - macOS launchctl 启动自启
+ * 暂不实现 (留 M-ε):
  *   - 系统代理开关 toggle (cfg 启动时定型,运行时改要 sidecar 重启)
  *   - 日志文件路径选择
  *   - PAC 自定义路径
  */
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Label } from '@/components/ui/label'
@@ -23,18 +22,21 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
   RiSettings4Line,
-  RiInformationLine,
   RiLinkM,
   RiDeleteBinLine,
   RiServerLine,
   RiAlertLine,
+  RiStethoscopeLine,
+  RiToggleLine,
 } from '@remixicon/vue'
 import { getRuntime } from '@/api/runtime'
-import { clientStore } from '@/stores/clientStore'
 import { connectionStore } from '@/stores/connectionStore'
 import { cacheStore } from '@/stores/cacheStore'
 import { useToast } from '@/composables/useToast'
+import { uiStore } from '@/stores/ui'
 import type { AppRuntime } from '@/types/client'
+import { invoke } from '@tauri-apps/api/core'
+import { Switch } from '@/components/ui/switch'
 
 const toast = useToast()
 const runtime = ref<AppRuntime | null>(null)
@@ -46,11 +48,38 @@ const manualSocks = ref(8081)
 const manualApi = ref(8090)
 const manualBusy = ref(false)
 
+const autostartEnabled = ref(false)
+const autostartBusy = ref(false)
+const autostartError = ref<string | null>(null)
+
 onMounted(async () => {
   runtime.value = await getRuntime()
+  await refreshAutostart()
 })
 
-const checks = computed(() => clientStore.checks.value)
+async function refreshAutostart() {
+  try {
+    autostartEnabled.value = await invoke<boolean>('autostart_status')
+    autostartError.value = null
+  } catch (e) {
+    autostartError.value = e instanceof Error ? e.message : String(e)
+  }
+}
+
+async function toggleAutostart(next: boolean) {
+  autostartBusy.value = true
+  try {
+    await invoke(next ? 'autostart_enable' : 'autostart_disable')
+    autostartEnabled.value = next
+    toast.success(next ? '已启用开机自启' : '已关闭开机自启')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error('开机自启切换失败', { detail: msg })
+    await refreshAutostart()
+  } finally {
+    autostartBusy.value = false
+  }
+}
 
 async function handleManualConnect() {
   if (!manualHost.value.trim() || !manualPort.value) {
@@ -114,6 +143,34 @@ async function handleFlushCache() {
           <Label class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Control API 端口</Label>
           <span class="rounded-md bg-muted px-2 py-1 font-mono text-sm tabular-nums">{{ runtime?.api_port ?? '—' }}</span>
         </div>
+      </CardContent>
+    </Card>
+
+    <!-- 开机自启 -->
+    <Card size="sm">
+      <CardHeader>
+        <CardTitle class="flex items-center gap-2 text-[13px] font-semibold">
+          <RiToggleLine class="size-4 text-muted-foreground" />
+          开机自启
+        </CardTitle>
+        <CardDescription class="text-xs">
+          通过 macOS launchctl 在 ~/Library/LaunchAgents/ 写入 plist，登录后自动启动 Conduit Client
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="flex items-center justify-between gap-3">
+        <div class="flex flex-col gap-0.5 text-xs text-muted-foreground">
+          <span>当前状态:
+            <span :class="autostartEnabled ? 'text-emerald-700 dark:text-emerald-400 font-medium' : 'text-muted-foreground'">
+              {{ autostartEnabled ? '已启用' : '未启用' }}
+            </span>
+          </span>
+          <span v-if="autostartError" class="text-destructive">{{ autostartError }}</span>
+        </div>
+        <Switch
+          :model-value="autostartEnabled"
+          :disabled="autostartBusy"
+          @update:model-value="toggleAutostart"
+        />
       </CardContent>
     </Card>
 
@@ -186,37 +243,25 @@ async function handleFlushCache() {
       </CardContent>
     </Card>
 
-    <!-- healthz 自检 -->
+    <!-- 诊断入口 (完整 5 步在独立诊断页) -->
     <Card size="sm">
       <CardHeader>
         <CardTitle class="flex items-center gap-2 text-[13px] font-semibold">
-          <RiInformationLine class="size-4 text-muted-foreground" />
+          <RiStethoscopeLine class="size-4 text-muted-foreground" />
           自检详情
         </CardTitle>
         <CardDescription class="text-xs">
-          基于 client-app/core/api/healthz.py 返回的项;M-δ 阶段会扩展为完整 5 步诊断
+          完整 5 步自检 (sidecar / mDNS / server 可达 / PAC / 系统代理) 在独立的诊断页
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div v-if="!checks.length" class="text-xs text-muted-foreground">
-          尚未拉取 healthz
-        </div>
-        <ul v-else class="flex flex-col gap-2">
-          <li
-            v-for="c in checks"
-            :key="c.name"
-            class="flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 text-xs"
-          >
-            <div class="flex items-center gap-2">
-              <span
-                class="inline-block size-2 rounded-full"
-                :class="c.ok ? 'bg-emerald-500' : 'bg-destructive'"
-              />
-              <span class="font-mono font-medium text-foreground">{{ c.name }}</span>
-            </div>
-            <span class="font-mono text-muted-foreground">{{ c.detail }}</span>
-          </li>
-        </ul>
+      <CardContent class="flex items-center justify-between gap-3">
+        <p class="text-xs text-muted-foreground">
+          失败项会给出可操作的修复建议，并支持一键复制完整报告
+        </p>
+        <Button variant="outline" size="sm" class="gap-1.5" @click="uiStore.setActive('diagnose')">
+          <RiStethoscopeLine class="size-3.5" />
+          打开诊断
+        </Button>
       </CardContent>
     </Card>
 

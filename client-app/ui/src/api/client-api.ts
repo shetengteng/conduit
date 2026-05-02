@@ -10,6 +10,7 @@
  */
 import type {
   ConnectionSnapshot,
+  DiagnoseResponse,
   HealthzResponse,
   RouteCacheResponse,
   ServerListResponse,
@@ -36,4 +37,6 @@ export const ClientApi = {
   },
   flushCache: () => apiDelete<{ ok: boolean; removed: number }>("/api/cache"),
   traffic: () => apiGet<TrafficSnapshot>("/api/traffic"),
+  // M-δ
+  diagnose: () => apiGet<DiagnoseResponse>("/api/diagnose"),
 };

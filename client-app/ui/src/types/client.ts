@@ -233,6 +233,31 @@ export interface RouteDecisionPayload {
 }
 
 // ============================================================================
+// /api/diagnose (M-δ)
+// ============================================================================
+
+export type DiagnoseCheckKey =
+  | "sidecar"
+  | "mdns"
+  | "server_reach"
+  | "pac"
+  | "system_proxy";
+
+export interface DiagnoseCheck {
+  key: DiagnoseCheckKey;
+  label: string;
+  ok: boolean;
+  detail: string;
+  remediation: string | null;
+}
+
+export interface DiagnoseResponse {
+  ok: boolean;
+  checks: DiagnoseCheck[];
+  checked_at: number;
+}
+
+// ============================================================================
 // 统一错误响应（所有 4xx/5xx）
 // ============================================================================
 

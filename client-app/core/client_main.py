@@ -218,6 +218,7 @@ class ClientRuntime:
         self.last_connect_error: Optional[str] = None
         self.heartbeat: Optional[Heartbeat] = None
         self._connect_lock = asyncio.Lock()
+        self._started_at = time.time()  # M-δ diagnose 用
 
     def _initial_endpoint(self) -> ServerEndpoint | None:
         if self.cfg.server_host is None:

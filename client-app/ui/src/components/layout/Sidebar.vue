@@ -24,6 +24,7 @@ import {
   RiPlugLine,
   RiSettings4Line,
   RiShieldKeyholeLine,
+  RiStethoscopeLine,
 } from '@remixicon/vue'
 import { uiStore, type NavKey } from '@/stores/ui'
 import { connectionStore } from '@/stores/connectionStore'
@@ -33,6 +34,7 @@ const collapsed = useMediaQuery('(max-width: 999px)')
 const navItems = computed(() => [
   { key: 'discovery' as NavKey, icon: RiCompass3Line, label: '发现' },
   { key: 'connected' as NavKey, icon: RiPlugLine, label: '已连接' },
+  { key: 'diagnose' as NavKey, icon: RiStethoscopeLine, label: '诊断' },
   { key: 'settings' as NavKey, icon: RiSettings4Line, label: '设置' },
 ])
 

@@ -1,6 +1,8 @@
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_shell::ShellExt;
 
+#[cfg(target_os = "macos")]
+use crate::autostart;
 use crate::error::ConduitError;
 use crate::state::{AppRuntime, AppState};
 
@@ -29,4 +31,40 @@ pub fn show_main_window(app: AppHandle) -> Result<(), ConduitError> {
 #[tauri::command]
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
+}
+
+#[tauri::command]
+pub fn autostart_status() -> Result<bool, ConduitError> {
+    #[cfg(target_os = "macos")]
+    {
+        autostart::is_enabled()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(ConduitError::Internal("autostart not supported on this OS".into()))
+    }
+}
+
+#[tauri::command]
+pub fn autostart_enable() -> Result<(), ConduitError> {
+    #[cfg(target_os = "macos")]
+    {
+        autostart::enable()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(ConduitError::Internal("autostart not supported on this OS".into()))
+    }
+}
+
+#[tauri::command]
+pub fn autostart_disable() -> Result<(), ConduitError> {
+    #[cfg(target_os = "macos")]
+    {
+        autostart::disable()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err(ConduitError::Internal("autostart not supported on this OS".into()))
+    }
 }

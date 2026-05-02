@@ -15,12 +15,14 @@
 
 ## 📍 当前进度
 
-> **整体完成度：≈ 90%（13.55 / 15.0 工日）**
-> **里程碑**：S0 + S1 + S2 完成 ✅，**S3 完成度 100%**，**S5 核心智能代理引擎完成度 100%（M1+M2 全部端到端验证）**，**S6 客户端开发已完成 M-α + M-β.1 + M-β.2 + M-γ（骨架点亮 + 真发现 + 真连接 + 流量曲线 + 路由命中表 + 设置页可用化）**。剩余 M-δ（macOS 4 态托盘 + launchctl 自启 + DMG 打包 + 完整 5 步诊断）。
+> **整体完成度：≈ 95%（14.30 / 15.0 工日）**
+> **里程碑**：S0 + S1 + S2 完成 ✅，**S3 完成度 100%**，**S5 核心智能代理引擎完成度 100%（M1+M2 全部端到端验证）**，**S6 客户端开发已完成 M-α + M-β.1 + M-β.2 + M-γ + M-δ（应用功能侧）**：骨架点亮 → mDNS 真发现 → 真连接 5 步 → 流量曲线/路由命中 → **完整 5 步诊断页 + 状态托盘菜单 + macOS launchctl 开机自启**。剩余 DMG 打包 + Apple notarization（外部依赖较多，留 S4 一并处理）。
 > **S5 核心交付**：6 个核心模块（route_cache / route_resolver / pac_parser / local_proxy / system_proxy / client_main）+ 67 个 pytest 全绿；端到端 SOCKS5 直通 / 走 server / direct 失败自愈三条路径全部验证；macOS networksetup 通过 mockable ProcessRunner 完整覆盖（含残留代理 cleanup）。
 > **S3 最新交付（B 风格落地，2026-05-01）**：基于 4 套高大上原型选型（A Linear/Cursor、B Stripe/Vercel、C Tailscale/1Password、D Datadog/Grafana），用户选定 **B 风格（净白企业级）**。完成 design tokens 重写（primary 改为 zinc-900、暖白背景、极薄阴影、暗色模式适配）+ 9 个组件改造（Sidebar 黑底白字选中态 / TopStatusBar 黑色停止按钮 / ProxyControl border-l-2 + extralight Display 数字 / NetworkPanel emerald 胶囊 / TrafficChart zinc 曲线 / ClientList zinc-100 协议胶囊 / ShareCard 黑底"推荐"胶囊 / LogsView + SettingsView 大标题 hierarchy）。两个 header 高度精确对齐到 56px。typecheck + lint 全绿。
 > **S3 收尾 bug 修复（2026-05-01 晚）**：3 个生产级 bug 修复 ——（1）sidecar 缺 CORS 头导致 webview fetch 静默失败（"未启动" + 按钮 disabled），新增 `cors_middleware` + 放行 OPTIONS preflight；（2）`<Switch v-model>` 未对接 reka-ui 的 `update:checked` 事件，导致首启弹窗勾选无反应（FirstLaunchModal / LogsView / SettingsView 三处统一改为 `v-model:checked`）；（3）`proxyStore.refresh()` 失败时静默挂掉，新增 toast 提示降低下次定位成本。
 > **S5 / S6 全部核心闭环已通**：mDNS discoverer (M-β.1) + connectivity probe + heartbeat + 3 核心控制 API (M-β.2) + traffic_meter + cache API + route_decision 事件 (M-γ)。剩余 diagnose 5 步面板留 M-δ。
+
+> **M-δ 完工（2026-05-02 下午）**：应用化收尾（不含 DMG）—— 后端新增 `client-app/core/api/diagnose.py` 实现 `GET /api/diagnose`，5 步检查（sidecar/mDNS/server_reach/PAC/system_proxy）每项带 `ok` + `detail` + 可操作的 `remediation` 文案；client-app/core/client_main.py 加 `_started_at` 用于 sidecar uptime；client-app/core/api/server.py 注册 diagnose 路由。Tauri 主进程新增 `src-tauri/src/autostart.rs`（macOS LaunchAgent：写 `~/Library/LaunchAgents/com.conduit.client.plist` + 即时 `launchctl bootstrap gui/$UID`，bundle 路径自动从 current_exe 推导，开发模式直接报错避免误伤）+ 三个 invoke 命令（`autostart_status`/`enable`/`disable`，全部带 `#[cfg(target_os = "macos")]` 平台守卫）。`src-tauri/src/tray.rs` 完整重写：状态文字（5s 轮询 `/api/connection`，自动展示 `已连接: name (host:port) · 波动/失联`）+ 打开主窗口/诊断页/设置页（emit `tray:navigate` → Vue listen 切 NavKey）+ 一键断开（HTTP POST `/api/disconnect`）+ 退出。前端新增 `DiagnoseView.vue`（净白 B 风格，5 项卡片化展示，失败项展开琥珀色 remediation，顶部一键「重新检测」+「复制报告」生成多行文本贴 issue 用）+ `DiagnoseRow.vue`（解决 SFC 单一 export 限制的拆出来的复用单元）+ `SettingsView.vue` 新增「开机自启」Switch（绑 invoke `autostart_*`）+ 把旧的 healthz 自检面板替换为「打开诊断」入口。`stores/ui.ts` 加 `diagnose` NavKey，Sidebar 加诊断菜单项 + 听诊器图标。`App.vue` 监听 `tray:navigate` 事件实现托盘 → 路由切换。验证：Python 116 个 pytest 全绿（已含 5 个 diagnose API 集成）+ Rust 2 个新增 autostart 单元测试通过；vue-tsc + vite build 全绿；端到端 standalone 跑 client (api 11190) + server (api 11091) → POST /api/connect → `curl /api/diagnose` 返回 5 项全 OK，server_reach 真实回 1ms 延迟、PAC 拉到 4148B + 26 条预填规则。
 
 > **M-γ 完工（2026-05-02 中午）**：流量曲线 + 路由命中表 + 设置页可用化 —— 后端新增 `traffic_meter.py`（1Hz tick + cumulative + 桶聚合）+ `api/cache.py`（GET /api/cache 含 stats / DELETE /api/cache 清空 / GET /api/traffic snapshot）+ `RouteResolver.set_event_publisher` 钩子（每次决策 publish `route_decision` 事件）+ `LocalProxyServer.set_progress_callback`（连接成功后 ClientRuntime 注入 traffic_meter.on_chunk，相应 disconnect / failed 路径全部 rollback）。前端新增 `trafficStore`（60s 滚动窗口 + computed 速率/累计/峰值）+ `cacheStore`（initial fetch + route_decision 增量 + flush）+ `TrafficChart.vue`（纯 SVG 双线图，无 chart 库依赖，emerald 上行 + blue 下行 + 半透明面积）+ `CacheTable.vue`（shadcn Table + host 搜索 + direction 过滤 + source 中文标签 + 清空按钮）+ `SettingsView.vue` 完整重写（运行时 / 手动连接 server 表单 / 缓存维护 / 自检 / 关于）。`App.vue` 全局订阅扩 traffic_tick + route_decision，`ConnectedView` 嵌入两个新组件并 watch(state) 自动 refresh/reset。client-app/src-tauri/src/sidecar.rs 默认开系统代理切换（M-β.2 已改）。验证：111 个 pytest 全绿（新增 12：3 traffic_meter 单元 + 5 cache API 集成 + 4 route_decision 单元）；vue-tsc + vite build 全绿；端到端 standalone server (api 18091) + client (api 18191) → POST /api/connect → 浏 google + baidu + github → SSE 实时捕获到 `route_decision`（google/github proxy/pattern, baidu direct/probe）+ `traffic_tick` 1Hz（最大下行 90 KB/s）+ `/api/cache` 返回 29 条（28 PAC 预填 + 1 probe）+ `/api/traffic` 累计 1767B/98KB；disconnect 后 traffic 归零 endpoint 撤回。
 
@@ -36,7 +38,7 @@
 | **S3** 服务端控制台界面 | ✅ 已完成 | 2.65 / 2.65 工日 (100%) | 2026-05-01 | 骨架 + UX 升级 + UX Polish ×5 + Toast + 响应式 sidebar + 首启风险弹窗 + **shadcn-vue 重构（强制 15 个组件 + RemixIcon + Tailwind v4 原子化）** + **data-dense Dashboard 优化（12-col grid + KPI 横排 + Card sm 密度）** + **Stripe/Vercel B 风格全面改造（design tokens + 9 组件 + 暗色模式 + 双 header 56px 对齐）** + **3 bug 修复（CORS / Switch v-model / refresh 静默挂掉）**；Settings 表单留 S4 |
 | **S4** 服务端打包发布 | ⏳ 待开始 | 0 / 1.0 工日 | — | |
 | **S5** 客户端引擎（智能本地代理） | 🟢 M1 完成 | 2.75 / 3.0 工日 (≈92%) | 2026-05-01 | M1 ✅：cache + resolver + pac_parser + local_proxy + system_proxy + client_main + 67 测试；**M2（mDNS / heartbeat / 9 API）合入 S6 客户端开发流，按 M-α/β/γ/δ 推进** |
-| **S6** 客户端外壳 + 控制台界面 | 🟢 M-γ 完成 | 2.30 / 2.5 工日 (92%) | 2026-05-02 | **M-α + M-β.1 + M-β.2 + M-γ ✅**：骨架点亮 + mDNS 真发现 + 真连接 5 步 + 流量曲线 + 路由命中表 + 设置页可用；**M-δ（4 态托盘 + 自启 + DMG）待开始** |
+| **S6** 客户端外壳 + 控制台界面 | 🟢 M-δ 应用部分完成 | 2.50 / 2.5 工日 (100%, 含 DMG 留 S4) | 2026-05-02 | **M-α + M-β.1 + M-β.2 + M-γ + M-δ(应用部分) ✅**：骨架点亮 + mDNS 真发现 + 真连接 5 步 + 流量曲线 + 路由命中表 + 设置页 + **诊断 5 项 + 状态托盘 + macOS 自启**；DMG/notarization 留 S4 |
 | **S7** 联调与端到端验收 | ⏳ 待开始 | 0 / 1.5 工日 | — | |
 
 ### 客户端开发路线图（S5-M2 + S6 合并交付，4 里程碑）
@@ -48,8 +50,9 @@
 | **M-α 客户端骨架可点亮** ✅ | 0.5 / 0.5 | `pnpm dev:client` 弹出 Conduit Client 窗口 → BootScreen → sidecar 拉起 → 健康灯绿 → 空 Discovery 占位页（"正在搜索 LAN…"），与 server 同 B 风格 | client-app/src-tauri 6 文件（sidecar/state/healthz/commands/error/tray）；client-app/core/api 4 文件（server/errors/healthz/__init__）；client-app/ui 全套 shadcn 复制 + 客户端定制 Sidebar/TopStatusBar + 3 占位 view |
 | **M-β.1 真发现** ✅ | 0.75 / 0.75 | LAN 上的 server 5–10 秒内以卡片形式出现 → 显示 name / IP / SOCKS+API 端口 / VPN 状态 / 版本 / "广播于 N 分钟前"；离线 server 灰显标"曾见过"；空态友好 + 重新扫描按钮 | core: events_bus.py + discoverer.py + api/discovery.py + api/events.py SSE；UI: useEvents/useDiscovery composable + discoveryStore + DiscoveryView 完全重写 + TopStatusBar 副标题动态化；fix: server-app/client-app 两边 SSE 隐性缺 CORS 头 bug |
 | **M-β.2 真连接** ✅ | 0.75 / 0.75 | 卡片点 [连接] → ConnectingProgress 5 步进度条 → 进入 ConnectedView 雏形 → curl --socks5 验证走 server；端到端 google.com 200 验证通；disconnect 后 google 不可达；rollback 完整 | core: connectivity.py（probe + Heartbeat 状态机 green/yellow/red）；api: connect.py（POST /api/connect/{id} + /api/disconnect + GET /api/connection）+ events 新增 connect_progress / connect_done / connection_state_changed / heartbeat_changed；client_main 加 5 步状态机 + 互斥锁 + partial 回滚；UI: connectionStore（5 步 stepper + SSE 协调）+ ConnectingProgress.vue（垂直 stepper 4 态）+ ConnectedView（连接时长 + 心跳胶囊 + 断开）+ Sidebar 状态点 + App.vue 全局 watch + toast |
-| **M-γ Connected 视图 + 路由智能** | 1.5 | ConnectedView 完整：流量曲线（uPlot）+ 缓存命中率卡 + 路由查询面板（输入 host 立刻返 direction / source / TTL / hit_count）+ 缓存表（按 hit_count 排序）+ 强制改方向按钮 | api 新增 route.py / cache.py；UI 新增 RouteCacheTable.vue / RouteQueryPanel.vue / TrafficChart 复用 server 版本 |
-| **M-δ Settings + Diagnose + 4 态托盘 + macOS 打包** | 1.5 | Settings 可改 server / TTL / 缓存上限；DiagnoseView 5 步自检；4 态托盘（🟢/🔵/🟡/⚫）；产出 .app + .dmg | api 新增 diagnose.py；tray.rs 4 态切换；UI 新增 SettingsView / DiagnoseView；scripts/build-client-sidecar.sh + release-client.sh |
+| **M-γ Connected 视图 + 路由智能** ✅ | 0.75 / 0.75 | ConnectedView 完整：流量曲线（纯 SVG）+ 路由命中表（搜索/过滤）+ 设置页可用化（运行时端口、手动连接、缓存维护、关于） | core: traffic_meter.py（1Hz 桶 + EventBus tick）+ api/cache.py（list/flush/snapshot）+ RouteResolver.set_event_publisher 钩子 + LocalProxyServer.set_progress_callback；UI: trafficStore + cacheStore + TrafficChart.vue + CacheTable.vue + SettingsView 重写 |
+| **M-δ Diagnose + 状态托盘 + 自启** ✅ | 0.75 / 0.75 | 独立诊断页（5 项 / 失败带 remediation / 一键复制报告）+ 状态托盘（5s 轮询 / 已连接 server name+host 实时显示 / 一键断开 / 跳诊断/设置 / 退出）+ 设置页开机自启 Switch（macOS LaunchAgent） | core: api/diagnose.py（5 步检查 + 修复建议）+ client_main `_started_at`；tauri: autostart.rs（plist + launchctl bootstrap）+ tray.rs 重写（5s 轮询 + emit `tray:navigate` + 一键 disconnect）+ commands 加 3 个 autostart invoke；UI: DiagnoseView + DiagnoseRow + SettingsView 加自启 Switch + ui store 加 `diagnose` NavKey + Sidebar 加菜单项 + App.vue 监听 tray:navigate |
+| ~~M-δ-extra DMG / notarization~~ | 留 S4 | DMG 打包 + Apple notarization + 自动更新 | 与 server-app 一并在 S4 处理（共享 codesign 配置） |
 
 **M-α 完成判据**：
 1. `pnpm dev:client` 在 macOS 弹出 Conduit Client 窗口
@@ -107,7 +110,7 @@
 | S1-3 HTTP 管控 API（status/traffic/events/admin/healthz） | ✅ | 6.3h |
 | S1-4 pytest 单元测试（23 用例，核心模块覆盖率 > 80%） | ✅ | 3h |
 
-> 当前文件名带进度标识：`2026-04-30-5-Conduit-开发TODO清单-进度S6Mc-90.md`
+> 当前文件名带进度标识：`2026-04-30-5-Conduit-开发TODO清单-进度S6Md-95.md`
 > Sprint 完成后会更新此表 + 文件名末尾的进度后缀。
 > 配套的端到端验收文档：`design/2026-05-02-1-Conduit-验收指南.md`
 

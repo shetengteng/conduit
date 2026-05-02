@@ -20,6 +20,7 @@ from aiohttp import web
 
 from .cache import routes as cache_routes
 from .connect import routes as connect_routes
+from .diagnose import routes as diagnose_routes
 from .discovery import routes as discovery_routes
 from .errors import error_middleware, err_response
 from .events import routes as events_routes
@@ -66,7 +67,7 @@ def build_app(runtime: "ClientRuntime", *, loopback_only: bool = True) -> web.Ap
     )
     app["runtime"] = runtime
     app["loopback_only"] = loopback_only
-    for tbl in (healthz_routes, discovery_routes, events_routes, connect_routes, cache_routes):
+    for tbl in (healthz_routes, discovery_routes, events_routes, connect_routes, cache_routes, diagnose_routes):
         app.add_routes(tbl)
     return app
 

@@ -5,7 +5,7 @@ import { reactive } from "vue";
 
 import type { LifecyclePhase } from "../types/client";
 
-export type NavKey = "discovery" | "connected" | "settings";
+export type NavKey = "discovery" | "connected" | "diagnose" | "settings";
 
 interface UiState {
   active: NavKey;

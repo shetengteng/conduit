@@ -19,6 +19,7 @@ import BootFailedScreen from '@/components/layout/BootFailedScreen.vue'
 import ToastHost from '@/components/feedback/ToastHost.vue'
 import DiscoveryView from '@/views/DiscoveryView.vue'
 import ConnectedView from '@/views/ConnectedView.vue'
+import DiagnoseView from '@/views/DiagnoseView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import { uiStore } from '@/stores/ui'
 import { clientStore } from '@/stores/clientStore'
@@ -29,6 +30,7 @@ import { useBootPhase } from '@/composables/useBootPhase'
 import { useEvents } from '@/composables/useEvents'
 import { useToast } from '@/composables/useToast'
 import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 useBootPhase()
 
@@ -39,6 +41,7 @@ const isFailed = computed(() => uiStore.state.bootPhase === 'Failed')
 
 // 全局 SSE 订阅:连接相关事件全部交给 connectionStore
 let stopEvents: (() => void) | null = null
+let unlistenTrayNav: UnlistenFn | null = null
 
 onMounted(async () => {
   await clientStore.refresh()
@@ -56,10 +59,23 @@ onMounted(async () => {
     { autoStart: true },
   )
   stopEvents = evt.stop
+
+  // 托盘菜单 → 主窗口路由切换
+  try {
+    unlistenTrayNav = await listen<string>('tray:navigate', (e) => {
+      const key = e.payload
+      if (key === 'discovery' || key === 'connected' || key === 'diagnose' || key === 'settings') {
+        uiStore.setActive(key)
+      }
+    })
+  } catch {
+    // 非 Tauri 环境(浏览器调试) 直接忽略
+  }
 })
 
 onUnmounted(() => {
   stopEvents?.()
+  unlistenTrayNav?.()
 })
 
 // 进入 connecting / connected 时,自动跳到「已连接」视图;
@@ -110,6 +126,7 @@ function handleRetry() {
         <main class="flex-1 overflow-y-auto">
           <DiscoveryView v-if="uiStore.state.active === 'discovery'" />
           <ConnectedView v-else-if="uiStore.state.active === 'connected'" />
+          <DiagnoseView v-else-if="uiStore.state.active === 'diagnose'" />
           <SettingsView v-else-if="uiStore.state.active === 'settings'" />
         </main>
       </div>
