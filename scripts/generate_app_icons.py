@@ -7,6 +7,9 @@
   V3 · ripple       ── 同心圆波纹,象征信号 / 连接
   V4 · letter-c     ── 抽象字母 C(断口表示通道入口)+ 中心数据点
   V5 · arc-bridge   ── 两条对称细弧在中心交汇成数据节点
+  V6 · remix        ── 直接采用 RemixIcon 现成图标:Server=Broadcast(广播),
+                       Client=Plug2(插头).不再自造图形,与 Sidebar / 全局图标
+                       系统保持视觉一致.
 
 输出:
   scripts/build/<design>-<role>.png  (1024x1024)
@@ -21,11 +24,13 @@
 """
 from __future__ import annotations
 
+import io
 import math
 import sys
 from pathlib import Path
 from typing import Callable, Dict
 
+import cairosvg
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 SIZE = 1024
@@ -72,14 +77,31 @@ def diagonal_gradient_bg(c1=BG_DARK, c2=BG_DARK2) -> Image.Image:
 
 
 def add_inner_highlight(img: Image.Image, intensity: int = 30) -> None:
-    """在 squircle 顶部加一抹微妙的内高光,模拟 macOS app icon 的玻璃感"""
+    """在 squircle 顶部加一抹微妙的内高光,模拟 macOS app icon 的玻璃感。
+
+    BUG-FIX: 早期版本用 layer.putalpha(squircle_mask),会把 layer 整个 alpha 覆盖
+    成 squircle,导致下半部"看起来不存在的高光"也被强行 alpha=255 写入,把 squircle
+    的上半部"擦"掉了。改成:
+      1. layer 内只画顶部渐淡白条(其他区域 alpha=0)
+      2. 再用 squircle mask **AND 操作**裁掉 squircle 之外的多余像素(可选,
+         因为 squircle 之外的像素本来就是 0,不会污染)
+      3. alpha_composite 到 img
+    """
     layer = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     for y in range(int(SIZE * 0.45)):
         alpha = int(intensity * (1 - y / (SIZE * 0.45)))
         if alpha > 0:
             draw.line([(0, y), (SIZE, y)], fill=(255, 255, 255, alpha))
-    layer.putalpha(squircle_mask(SIZE, RADIUS))
+
+    # 把高光层裁到 squircle 内(用 mask 的 AND 等价:取 alpha 与 squircle 的最小值)
+    mask = squircle_mask(SIZE, RADIUS)
+    layer_alpha = layer.split()[3]
+    new_alpha = Image.eval(layer_alpha, lambda a: a)  # copy
+    # 用 mask 作为上限,逐点 min(alpha, mask)
+    new_alpha = Image.composite(layer_alpha, Image.new("L", (SIZE, SIZE), 0), mask)
+    layer.putalpha(new_alpha)
+
     img.alpha_composite(layer)
 
 
@@ -304,6 +326,61 @@ def design_arc_bridge(role: str) -> Image.Image:
 
 
 # ---------------------------------------------------------------------------
+# V6 · remix (RemixIcon SVG path 嵌入 squircle)
+# ---------------------------------------------------------------------------
+
+# RemixIcon 4.x 的 path 数据(viewBox 24x24,fill=currentColor)
+# Server 用 RiBroadcastLine,Client 用 RiPlug2Line
+REMIX_PATHS = {
+    "server": "M4.92893 2.92896L6.34315 4.34317C4.89543 5.79088 4 7.79088 4 10C4 12.2092 4.89543 14.2092 6.34315 15.6569L4.92893 17.0711C3.11929 15.2614 2 12.7614 2 10C2 7.2386 3.11929 4.7386 4.92893 2.92896ZM19.0711 2.92896C20.8807 4.7386 22 7.2386 22 10C22 12.7614 20.8807 15.2614 19.0711 17.0711L17.6569 15.6569C19.1046 14.2092 20 12.2092 20 10C20 7.79088 19.1046 5.79088 17.6569 4.34317L19.0711 2.92896ZM7.75736 5.75738L9.17157 7.1716C8.44771 7.89545 8 8.89545 8 10C8 11.1046 8.44771 12.1046 9.17157 12.8285L7.75736 14.2427C6.67157 13.1569 6 11.6569 6 10C6 8.34317 6.67157 6.84317 7.75736 5.75738ZM16.2426 5.75738C17.3284 6.84317 18 8.34317 18 10C18 11.6569 17.3284 13.1569 16.2426 14.2427L14.8284 12.8285C15.5523 12.1046 16 11.1046 16 10C16 8.89545 15.5523 7.89545 14.8284 7.1716L16.2426 5.75738ZM12 12C10.8954 12 10 11.1046 10 10C10 8.89545 10.8954 8.00002 12 8.00002C13.1046 8.00002 14 8.89545 14 10C14 11.1046 13.1046 12 12 12ZM11 14H13V22H11V14Z",
+    "client": "M13 18V20H19V22H13C11.8954 22 11 21.1046 11 20V18H8C5.79086 18 4 16.2091 4 14V7C4 6.44772 4.44772 6 5 6H7V2H9V6H15V2H17V6H19C19.5523 6 20 6.44772 20 7V14C20 16.2091 18.2091 18 16 18H13ZM8 16H16C17.1046 16 18 15.1046 18 14V11H6V14C6 15.1046 6.89543 16 8 16ZM18 8H6V9H18V8ZM12 14.5C11.4477 14.5 11 14.0523 11 13.5C11 12.9477 11.4477 12.5 12 12.5C12.5523 12.5 13 12.9477 13 13.5C13 14.0523 12.5523 14.5 12 14.5ZM11 2H13V5H11V2Z",
+}
+
+
+def _render_remix_svg(role: str, target_px: int, color: str) -> Image.Image:
+    """把 24x24 viewBox 的 RemixIcon path 渲染成 target_px × target_px 的 PNG。"""
+    path = REMIX_PATHS[role]
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
+        f'width="{target_px}" height="{target_px}">'
+        f'<path d="{path}" fill="{color}"/></svg>'
+    )
+    png_bytes = cairosvg.svg2png(bytestring=svg.encode("utf-8"),
+                                 output_width=target_px, output_height=target_px)
+    return Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+
+
+def design_remix(role: str) -> Image.Image:
+    """RemixIcon 路径(白色) + 黑色 squircle 背景 + 顶部微高光。
+
+    注意 RemixIcon 24x24 viewBox 的视觉重心通常不严格在 (12,12),
+    所以贴的时候 y 方向也按 path bbox 居中,而不是 viewBox 居中。
+    """
+    img = solid_bg(BG_DARK)
+    add_inner_highlight(img, intensity=20)
+
+    # icon 占 squircle 内 ~52% 宽(squircle 本身就有 ~17% padding,
+    # 这里再缩小一点,让 icon 视觉占 squircle 内核约 70%)
+    icon_px = int(SIZE * 0.52)
+    icon = _render_remix_svg(role, icon_px, "#ffffff")
+    # 找到 icon 实际的非透明 bbox,以此为中心贴
+    bbox = icon.getbbox()  # (l,t,r,b) 非透明区域
+    if bbox is not None:
+        l, t, r, b = bbox
+        actual_w = r - l
+        actual_h = b - t
+        # 把 actual bbox 居中到 SIZE 中心
+        cx = SIZE // 2
+        cy = SIZE // 2
+        paste_x = cx - actual_w // 2 - l
+        paste_y = cy - actual_h // 2 - t
+        img.alpha_composite(icon, (paste_x, paste_y))
+    else:
+        img.alpha_composite(icon, ((SIZE - icon_px) // 2, (SIZE - icon_px) // 2))
+    return img
+
+
+# ---------------------------------------------------------------------------
 # Registry + CLI
 # ---------------------------------------------------------------------------
 
@@ -314,6 +391,7 @@ DESIGNS: Dict[str, Callable[[str], Image.Image]] = {
     "V3-ripple":     design_ripple,
     "V4-letter-c":   design_letter_c,
     "V5-arc-bridge": design_arc_bridge,
+    "V6-remix":      design_remix,
 }
 
 ROLES = ("server", "client")

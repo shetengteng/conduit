@@ -7,9 +7,17 @@
  *
  * 高度 56px，与 Sidebar logo 区视觉对齐。
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Button } from '@/components/ui/button'
-import { RiStopCircleLine } from '@remixicon/vue'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { RiCloseCircleLine, RiAlertLine } from '@remixicon/vue'
 import StatusBadge from './StatusBadge.vue'
 import { proxyStore } from '@/stores/proxy'
 import { useToast } from '@/composables/useToast'
@@ -18,6 +26,8 @@ import { ApiError } from '@/api/client'
 import { formatUptimeShort } from '@/utils/format'
 
 const toast = useToast()
+const confirmOpen = ref(false)
+const stopping = ref(false)
 
 const status = computed(() => proxyStore.state.status)
 
@@ -63,13 +73,24 @@ const uptime = computed(() => {
   return formatUptimeShort(sec)
 })
 
-async function handleStop() {
+function openConfirm() {
+  confirmOpen.value = true
+}
+
+async function handleConfirmStop() {
+  stopping.value = true
   try {
     await ServerApi.adminStop()
-    toast.success('已发送停止指令', { detail: '代理引擎正在退出…' })
+    toast.success('应用即将退出', { detail: '代理引擎已停止,Conduit Server 进程正在清理资源…' })
+    confirmOpen.value = false
+    // 不主动 quit Tauri 主进程 —— sidecar 退出后窗口仍然存在(显示"已停止"),
+    // 让用户自行关闭或者最小化。如果未来想严格 lockstep,这里可以加
+    // window.__TAURI_INTERNALS__.invoke('plugin:app|exit', 0)。
   } catch (e) {
     const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e)
     toast.error('停止失败', { detail: msg })
+  } finally {
+    stopping.value = false
   }
 }
 </script>
@@ -110,14 +131,39 @@ async function handleStop() {
         运行 {{ uptime }}
       </span>
       <Button
-        variant="default"
+        variant="destructive"
         size="sm"
-        :disabled="!status?.running"
-        @click="handleStop"
+        :disabled="!status?.running || stopping"
+        @click="openConfirm"
       >
-        <RiStopCircleLine />
-        停止代理
+        <RiCloseCircleLine />
+        停止代理并退出
       </Button>
     </div>
   </header>
+
+  <Dialog v-model:open="confirmOpen">
+    <DialogContent class="sm:max-w-[440px]">
+      <DialogHeader>
+        <DialogTitle class="flex items-center gap-2 text-base">
+          <RiAlertLine class="size-4 text-destructive" />
+          确认停止 Conduit Server?
+        </DialogTitle>
+        <DialogDescription class="pt-2 text-sm leading-relaxed text-muted-foreground">
+          停止后代理引擎(HTTP / SOCKS5 / mDNS 广播)将全部下线,正在使用本机 VPN 的客户端会立刻断开。
+          <br>
+          v0.1 阶段不支持在窗口里"重启代理",需要重新打开 Conduit Server 应用(或在终端跑
+          <code class="font-mono text-foreground">pnpm dev:server</code>)才能再次启动。
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter class="gap-2 sm:gap-2">
+        <Button variant="outline" size="sm" :disabled="stopping" @click="confirmOpen = false">
+          取消
+        </Button>
+        <Button variant="destructive" size="sm" :disabled="stopping" @click="handleConfirmStop">
+          {{ stopping ? '停止中…' : '确认停止' }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

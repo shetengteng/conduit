@@ -7,11 +7,18 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-CELL = 256                # 每个图标缩到 256
-GAP = 18
+CELL = 220                # 每个图标缩到 220 (6 列宽容易超屏)
+GAP = 16
 LABEL_H = 36
 ROLES = ("server", "client")
-DESIGNS = ["V1-pipe-dot", "V2-gradient", "V3-ripple", "V4-letter-c", "V5-arc-bridge"]
+DESIGNS = [
+    "V1-pipe-dot",
+    "V2-gradient",
+    "V3-ripple",
+    "V4-letter-c",
+    "V5-arc-bridge",
+    "V6-remix",
+]
 
 BUILD = Path(__file__).resolve().parent / "build"
 
