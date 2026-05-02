@@ -43,6 +43,8 @@ export interface ServerStatus {
   vpn: VpnStatus;
   lan: LanStatus;
   clients_count: number;
+  /** 通过 LAN HTTP /api/clients/heartbeat 上报的 client-app 数量(已链接但暂未传输流量) */
+  passive_clients_count: number;
   uptime_sec: number;
   ready: boolean;
 }
@@ -59,9 +61,23 @@ export interface ClientSession {
   recv_bytes: number;
 }
 
+/** /api/clients 中的 passive client（通过 LAN HTTP /api/clients/heartbeat 心跳登记）。 */
+export interface PassiveClient {
+  peer_ip: string;
+  client_name: string;
+  version: string;
+  first_seen: number;
+  last_seen: number;
+  /** 距离最后一次心跳的秒数(已被 server 计算好) */
+  idle_sec: number;
+}
+
 export interface ClientsResponse {
   count: number;
   clients: ClientSession[];
+  /** v0.1 阶段新增:被动客户端列表(已链接但暂未传输流量) */
+  passive_count: number;
+  passive_clients: PassiveClient[];
 }
 
 // ============================================================================
@@ -102,8 +118,23 @@ export type ServerEventType =
   | "ready"
   | "client_connected"
   | "client_disconnected"
+  | "passive_client_seen"
+  | "passive_client_lost"
   | "traffic_tick"
   | "vpn_state_changed";
+
+export interface PassiveClientSeenPayload {
+  peer_ip: string;
+  client_name: string;
+  version: string;
+  first_seen: number;
+}
+
+export interface PassiveClientLostPayload {
+  peer_ip: string;
+  client_name: string;
+  duration_sec: number;
+}
 
 export interface ClientConnectedPayload {
   session_id: string;
@@ -135,6 +166,8 @@ export type ServerEventPayload =
   | { type: "ready"; payload: { version: string } }
   | { type: "client_connected"; payload: ClientConnectedPayload }
   | { type: "client_disconnected"; payload: ClientDisconnectedPayload }
+  | { type: "passive_client_seen"; payload: PassiveClientSeenPayload }
+  | { type: "passive_client_lost"; payload: PassiveClientLostPayload }
   | { type: "traffic_tick"; payload: TrafficTickPayload }
   | { type: "vpn_state_changed"; payload: VpnStateChangedPayload };
 

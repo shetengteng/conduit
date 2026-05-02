@@ -32,16 +32,18 @@ const vpnIface = computed(() => status.value?.vpn?.iface ?? '—')
 const vpnRoute = computed(() => Boolean(status.value?.vpn?.default_route_via_vpn))
 
 /**
- * 5 项健康检查的人话标签映射（与 healthcheck.py CheckResult.name 严格对齐）。
+ * 端口健康检查的人话标签映射(与 healthcheck.py CheckResult.name 严格对齐)。
+ *
+ * 设计:lan_ip / vpn_tunnel 这两项的 detail 已经在面板顶部"LAN" / "VPN" 行
+ * 完整展示,在下面 listen 状态列表里再写一遍纯重复,所以这里只保留 3 个
+ * 端口探活检查 —— 这是顶部 KPI 没有的信息(端口是否真的 listening)。
  */
 const CHECK_LABELS: Record<string, string> = {
   http_port: 'HTTP 代理端口',
   socks5_port: 'SOCKS5 代理端口',
   api_port: '管控 API 端口',
-  lan_ip: '局域网 IP 检测',
-  vpn_tunnel: 'VPN 隧道',
 }
-const CHECK_ORDER = ['http_port', 'socks5_port', 'api_port', 'lan_ip', 'vpn_tunnel'] as const
+const CHECK_ORDER = ['http_port', 'socks5_port', 'api_port'] as const
 
 interface CheckRow {
   key: string
@@ -90,26 +92,44 @@ const totalCount = computed(() => rows.value.length)
         <div class="skeleton h-32" />
       </div>
 
-      <div v-else class="flex flex-col gap-2">
-        <div class="flex items-center gap-2 text-xs">
-          <RiShareForwardLine class="size-3.5 text-muted-foreground" />
-          <span class="text-muted-foreground">LAN</span>
-          <span class="ml-auto truncate font-mono font-medium">{{ lanDetail }}</span>
+      <div v-else class="flex flex-col gap-2.5">
+        <div class="flex flex-col gap-0.5 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+          <div class="flex items-center gap-2">
+            <RiShareForwardLine class="size-3.5 text-muted-foreground" />
+            <span class="font-medium text-muted-foreground">LAN 出口</span>
+            <span
+              class="ml-auto text-[10px] uppercase tracking-wide"
+              :class="status?.lan?.available ? 'text-status-ok' : 'text-status-warn'"
+            >
+              {{ status?.lan?.available ? '已检测' : '未检测' }}
+            </span>
+          </div>
+          <p class="ml-5 break-all font-mono text-[11px] text-foreground">
+            {{ lanDetail }}
+          </p>
         </div>
-        <div class="flex items-center gap-2 text-xs">
-          <RiRouterLine class="size-3.5 text-muted-foreground" />
-          <span class="text-muted-foreground">VPN</span>
-          <span class="font-mono font-medium">{{ vpnIface }}</span>
-          <span
-            class="ml-auto text-[10px]"
-            :class="vpnRoute ? 'text-status-ok' : 'text-muted-foreground'"
-          >
-            {{ vpnRoute ? '默认路由 → VPN' : '未走 VPN' }}
-          </span>
+
+        <div class="flex flex-col gap-0.5 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
+          <div class="flex items-center gap-2">
+            <RiRouterLine class="size-3.5 text-muted-foreground" />
+            <span class="font-medium text-muted-foreground">VPN 出口</span>
+            <span
+              class="ml-auto text-[10px] uppercase tracking-wide"
+              :class="vpnRoute ? 'text-status-ok' : 'text-muted-foreground'"
+            >
+              {{ vpnRoute ? '默认路由 → VPN' : '未走 VPN' }}
+            </span>
+          </div>
+          <p class="ml-5 break-all font-mono text-[11px] text-foreground">
+            {{ vpnIface }}
+          </p>
         </div>
 
         <Separator />
 
+        <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          端口监听
+        </p>
         <ul class="flex flex-col">
           <li
             v-for="r in rows"

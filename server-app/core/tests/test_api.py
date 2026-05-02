@@ -42,6 +42,91 @@ async def test_clients_empty(core):
             body = await r.json()
             assert body["count"] == 0
             assert body["clients"] == []
+            # 新增 passive 字段
+            assert body["passive_count"] == 0
+            assert body["passive_clients"] == []
+
+
+# ---------------------------------------------------------------------------
+# Passive client heartbeat (LAN-facing HTTP proxy port)
+# ---------------------------------------------------------------------------
+
+
+async def _http_proxy_get_text(host: str, port: int, path: str, *, timeout: float = 2.0) -> tuple[int, dict, bytes]:
+    """通过 server 的 HTTP proxy 端口直接 GET (代理本身的元路径,不走 CONNECT)。"""
+    r, w = await asyncio.open_connection(host, port)
+    try:
+        w.write(
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}\r\n"
+            f"Connection: close\r\n\r\n".encode()
+        )
+        await w.drain()
+        head = await asyncio.wait_for(r.readuntil(b"\r\n\r\n"), timeout=timeout)
+        body = await asyncio.wait_for(r.read(), timeout=timeout)
+    finally:
+        try:
+            w.close()
+            await w.wait_closed()
+        except Exception:
+            pass
+
+    head_lines = head.decode("ascii", errors="ignore").split("\r\n")
+    status_line = head_lines[0]
+    status = int(status_line.split(" ")[1])
+    headers = {}
+    for line in head_lines[1:]:
+        if ":" in line:
+            k, _, v = line.partition(":")
+            headers[k.strip().lower()] = v.strip()
+    return status, headers, body
+
+
+async def test_proxy_heartbeat_creates_passive_client(core):
+    status, headers, body = await _http_proxy_get_text(
+        "127.0.0.1", core.cfg.http_port,
+        "/api/clients/heartbeat?name=TestMac&version=0.1.0",
+    )
+    assert status == 200
+    assert "application/json" in headers.get("content-type", "")
+    payload = json.loads(body)
+    assert payload["ok"] is True
+    assert payload["created"] is True
+    assert payload["ttl_sec"] == 60
+
+    async with aiohttp.ClientSession() as s:
+        async with s.get(f"{_api_base(core.cfg)}/api/clients") as r:
+            data = await r.json()
+            assert data["passive_count"] == 1
+            pc = data["passive_clients"][0]
+            assert pc["client_name"] == "TestMac"
+            assert pc["version"] == "0.1.0"
+            assert pc["peer_ip"] == "127.0.0.1"
+
+
+async def test_proxy_heartbeat_idempotent_on_repeat(core):
+    for _ in range(3):
+        status, _, body = await _http_proxy_get_text(
+            "127.0.0.1", core.cfg.http_port,
+            "/api/clients/heartbeat?name=TestMac&version=0.1.0",
+        )
+        assert status == 200
+
+    async with aiohttp.ClientSession() as s:
+        async with s.get(f"{_api_base(core.cfg)}/api/clients") as r:
+            data = await r.json()
+            assert data["passive_count"] == 1
+
+
+async def test_status_includes_passive_count_after_heartbeat(core):
+    await _http_proxy_get_text(
+        "127.0.0.1", core.cfg.http_port,
+        "/api/clients/heartbeat?name=TestMac&version=0.1.0",
+    )
+    async with aiohttp.ClientSession() as s:
+        async with s.get(f"{_api_base(core.cfg)}/api/status") as r:
+            body = await r.json()
+            assert body["passive_clients_count"] == 1
 
 
 async def test_traffic_default_window(core):

@@ -42,6 +42,7 @@ import asyncio
 import logging
 import os
 import signal
+import socket
 import sys
 import time
 import urllib.error
@@ -404,9 +405,15 @@ class ClientRuntime:
 
             # ---- step 5: start heartbeat ----
             self._publish_progress(step=5, key="start_heartbeat", status="running", server_id=server.server_id)
+            try:
+                hostname = socket.gethostname().split(".")[0] or "Conduit Client"
+            except Exception:
+                hostname = "Conduit Client"
             self.heartbeat = Heartbeat(
                 self.bus,
                 host=server.host, http_port=server.port, socks_port=server.socks,
+                client_name=hostname,
+                client_version="0.1.0",
             )
             await self.heartbeat.start()
             # M-γ:启动 traffic_meter,挂上 LocalProxyServer 的进度回调

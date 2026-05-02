@@ -20,7 +20,7 @@ import logging
 import time
 from typing import Optional
 
-from active_connections import ConnectionRegistry, TrafficSampler
+from active_connections import ConnectionRegistry, PassiveClientRegistry, TrafficSampler
 from config import Config
 from events_bus import EventBus
 from healthcheck import HealthCheck
@@ -53,6 +53,7 @@ class ProxyCore:
         self.rules = rules
         self.bus = EventBus()
         self.registry = ConnectionRegistry(publish=self.bus.publish)
+        self.passive_clients = PassiveClientRegistry(publish=self.bus.publish)
         self.sampler = TrafficSampler(
             self.registry, cfg.traffic_sample_window_sec, publish=self.bus.publish
         )
@@ -88,7 +89,9 @@ class ProxyCore:
                 )
 
             self._http_srv = await asyncio.start_server(
-                lambda r, w: handle_http(r, w, self.cfg, self.rules, self.registry),
+                lambda r, w: handle_http(
+                    r, w, self.cfg, self.rules, self.registry, self.passive_clients
+                ),
                 self.cfg.bind, self.cfg.http_port,
             )
             self._socks_srv = await asyncio.start_server(
@@ -99,6 +102,7 @@ class ProxyCore:
             log.info("SOCKS5 listening on %s:%d", self.cfg.bind, self.cfg.socks_port)
 
             self.sampler.start()
+            self.passive_clients.start()
             self._vpn_watch_task = asyncio.create_task(self._watch_vpn_state())
             self._started_at = time.time()
 
@@ -133,6 +137,7 @@ class ProxyCore:
                 return_exceptions=True,
             )
             await self.sampler.stop()
+            await self.passive_clients.stop()
             if self._vpn_watch_task is not None:
                 self._vpn_watch_task.cancel()
                 try:
@@ -213,6 +218,7 @@ class ProxyCore:
                 "detail": lan_check["detail"] if lan_check else None,
             },
             "clients_count": len(self.registry),
+            "passive_clients_count": len(self.passive_clients),
             "uptime_sec": self.uptime_sec,
             "ready": health_dict["ready"],
         }

@@ -66,7 +66,13 @@ const subLabel = computed(() => {
   if (!s.running) return '代理服务已停止，等待重新启动'
   if (s.vpn && !s.vpn.available) return 'VPN 接口未就绪，部分流量可能无法走代理'
   if (!s.ready) return '代理正在启动中，端口尚未就绪'
-  return `${s.clients_count ?? 0} 个客户端正在使用代理`
+  const active = s.clients_count ?? 0
+  const passive = s.passive_clients_count ?? 0
+  const total = active + passive
+  if (total === 0) return '等待客户端接入'
+  if (active === 0) return `${passive} 个客户端已链接(待命中)`
+  if (passive === 0) return `${active} 个客户端正在传输流量`
+  return `共 ${total} 个客户端 · ${active} 传输 + ${passive} 待命`
 })
 
 const ports = computed(() => {

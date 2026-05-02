@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from active_connections import ConnectionRegistry, TrafficSampler
+from active_connections import ConnectionRegistry, PassiveClientRegistry, TrafficSampler
 
 
 pytestmark = pytest.mark.asyncio
@@ -69,3 +69,65 @@ async def test_concurrent_id_allocation_unique():
     reg = ConnectionRegistry()
     sids = await asyncio.gather(*(reg.add("1.2.3.4", "http", "h:1") for _ in range(50)))
     assert len(set(sids)) == 50
+
+
+# ---------------------------------------------------------------------------
+# PassiveClientRegistry
+# ---------------------------------------------------------------------------
+
+
+async def test_passive_touch_first_time_publishes_seen():
+    events: list[tuple[str, dict]] = []
+    reg = PassiveClientRegistry(publish=lambda t, p: events.append((t, p)))
+
+    created = reg.touch("10.0.0.7", "MacOfBob", "0.1.0")
+    assert created is True
+    assert len(reg) == 1
+    snap = reg.snapshot()[0]
+    assert snap["peer_ip"] == "10.0.0.7"
+    assert snap["client_name"] == "MacOfBob"
+    assert snap["version"] == "0.1.0"
+    assert snap["idle_sec"] == 0
+
+    types = [e[0] for e in events]
+    assert types == ["passive_client_seen"]
+    assert events[0][1]["client_name"] == "MacOfBob"
+
+
+async def test_passive_touch_again_only_refreshes_no_event():
+    events: list[tuple[str, dict]] = []
+    reg = PassiveClientRegistry(publish=lambda t, p: events.append((t, p)))
+
+    reg.touch("10.0.0.7", "MacOfBob", "0.1.0")
+    events.clear()
+    created2 = reg.touch("10.0.0.7", "MacOfBob", "0.1.0")
+    assert created2 is False
+    assert len(reg) == 1
+    assert events == []
+
+
+async def test_passive_evict_after_ttl_publishes_lost():
+    events: list[tuple[str, dict]] = []
+    reg = PassiveClientRegistry(
+        publish=lambda t, p: events.append((t, p)),
+        ttl=0.3,
+        evict_interval=0.1,
+    )
+    reg.start()
+    try:
+        reg.touch("10.0.0.8", "Ghost", "0.1.0")
+        assert len(reg) == 1
+        await asyncio.sleep(0.6)
+        assert len(reg) == 0
+        types = [e[0] for e in events]
+        assert "passive_client_seen" in types
+        assert "passive_client_lost" in types
+    finally:
+        await reg.stop()
+
+
+async def test_passive_stop_idempotent():
+    reg = PassiveClientRegistry()
+    reg.start()
+    await reg.stop()
+    await reg.stop()

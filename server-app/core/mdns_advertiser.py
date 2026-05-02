@@ -98,11 +98,14 @@ class MdnsAdvertiser:
         )
 
         zc = AsyncZeroconf()
-        await zc.async_register_service(info)
+        # allow_name_change=True 让 zeroconf 在重名(NonUniqueNameException)时
+        # 自动追加 #2/#3 直到拿到唯一名 —— 应对上次进程没正常 unregister 留下的
+        # 残留广播(常见于 dev 模式 pkill 后重启)。
+        await zc.async_register_service(info, allow_name_change=True)
         self._zc = zc
         self._info = info
         log.info("mDNS advertised: %s @ %s:%d (vpn=%s)",
-                 instance_name, self.host_ip, self.http_port,
+                 info.name, self.host_ip, self.http_port,
                  "on" if self.vpn_on else "off")
         return True
 

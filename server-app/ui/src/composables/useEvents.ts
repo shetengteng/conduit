@@ -12,6 +12,8 @@ import { apiBase } from "../api/runtime";
 import type {
   ClientConnectedPayload,
   ClientDisconnectedPayload,
+  PassiveClientLostPayload,
+  PassiveClientSeenPayload,
   ServerEventType,
   TrafficTickPayload,
   VpnStateChangedPayload,
@@ -21,6 +23,8 @@ export interface EventHandlers {
   ready?: (payload: { version: string }) => void;
   client_connected?: (payload: ClientConnectedPayload) => void;
   client_disconnected?: (payload: ClientDisconnectedPayload) => void;
+  passive_client_seen?: (payload: PassiveClientSeenPayload) => void;
+  passive_client_lost?: (payload: PassiveClientLostPayload) => void;
   traffic_tick?: (payload: TrafficTickPayload) => void;
   vpn_state_changed?: (payload: VpnStateChangedPayload) => void;
 }
@@ -34,6 +38,8 @@ const ALL_EVENT_TYPES: ServerEventType[] = [
   "ready",
   "client_connected",
   "client_disconnected",
+  "passive_client_seen",
+  "passive_client_lost",
   "traffic_tick",
   "vpn_state_changed",
 ];

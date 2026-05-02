@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import urllib.error
+import urllib.parse
 import urllib.request
 
 log = logging.getLogger("conduit.client.connectivity")
@@ -148,7 +149,12 @@ class HeartbeatState:
 
 class Heartbeat:
     """简单的心跳:每 ``interval`` 秒一次 TCP probe; 失败次数累加,触发 tone
-    迁移。失败回归到成功直接 reset 到 green。"""
+    迁移。失败回归到成功直接 reset 到 green。
+
+    Tick 同时会向 server 的 LAN-facing HTTP 端口发一次
+    ``GET /api/clients/heartbeat?name=<client_name>&version=<version>``,
+    让 server 知道"我已链接但暂无流量"(passive client)。失败不影响 tone。
+    """
 
     def __init__(
         self,
@@ -159,6 +165,8 @@ class Heartbeat:
         socks_port: int,
         interval: float = DEFAULT_HEARTBEAT_INTERVAL,
         timeout: float = DEFAULT_HEARTBEAT_TIMEOUT,
+        client_name: str = "Conduit Client",
+        client_version: str = "0.1.0",
     ) -> None:
         self.bus = bus
         self.host = host
@@ -166,6 +174,8 @@ class Heartbeat:
         self.socks_port = socks_port
         self.interval = interval
         self.timeout = timeout
+        self.client_name = client_name
+        self.client_version = client_version
         self.state = HeartbeatState()
         self._task: Optional[asyncio.Task] = None
         self._stop = asyncio.Event()
@@ -217,6 +227,39 @@ class Heartbeat:
             if new_tone != self.state.tone:
                 self.state.tone = new_tone
                 self._publish_tone(new_tone, recovered=False)
+
+        # 仅在 socks 探测成功时(server 还活着)才上报 passive 心跳;
+        # 失败的话 server 也连不上,无需多此一举。
+        if ok:
+            asyncio.create_task(self._publish_passive_heartbeat())
+
+    async def _publish_passive_heartbeat(self) -> None:
+        """向 server 的 HTTP 代理端口发 GET /api/clients/heartbeat,失败静默。
+
+        放后台 task 执行,不阻塞 _tick 主流程;失败用 debug 级别日志,
+        因为 socks_port 已通的话 http_port 通常也通,异常多半是 server
+        正在 graceful shutdown。
+        """
+        qs = urllib.parse.urlencode({
+            "name": self.client_name,
+            "version": self.client_version,
+        })
+        url = f"http://{self.host}:{self.http_port}/api/clients/heartbeat?{qs}"
+
+        def _do_get() -> None:
+            try:
+                req = urllib.request.Request(url, method="GET", headers={
+                    "User-Agent": f"Conduit-Client/{self.client_version}",
+                })
+                with urllib.request.urlopen(req, timeout=self.timeout):
+                    pass
+            except (urllib.error.URLError, OSError, TimeoutError) as exc:
+                log.debug("passive heartbeat failed: %s", exc)
+
+        try:
+            await asyncio.get_running_loop().run_in_executor(None, _do_get)
+        except Exception as exc:  # noqa: BLE001
+            log.debug("passive heartbeat scheduling failed: %s", exc)
 
     @staticmethod
     def _compute_tone(failures: int) -> str:

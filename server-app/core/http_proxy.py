@@ -159,6 +159,35 @@ async def _serve_status(reader: asyncio.StreamReader, writer: asyncio.StreamWrit
                        extra_headers={"Content-Type": "application/json; charset=utf-8"})
 
 
+async def _serve_heartbeat(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                           target: str, peer_ip: str, passive_clients) -> None:
+    """LAN-facing 心跳端点:client-app 已链接 server 但暂未传输代理流量时调用。
+
+    GET /api/clients/heartbeat?name=<client_name>&version=<version>
+
+    返回 200 + 简短 JSON。即使 passive_clients 不可用(早期 unit test 场景),
+    也返 200 让 client 不至于把 server 误判为不可用。
+    """
+    await _drain_request(reader, 2.0)
+    qs = target.partition("?")[2]
+    params = parse_qs(qs)
+    client_name = (params.get("name") or ["anonymous"])[0].strip() or "anonymous"
+    version = (params.get("version") or ["unknown"])[0].strip() or "unknown"
+
+    created = False
+    if passive_clients is not None:
+        try:
+            created = passive_clients.touch(peer_ip, client_name, version)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("passive_clients.touch failed for %s: %s", peer_ip, exc)
+
+    payload = {"ok": True, "created": created, "ttl_sec": 60}
+    body = (json.dumps(payload) + "\n").encode("utf-8")
+    log.info("client heartbeat from %s name=%s version=%s (new=%s)", peer_ip, client_name, version, created)
+    await _send_simple(writer, "200 OK", body,
+                       extra_headers={"Content-Type": "application/json; charset=utf-8"})
+
+
 async def _serve_pac(writer: asyncio.StreamWriter, cfg: Config) -> None:
     path = cfg.pac_file_path
     if not os.path.isabs(path):
@@ -180,7 +209,8 @@ async def _serve_pac(writer: asyncio.StreamWriter, cfg: Config) -> None:
 
 async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
                       cfg: Config, rules: PacRules | None = None,
-                      registry: ConnectionRegistry | None = None) -> None:
+                      registry: ConnectionRegistry | None = None,
+                      passive_clients=None) -> None:
     peer = writer.get_extra_info("peername") or ("?", 0)
     peer_ip = peer[0] if peer else "?"
 
@@ -214,6 +244,9 @@ async def handle_http(reader: asyncio.StreamReader, writer: asyncio.StreamWriter
             return
         if method == "GET" and path_only == "/status":
             await _serve_status(reader, writer, rules, cfg, peer_ip)
+            return
+        if method == "GET" and path_only == "/api/clients/heartbeat":
+            await _serve_heartbeat(reader, writer, target, peer_ip, passive_clients)
             return
 
         if method == "CONNECT":

@@ -26,6 +26,8 @@ import {
   RiArrowDownSLine,
   RiExpandUpDownLine,
   RiUserUnfollowLine,
+  RiUserStarLine,
+  RiPulseLine,
 } from '@remixicon/vue'
 import { proxyStore } from '@/stores/proxy'
 import { trafficStore } from '@/stores/traffic'
@@ -43,6 +45,8 @@ type SortKey =
   | 'since'
 
 const clients = computed(() => proxyStore.state.clients)
+const passiveClients = computed(() => proxyStore.state.passiveClients)
+const totalCount = computed(() => clients.value.length + passiveClients.value.length)
 
 function liveBps(peer: string, dir: 'in' | 'out'): number {
   const arr = trafficStore.state.series[peer]
@@ -100,7 +104,13 @@ const columns: Column[] = [
     <CardHeader class="flex flex-row items-center justify-between">
       <CardTitle class="text-[13px] font-semibold">在线客户端</CardTitle>
       <span class="font-mono text-[11px] text-muted-foreground tabular-nums">
-        {{ clients.length }} 个
+        共 {{ totalCount }} 个
+        <template v-if="totalCount > 0">
+          ·
+          <span class="text-emerald-600 dark:text-emerald-400">{{ clients.length }} 传输中</span>
+          ·
+          <span class="text-blue-600 dark:text-blue-400">{{ passiveClients.length }} 待命</span>
+        </template>
       </span>
     </CardHeader>
 
@@ -177,15 +187,56 @@ const columns: Column[] = [
                 <RiUserUnfollowLine class="size-3.5" />
               </div>
               <div class="flex items-baseline gap-2">
-                <p class="text-xs font-medium">还没有客户端连进来</p>
+                <p class="text-xs font-medium">
+                  {{ passiveClients.length > 0 ? '暂无客户端在传输流量' : '还没有客户端连进来' }}
+                </p>
                 <p class="text-[11px] text-muted-foreground">
-                  把右侧 PAC URL 分享给同事即可接入
+                  {{ passiveClients.length > 0
+                    ? '下方"待命"客户端正等着发起请求'
+                    : '把右侧 PAC URL 分享给同事即可接入' }}
                 </p>
               </div>
             </div>
           </TableEmpty>
         </TableBody>
       </Table>
+
+      <!-- 被动客户端区(已链接但暂未传输流量)。仅当列表非空才显示。 -->
+      <div
+        v-if="passiveClients.length > 0"
+        class="border-t border-border/40 bg-muted/30 px-4 py-3"
+      >
+        <div class="mb-2 flex items-center gap-2">
+          <RiUserStarLine class="size-3.5 text-blue-600 dark:text-blue-400" />
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            待命客户端 · 已链接但暂无流量
+          </span>
+        </div>
+        <div class="flex flex-col gap-1">
+          <div
+            v-for="pc in passiveClients"
+            :key="pc.peer_ip"
+            class="flex items-center justify-between gap-3 rounded-md bg-background px-2.5 py-1.5"
+          >
+            <div class="flex min-w-0 items-center gap-2.5">
+              <span class="size-1.5 shrink-0 rounded-full bg-blue-500" />
+              <span class="truncate text-xs font-semibold text-foreground">
+                {{ pc.client_name }}
+              </span>
+              <span class="font-mono text-[11px] text-muted-foreground tabular-nums">
+                {{ pc.peer_ip }}
+              </span>
+              <span class="rounded bg-muted px-1.5 py-px font-mono text-[10px] text-muted-foreground">
+                v{{ pc.version }}
+              </span>
+            </div>
+            <span class="flex items-center gap-1 font-mono text-[11px] text-muted-foreground tabular-nums">
+              <RiPulseLine class="size-3 text-blue-500/80" />
+              心跳 {{ pc.idle_sec }}s 前
+            </span>
+          </div>
+        </div>
+      </div>
     </CardContent>
   </Card>
 </template>

@@ -28,13 +28,26 @@ const totalBps = trafficStore.totalBps
 const kpis = computed(() => {
   const s = status.value
   const t = totalBps.value
+  const passiveCount = s?.passive_clients_count ?? 0
+  const activeCount = s?.clients_count ?? 0
+  const totalCount = activeCount + passiveCount
+  let clientsSub: string
+  if (totalCount === 0) {
+    clientsSub = '等待客户端接入'
+  } else if (passiveCount === 0) {
+    clientsSub = `${activeCount} 个正在传输流量`
+  } else if (activeCount === 0) {
+    clientsSub = `${passiveCount} 个待命中(暂无流量)`
+  } else {
+    clientsSub = `${activeCount} 传输中 · ${passiveCount} 待命`
+  }
   return [
     {
       key: 'clients',
-      label: '在线客户端',
-      value: String(s?.clients_count ?? 0),
+      label: '已链接客户端',
+      value: String(totalCount),
       unit: '个',
-      sub: s?.clients_count ? '正在使用代理' : '等待客户端接入',
+      sub: clientsSub,
       accent: 'border-l-foreground',
     },
     {

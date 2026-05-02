@@ -52,6 +52,8 @@ useEvents({
       recv_bytes: 0,
     }),
   client_disconnected: (p) => proxyStore.applyClientDisconnected(p.session_id),
+  passive_client_seen: (p) => proxyStore.applyPassiveClientSeen(p),
+  passive_client_lost: (p) => proxyStore.applyPassiveClientLost(p),
   traffic_tick: (p) => trafficStore.applyTick(p),
   vpn_state_changed: (p) =>
     proxyStore.applyVpnState({
