@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Conduit · Linear/Cursor 风格</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css" rel="stylesheet">
+<style>
+  body {
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(120, 119, 198, 0.25), rgba(255, 255, 255, 0)),
+      radial-gradient(ellipse 60% 40% at 80% 80%, rgba(99, 102, 241, 0.15), rgba(255, 255, 255, 0)),
+      #0a0a0f;
+    color: #e4e4e7;
+  }
+  .glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(20px) saturate(150%);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 1px 0 0 rgba(255, 255, 255, 0.04) inset,
+      0 8px 32px -8px rgba(0, 0, 0, 0.4);
+  }
+  .glass-strong {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+  .accent-glow {
+    box-shadow: 0 0 40px -10px rgba(99, 102, 241, 0.5);
+  }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .num-display {
+    font-family: 'Geist Mono', ui-monospace, monospace;
+    font-feature-settings: 'tnum', 'ss01';
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .pulse-dot { animation: pulse-soft 2s ease-in-out infinite; }
+</style>
+</head>
+<body class="min-h-screen grid-bg">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-[200px] flex flex-col border-r border-white/5 bg-black/20">
+      <div class="px-4 py-5 flex items-center gap-2.5">
+        <div class="size-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <i class="ri-shield-flash-fill text-white text-base"></i>
+        </div>
+        <div class="flex flex-col leading-tight">
+          <div class="text-sm font-semibold text-white">Conduit</div>
+          <div class="text-[10px] text-zinc-500">Server</div>
+        </div>
+      </div>
+      <nav class="px-2 flex flex-col gap-0.5">
+        <button class="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium bg-white/[0.06] text-white border border-white/10 shadow-sm">
+          <i class="ri-dashboard-line text-sm"></i>
+          仪表盘
+        </button>
+        <button class="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-400 hover:bg-white/[0.04] hover:text-white">
+          <i class="ri-file-list-line text-sm"></i>
+          日志
+        </button>
+        <button class="flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-400 hover:bg-white/[0.04] hover:text-white">
+          <i class="ri-settings-3-line text-sm"></i>
+          设置
+        </button>
+      </nav>
+      <div class="mt-auto px-4 py-3 text-[10px] text-zinc-600 font-mono">v0.1.0</div>
+    </aside>
+
+    <!-- Main -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top status bar -->
+      <header class="h-14 shrink-0 flex items-center gap-3 px-5 border-b border-white/5">
+        <div class="flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+          <span class="size-1.5 rounded-full bg-emerald-400 pulse-dot shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+          <span class="text-[11px] font-medium text-emerald-300">运行中</span>
+        </div>
+        <span class="text-xs text-zinc-500">3 个客户端正在使用代理</span>
+        <div class="h-5 w-px bg-white/10 mx-1"></div>
+        <div class="flex items-center gap-1.5">
+          <div class="flex items-center gap-1 rounded-md bg-white/5 border border-white/5 px-2 py-1">
+            <span class="text-[10px] uppercase tracking-wider text-zinc-500">HTTP</span>
+            <span class="num-display text-xs font-medium text-zinc-200">8080</span>
+          </div>
+          <div class="flex items-center gap-1 rounded-md bg-white/5 border border-white/5 px-2 py-1">
+            <span class="text-[10px] uppercase tracking-wider text-zinc-500">SOCKS5</span>
+            <span class="num-display text-xs font-medium text-zinc-200">1080</span>
+          </div>
+          <div class="flex items-center gap-1 rounded-md bg-white/5 border border-white/5 px-2 py-1">
+            <span class="text-[10px] uppercase tracking-wider text-zinc-500">API</span>
+            <span class="num-display text-xs font-medium text-zinc-200">23789</span>
+          </div>
+        </div>
+        <div class="ml-auto flex items-center gap-3">
+          <span class="num-display text-xs text-zinc-500">运行 2h 14m</span>
+          <button class="px-3 py-1.5 rounded-md bg-rose-500/10 border border-rose-500/20 hover:bg-rose-500/20 text-rose-300 text-xs font-medium flex items-center gap-1.5 transition-all">
+            <i class="ri-stop-circle-line"></i>
+            停止代理
+          </button>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <main class="flex-1 overflow-y-auto p-5">
+        <div class="max-w-[1440px] mx-auto grid grid-cols-12 gap-3">
+          <!-- ProxyControl -->
+          <div class="col-span-7 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-[13px] font-semibold text-white">代理引擎</h2>
+              <div class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <span class="size-1 rounded-full bg-emerald-400 pulse-dot"></span>
+                <span class="text-[10px] font-medium text-emerald-300">运行中</span>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="relative rounded-lg p-3 bg-gradient-to-br from-indigo-500/10 to-transparent border border-indigo-500/20">
+                <i class="ri-user-3-line absolute right-2.5 top-2.5 text-indigo-400 text-sm"></i>
+                <div class="text-[10px] uppercase tracking-wider text-indigo-300/70 mb-1">在线客户端</div>
+                <div class="flex items-baseline gap-1.5">
+                  <span class="num-display text-[26px] font-light text-white leading-none">3</span>
+                  <span class="text-[11px] text-zinc-500">个</span>
+                </div>
+                <div class="text-[10px] text-zinc-500 mt-0.5">正在使用代理</div>
+              </div>
+              <div class="relative rounded-lg p-3 bg-gradient-to-br from-emerald-500/10 to-transparent border border-emerald-500/20">
+                <i class="ri-arrow-down-line absolute right-2.5 top-2.5 text-emerald-400 text-sm"></i>
+                <div class="text-[10px] uppercase tracking-wider text-emerald-300/70 mb-1">下行</div>
+                <div class="flex items-baseline gap-1.5">
+                  <span class="num-display text-[26px] font-light text-white leading-none">2.4</span>
+                  <span class="text-[11px] text-zinc-500">MB/s</span>
+                </div>
+                <div class="text-[10px] text-zinc-500 mt-0.5">同事 → 服务端</div>
+              </div>
+              <div class="relative rounded-lg p-3 bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/20">
+                <i class="ri-arrow-up-line absolute right-2.5 top-2.5 text-amber-400 text-sm"></i>
+                <div class="text-[10px] uppercase tracking-wider text-amber-300/70 mb-1">上行</div>
+                <div class="flex items-baseline gap-1.5">
+                  <span class="num-display text-[26px] font-light text-white leading-none">874</span>
+                  <span class="text-[11px] text-zinc-500">KB/s</span>
+                </div>
+                <div class="text-[10px] text-zinc-500 mt-0.5">服务端 → 同事</div>
+              </div>
+              <div class="relative rounded-lg p-3 bg-gradient-to-br from-zinc-500/10 to-transparent border border-zinc-500/20">
+                <i class="ri-time-line absolute right-2.5 top-2.5 text-zinc-400 text-sm"></i>
+                <div class="text-[10px] uppercase tracking-wider text-zinc-400/70 mb-1">运行时长</div>
+                <div class="flex items-baseline gap-1.5">
+                  <span class="num-display text-[26px] font-light text-white leading-none">2h 14m</span>
+                </div>
+                <div class="text-[10px] text-zinc-500 mt-0.5">稳定运行中</div>
+              </div>
+            </div>
+            <div class="mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-xs">
+              <i class="ri-shield-check-line text-emerald-400"></i>
+              <span class="text-zinc-400">VPN 出口</span>
+              <span class="num-display text-zinc-200">utun3</span>
+              <span class="ml-auto text-[10px] uppercase tracking-wider text-emerald-300">可用</span>
+            </div>
+          </div>
+
+          <!-- NetworkPanel -->
+          <div class="col-span-5 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-[13px] font-semibold text-white">本机网络</h2>
+              <span class="num-display text-[11px] text-zinc-500">5 / 5 通过</span>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2 text-xs">
+                <i class="ri-share-forward-line text-zinc-500"></i>
+                <span class="text-zinc-400">LAN</span>
+                <span class="ml-auto num-display text-zinc-200">en0=192.168.1.42</span>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <i class="ri-router-line text-zinc-500"></i>
+                <span class="text-zinc-400">VPN</span>
+                <span class="num-display text-zinc-200">utun3</span>
+                <span class="ml-auto text-[10px] text-emerald-300">默认路由 → VPN</span>
+              </div>
+              <div class="my-2 h-px bg-white/5"></div>
+              <ul class="space-y-0.5">
+                <li class="flex items-center gap-2 text-xs px-1.5 py-1 rounded hover:bg-white/[0.02]">
+                  <span class="size-3.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <i class="ri-check-line text-emerald-400 text-[10px]"></i>
+                  </span>
+                  <span class="text-zinc-300">HTTP 代理端口</span>
+                  <span class="ml-auto num-display text-[10px] text-zinc-500">listening on 127.0.0.1:8080</span>
+                </li>
+                <li class="flex items-center gap-2 text-xs px-1.5 py-1 rounded hover:bg-white/[0.02]">
+                  <span class="size-3.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <i class="ri-check-line text-emerald-400 text-[10px]"></i>
+                  </span>
+                  <span class="text-zinc-300">SOCKS5 代理端口</span>
+                  <span class="ml-auto num-display text-[10px] text-zinc-500">listening on 127.0.0.1:1080</span>
+                </li>
+                <li class="flex items-center gap-2 text-xs px-1.5 py-1 rounded hover:bg-white/[0.02]">
+                  <span class="size-3.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <i class="ri-check-line text-emerald-400 text-[10px]"></i>
+                  </span>
+                  <span class="text-zinc-300">管控 API 端口</span>
+                  <span class="ml-auto num-display text-[10px] text-zinc-500">listening on 127.0.0.1:23789</span>
+                </li>
+                <li class="flex items-center gap-2 text-xs px-1.5 py-1 rounded hover:bg-white/[0.02]">
+                  <span class="size-3.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <i class="ri-check-line text-emerald-400 text-[10px]"></i>
+                  </span>
+                  <span class="text-zinc-300">局域网 IP 检测</span>
+                  <span class="ml-auto num-display text-[10px] text-zinc-500">en0=192.168.1.42</span>
+                </li>
+                <li class="flex items-center gap-2 text-xs px-1.5 py-1 rounded hover:bg-white/[0.02]">
+                  <span class="size-3.5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                    <i class="ri-check-line text-emerald-400 text-[10px]"></i>
+                  </span>
+                  <span class="text-zinc-300">VPN 隧道</span>
+                  <span class="ml-auto num-display text-[10px] text-zinc-500">utun3 (default route)</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- TrafficChart -->
+          <div class="col-span-12 glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-3">
+                <h2 class="text-[13px] font-semibold text-white">实时流量</h2>
+                <span class="text-[11px] text-zinc-500 num-display">窗口 60s · 53 点</span>
+                <span class="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] num-display text-zinc-300">峰值 3.2 MB/s</span>
+              </div>
+              <div class="flex bg-white/5 rounded-md p-0.5 border border-white/10">
+                <button class="px-2.5 py-1 rounded text-[11px] font-medium bg-white/10 text-white">下行</button>
+                <button class="px-2.5 py-1 rounded text-[11px] font-medium text-zinc-400 hover:text-white">上行</button>
+              </div>
+            </div>
+            <svg viewBox="0 0 720 160" preserveAspectRatio="none" class="w-full h-[160px]">
+              <defs>
+                <linearGradient id="grad-1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#818cf8" stop-opacity="0.4"/>
+                  <stop offset="100%" stop-color="#818cf8" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="grad-2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#34d399" stop-opacity="0.3"/>
+                  <stop offset="100%" stop-color="#34d399" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <g stroke="rgba(255,255,255,0.04)" stroke-dasharray="2 4" stroke-width="0.5">
+                <line x1="12" x2="708" y1="40" y2="40"/>
+                <line x1="12" x2="708" y1="80" y2="80"/>
+                <line x1="12" x2="708" y1="120" y2="120"/>
+              </g>
+              <path d="M 12 130 C 60 80, 120 90, 180 60 S 300 100, 360 70 S 480 40, 540 65 S 660 90, 708 50 L 708 148 L 12 148 Z" fill="url(#grad-1)"/>
+              <path d="M 12 130 C 60 80, 120 90, 180 60 S 300 100, 360 70 S 480 40, 540 65 S 660 90, 708 50" fill="none" stroke="#818cf8" stroke-width="1.5"/>
+              <path d="M 12 140 C 80 120, 160 100, 240 110 S 360 130, 420 100 S 540 80, 600 105 S 700 120, 708 100 L 708 148 L 12 148 Z" fill="url(#grad-2)"/>
+              <path d="M 12 140 C 80 120, 160 100, 240 110 S 360 130, 420 100 S 540 80, 600 105 S 700 120, 708 100" fill="none" stroke="#34d399" stroke-width="1.5"/>
+            </svg>
+            <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
+              <div class="flex items-center gap-1.5">
+                <span class="size-2 rounded-full bg-indigo-400"></span>
+                <span class="num-display text-zinc-300">192.168.1.18</span>
+                <span class="text-zinc-500">3.2 MB/s</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="size-2 rounded-full bg-emerald-400"></span>
+                <span class="num-display text-zinc-300">192.168.1.22</span>
+                <span class="text-zinc-500">1.8 MB/s</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="size-2 rounded-full bg-amber-400"></span>
+                <span class="num-display text-zinc-300">192.168.1.25</span>
+                <span class="text-zinc-500">540 KB/s</span>
+              </div>
+              <span class="ml-auto num-display text-zinc-500">最后更新 18:32:14</span>
+            </div>
+          </div>
+
+          <!-- ClientList -->
+          <div class="col-span-8 glass rounded-xl">
+            <div class="flex items-center justify-between p-4 pb-3">
+              <h2 class="text-[13px] font-semibold text-white">在线客户端</h2>
+              <span class="px-2 py-0.5 rounded-md bg-white/5 border border-white/10 text-[10px] num-display text-zinc-300">3 个</span>
+            </div>
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-y border-white/5 text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
+                  <th class="text-left px-4 py-2 font-semibold">客户端</th>
+                  <th class="text-left px-2 py-2 font-semibold">协议</th>
+                  <th class="text-left px-2 py-2 font-semibold">目标</th>
+                  <th class="text-right px-2 py-2 font-semibold">下行</th>
+                  <th class="text-right px-2 py-2 font-semibold">上行</th>
+                  <th class="text-right px-2 py-2 font-semibold">累计</th>
+                  <th class="text-right px-4 py-2 font-semibold">接入</th>
+                </tr>
+              </thead>
+              <tbody class="text-zinc-300">
+                <tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <td class="px-4 py-2.5 num-display">192.168.1.18</td>
+                  <td class="px-2 py-2.5"><span class="px-1.5 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/20 text-indigo-300 num-display text-[10px] uppercase">HTTP</span></td>
+                  <td class="px-2 py-2.5 num-display text-zinc-400 max-w-[280px] truncate">api.notion.com:443</td>
+                  <td class="px-2 py-2.5 text-right num-display text-emerald-300">1.4 MB/s</td>
+                  <td class="px-2 py-2.5 text-right num-display text-amber-300">240 KB/s</td>
+                  <td class="px-2 py-2.5 text-right num-display text-zinc-500">128 MB</td>
+                  <td class="px-4 py-2.5 text-right num-display text-zinc-500">42m</td>
+                </tr>
+                <tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <td class="px-4 py-2.5 num-display">192.168.1.22</td>
+                  <td class="px-2 py-2.5"><span class="px-1.5 py-0.5 rounded bg-purple-500/15 border border-purple-500/20 text-purple-300 num-display text-[10px] uppercase">SOCKS5</span></td>
+                  <td class="px-2 py-2.5 num-display text-zinc-400 max-w-[280px] truncate">git.zoom.us:22</td>
+                  <td class="px-2 py-2.5 text-right num-display text-emerald-300">680 KB/s</td>
+                  <td class="px-2 py-2.5 text-right num-display text-amber-300">120 KB/s</td>
+                  <td class="px-2 py-2.5 text-right num-display text-zinc-500">42 MB</td>
+                  <td class="px-4 py-2.5 text-right num-display text-zinc-500">18m</td>
+                </tr>
+                <tr class="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <td class="px-4 py-2.5 num-display">192.168.1.25</td>
+                  <td class="px-2 py-2.5"><span class="px-1.5 py-0.5 rounded bg-indigo-500/15 border border-indigo-500/20 text-indigo-300 num-display text-[10px] uppercase">HTTP</span></td>
+                  <td class="px-2 py-2.5 num-display text-zinc-400 max-w-[280px] truncate">jenkins.zoom.us:443</td>
+                  <td class="px-2 py-2.5 text-right num-display text-emerald-300">320 KB/s</td>
+                  <td class="px-2 py-2.5 text-right num-display text-amber-300">85 KB/s</td>
+                  <td class="px-2 py-2.5 text-right num-display text-zinc-500">12 MB</td>
+                  <td class="px-4 py-2.5 text-right num-display text-zinc-500">5m</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- ShareCard -->
+          <div class="col-span-4 glass-strong rounded-xl p-4 accent-glow">
+            <div class="flex items-baseline justify-between mb-3">
+              <h2 class="text-[13px] font-semibold text-white">接入信息</h2>
+              <span class="text-[10px] uppercase tracking-wider text-zinc-500 font-medium">分享给同事</span>
+            </div>
+            <div class="flex bg-white/5 rounded-md p-0.5 border border-white/10 mb-2.5">
+              <button class="flex-1 px-3 py-1.5 rounded text-[11px] font-semibold bg-gradient-to-b from-indigo-500/30 to-indigo-500/10 text-white border border-indigo-500/30">PAC</button>
+              <button class="flex-1 px-3 py-1.5 rounded text-[11px] font-medium text-zinc-400 hover:text-white">HTTP</button>
+              <button class="flex-1 px-3 py-1.5 rounded text-[11px] font-medium text-zinc-400 hover:text-white">SOCKS5</button>
+            </div>
+            <p class="text-[11px] text-zinc-400 mb-2 flex items-baseline gap-1.5">
+              <span class="px-1.5 py-0.5 rounded-sm bg-indigo-500/20 text-indigo-300 text-[9px] font-bold uppercase tracking-wider">推荐</span>
+              填到系统代理「自动配置脚本」即可智能分流
+            </p>
+            <div class="flex items-stretch overflow-hidden rounded-md bg-black/30 border border-white/10 hover:border-indigo-500/30 transition-colors">
+              <div class="flex items-center px-2.5 text-zinc-500">
+                <i class="ri-link-m text-sm"></i>
+              </div>
+              <code class="flex-1 select-all overflow-x-auto whitespace-nowrap py-2 pr-2 num-display text-xs text-zinc-200 leading-tight">
+                http://192.168.1.42:8080/proxy.pac
+              </code>
+              <button class="px-3 border-l border-white/10 hover:bg-white/5 transition-colors">
+                <i class="ri-file-copy-2-line text-zinc-400 hover:text-white text-sm"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,323 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+
+/* =====================================================================
+ * Conduit Server — 全局样式入口
+ * ---------------------------------------------------------------------
+ * 加载顺序：
+ *   1. tailwindcss          —— Tailwind CSS v4 工具类
+ *   2. tw-animate-css       —— shadcn-vue 用到的关键帧动画
+ *   3. remixicon/fonts/...  —— 仅作为兜底字体加载（实际使用 @remixicon/vue 组件）
+ *
+ * 设计 token 全部走 shadcn-vue 的 OKLCH 颜色体系（neutral 基色）。
+ * 业务层不再直接读 `--color-*`，而是通过 shadcn-vue 组件 + Tailwind 工具类消费。
+ * ===================================================================== */
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "remixicon/fonts/remixicon.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* =====================================================================
+ * 主题 token：shadcn-vue 标准 + Conduit 业务扩展
+ * - 颜色基底：neutral（zinc 系）
+ * - 强调色：Stripe/Vercel 净白企业级风格 —— 主色为近黑色 zinc-900
+ *   黑白对比建立专业克制的视觉语言，状态色（emerald/amber/red）作为辅助
+ * - 字体：Geist Sans（界面）+ Geist Mono（端口/IP/流量数字）
+ * ===================================================================== */
+:root {
+  /* 背景：暖白 #fafaf9（zinc-50 + 微暖），让纯白 Card 自然 "浮起" */
+  --background: oklch(0.985 0.002 80);
+  --foreground: oklch(0.18 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0 0);
+
+  /* Primary：zinc-900（近黑色）—— Stripe/Vercel 风格的视觉签名 */
+  --primary: oklch(0.21 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.21 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.55 0 0);
+  /* Accent：极淡灰，用于 hover */
+  --accent: oklch(0.96 0 0);
+  --accent-foreground: oklch(0.21 0 0);
+  --destructive: oklch(0.62 0.22 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  /* 边框：zinc-200，细线 */
+  --border: oklch(0.92 0 0);
+  --input: oklch(0.92 0 0);
+  /* Focus ring：黑色 ring，与 primary 一致 */
+  --ring: oklch(0.18 0 0);
+
+  /* Chart 颜色：保持适度多彩用于流量/客户端区分 */
+  --chart-1: oklch(0.21 0 0);
+  --chart-2: oklch(0.7 0.18 152);
+  --chart-3: oklch(0.78 0.16 78);
+  --chart-4: oklch(0.62 0.22 27);
+  --chart-5: oklch(0.55 0.22 257);
+
+  --radius: 0.5rem;
+
+  /* Sidebar 与 background 同色，营造一体化感 */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-primary: oklch(0.21 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.21 0 0);
+  --sidebar-border: oklch(0.92 0 0);
+  --sidebar-ring: oklch(0.18 0 0);
+
+  /* Conduit 业务扩展：状态色（emerald-500/amber-500/red-500/blue-500，B 风格的克制辅助色） */
+  --status-ok: oklch(0.7 0.18 152);
+  --status-ok-foreground: oklch(0.985 0 0);
+  --status-warn: oklch(0.78 0.16 78);
+  --status-warn-foreground: oklch(0.18 0 0);
+  --status-error: oklch(0.62 0.22 27);
+  --status-error-foreground: oklch(0.985 0 0);
+  --status-info: oklch(0.62 0.18 250);
+  --status-info-foreground: oklch(0.985 0 0);
+
+  /* 兼容 useTrafficSeries 等旧业务模块（流量曲线主色用 zinc-900） */
+  --color-primary-raw: oklch(0.21 0 0);
+  --color-cta: oklch(0.7 0.18 152);
+}
+
+/* =====================================================================
+ * 暗色模式：Stripe/Vercel 风格的暗色版（zinc-950 背景 + zinc-900 卡片）
+ * - 背景层级：bg #0a0a0a / card #141414 / hover #1a1a1a
+ * - Primary 反转为白色（让按钮在暗色下保持对比度）
+ * - 边框使用 white / 8%~12% 半透明，避免硬切线条
+ * ===================================================================== */
+.dark {
+  /* 真黑背景，Stripe Docs 暗色那种 */
+  --background: oklch(0.13 0 0);
+  --foreground: oklch(0.95 0 0);
+  --card: oklch(0.18 0 0);
+  --card-foreground: oklch(0.95 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(0.95 0 0);
+
+  /* Primary 反转为白色 */
+  --primary: oklch(0.95 0 0);
+  --primary-foreground: oklch(0.13 0 0);
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.95 0 0);
+  --muted: oklch(0.24 0 0);
+  --muted-foreground: oklch(0.68 0 0);
+  --accent: oklch(0.24 0 0);
+  --accent-foreground: oklch(0.95 0 0);
+  --destructive: oklch(0.65 0.22 27);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.95 0 0);
+
+  --chart-1: oklch(0.95 0 0);
+  --chart-2: oklch(0.74 0.16 152);
+  --chart-3: oklch(0.82 0.15 78);
+  --chart-4: oklch(0.7 0.2 27);
+  --chart-5: oklch(0.7 0.18 250);
+
+  --sidebar: oklch(0.16 0 0);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-primary: oklch(0.95 0 0);
+  --sidebar-primary-foreground: oklch(0.13 0 0);
+  --sidebar-accent: oklch(0.24 0 0);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.95 0 0);
+
+  --status-ok: oklch(0.74 0.16 152);
+  --status-ok-foreground: oklch(0.13 0 0);
+  --status-warn: oklch(0.82 0.15 78);
+  --status-warn-foreground: oklch(0.13 0 0);
+  --status-error: oklch(0.7 0.2 27);
+  --status-error-foreground: oklch(0.985 0 0);
+  --status-info: oklch(0.7 0.18 250);
+  --status-info-foreground: oklch(0.13 0 0);
+
+  --color-primary-raw: oklch(0.95 0 0);
+  --color-cta: oklch(0.74 0.16 152);
+}
+
+/* =====================================================================
+ * Tailwind v4 主题注册：把 CSS 变量绑成 Tailwind 工具类
+ * ===================================================================== */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-foreground: var(--status-ok-foreground);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-foreground: var(--status-warn-foreground);
+  --color-status-error: var(--status-error);
+  --color-status-error-foreground: var(--status-error-foreground);
+  --color-status-info: var(--status-info);
+  --color-status-info-foreground: var(--status-info-foreground);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-heading: var(--font-sans);
+}
+
+/* =====================================================================
+ * Base 层：默认边框/字体/光标/无障碍
+ * ===================================================================== */
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  /* 减弱动画偏好（无障碍） */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  /* 滚动条美化 */
+  ::-webkit-scrollbar {
+    @apply w-2.5 h-2.5;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/60;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::selection {
+    @apply bg-primary/15 text-foreground;
+  }
+  /* Card 浮起阴影：B 风格 —— 极细两层叠加，hover 时才浮起 */
+  [data-slot='card'] {
+    box-shadow:
+      0 1px 0 0 oklch(0 0 0 / 0.02),
+      0 1px 2px 0 oklch(0 0 0 / 0.02);
+    transition: box-shadow 200ms ease;
+  }
+  [data-slot='card']:hover {
+    box-shadow:
+      0 1px 0 0 oklch(0 0 0 / 0.02),
+      0 4px 12px -2px oklch(0 0 0 / 0.08);
+  }
+  /* 暗色模式下不需要阴影，由边框承担分隔作用 */
+  .dark [data-slot='card'] {
+    box-shadow: none;
+  }
+  .dark [data-slot='card']:hover {
+    box-shadow: 0 4px 12px -2px oklch(0 0 0 / 0.4);
+  }
+}
+
+/* =====================================================================
+ * 业务自定义动画（不属于 shadcn-vue 标配，但 Conduit 多处复用）
+ * ===================================================================== */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.88);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 0%,
+    var(--border) 50%,
+    var(--muted) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  @apply rounded-md;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

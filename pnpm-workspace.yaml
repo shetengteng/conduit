@@ -1,0 +1,5 @@
+packages:
+  - "server-app"
+  - "server-app/ui"
+  - "client-app"
+  - "client-app/ui"

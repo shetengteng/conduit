@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conduit · 设计原型选型</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css" rel="stylesheet">
+<style>
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+    background:
+      radial-gradient(ellipse 60% 50% at 50% -20%, rgba(120, 119, 198, 0.18), transparent),
+      radial-gradient(ellipse 50% 40% at 80% 100%, rgba(99, 102, 241, 0.12), transparent),
+      #0a0a0f;
+    color: #e4e4e7;
+    min-height: 100vh;
+  }
+  .preview-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .preview-card:hover {
+    transform: translateY(-4px);
+    border-color: rgba(120, 119, 198, 0.4);
+    box-shadow: 0 20px 60px -10px rgba(120, 119, 198, 0.3);
+  }
+  .preview-thumb {
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: #14141c;
+  }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    transform: scale(0.45);
+    transform-origin: top left;
+    width: 222.22%;
+    height: 222.22%;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="max-w-[1400px] mx-auto px-8 py-12">
+    <!-- Header -->
+    <div class="mb-12 text-center">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 mb-4">
+        <i class="ri-palette-line text-purple-400"></i>
+        <span class="text-xs font-medium text-purple-300">设计选型 · Conduit Server</span>
+      </div>
+      <h1 class="text-5xl font-bold tracking-tight mb-3" style="background: linear-gradient(135deg, #fff 0%, #a3a3a3 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        4 套高大上风格，挑一个改造
+      </h1>
+      <p class="text-zinc-400 text-base">点击卡片查看大图，或在右侧"打开全屏"逐一对比细节</p>
+    </div>
+
+    <!-- Grid -->
+    <div class="grid grid-cols-2 gap-6 mb-12">
+      <!-- A -->
+      <a href="A-linear-cursor.html" target="_blank" class="preview-card rounded-2xl overflow-hidden block group">
+        <div class="preview-thumb relative">
+          <iframe src="A-linear-cursor.html" loading="lazy"></iframe>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
+          <div class="absolute top-4 left-4 px-3 py-1 rounded-md bg-black/60 backdrop-blur text-xs font-bold text-white border border-white/10">A</div>
+        </div>
+        <div class="p-6">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="text-xl font-bold text-white">Linear / Cursor</h3>
+            <span class="text-xs text-purple-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">点击查看 →</span>
+          </div>
+          <p class="text-sm text-zinc-400 leading-relaxed mb-3">
+            深色 + Glassmorphism + 紫色辉光。极致高大上，开发者审美天花板，氛围像深夜里的科技指挥室。
+          </p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 text-[10px] font-medium border border-purple-500/20">深色背景</span>
+            <span class="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-300 text-[10px] font-medium border border-blue-500/20">毛玻璃</span>
+            <span class="px-2 py-0.5 rounded-md bg-pink-500/10 text-pink-300 text-[10px] font-medium border border-pink-500/20">辉光强调</span>
+            <span class="px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-300 text-[10px] font-medium border border-zinc-500/20">极简留白</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- B -->
+      <a href="B-stripe-vercel.html" target="_blank" class="preview-card rounded-2xl overflow-hidden block group">
+        <div class="preview-thumb relative">
+          <iframe src="B-stripe-vercel.html" loading="lazy"></iframe>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
+          <div class="absolute top-4 left-4 px-3 py-1 rounded-md bg-white/90 text-xs font-bold text-zinc-900 border border-zinc-200">B</div>
+        </div>
+        <div class="p-6">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="text-xl font-bold text-white">Stripe / Vercel</h3>
+            <span class="text-xs text-zinc-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">点击查看 →</span>
+          </div>
+          <p class="text-sm text-zinc-400 leading-relaxed mb-3">
+            净白 + 极细字重 + 黑白对比。Crisp 美学，像是给 CFO 演示的财务后台，理性、克制、有钱味。
+          </p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-[10px] font-medium">净白底</span>
+            <span class="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-[10px] font-medium">细线条</span>
+            <span class="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-[10px] font-medium">Display 字体</span>
+            <span class="px-2 py-0.5 rounded-md bg-zinc-100 text-zinc-700 text-[10px] font-medium">克制色彩</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- C -->
+      <a href="C-tailscale-1password.html" target="_blank" class="preview-card rounded-2xl overflow-hidden block group">
+        <div class="preview-thumb relative">
+          <iframe src="C-tailscale-1password.html" loading="lazy"></iframe>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
+          <div class="absolute top-4 left-4 px-3 py-1 rounded-md bg-orange-500 text-xs font-bold text-white shadow-lg shadow-orange-500/30">C</div>
+        </div>
+        <div class="p-6">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="text-xl font-bold text-white">Tailscale / 1Password</h3>
+            <span class="text-xs text-orange-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">点击查看 →</span>
+          </div>
+          <p class="text-sm text-zinc-400 leading-relaxed mb-3">
+            暖米色 + 大圆角 + 橙色强调。温暖友好，像是给同事用的产品，"今天工作辛苦了" 的氛围感。
+          </p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 text-[10px] font-medium border border-amber-500/30">暖米色</span>
+            <span class="px-2 py-0.5 rounded-md bg-orange-500/15 text-orange-300 text-[10px] font-medium border border-orange-500/30">大圆角</span>
+            <span class="px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300 text-[10px] font-medium border border-rose-500/30">头像彩色</span>
+            <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-300 text-[10px] font-medium border border-emerald-500/30">柔和阴影</span>
+          </div>
+        </div>
+      </a>
+
+      <!-- D -->
+      <a href="D-datadog-grafana.html" target="_blank" class="preview-card rounded-2xl overflow-hidden block group">
+        <div class="preview-thumb relative">
+          <iframe src="D-datadog-grafana.html" loading="lazy"></iframe>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none"></div>
+          <div class="absolute top-4 left-4 px-3 py-1 rounded-md bg-cyan-500/90 text-xs font-bold text-zinc-900 border border-cyan-300">D</div>
+        </div>
+        <div class="p-6">
+          <div class="flex items-baseline justify-between mb-2">
+            <h3 class="text-xl font-bold text-white">Datadog / Grafana</h3>
+            <span class="text-xs text-cyan-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">点击查看 →</span>
+          </div>
+          <p class="text-sm text-zinc-400 leading-relaxed mb-3">
+            硬核炭灰 + 霓虹荧光 + 等宽字体。SRE 监控大屏美学，"我在管一个生产系统" 的硬核感和专业感。
+          </p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 text-[10px] font-medium border border-cyan-500/30">炭灰底</span>
+            <span class="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 text-[10px] font-medium border border-emerald-500/30">霓虹高亮</span>
+            <span class="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-[10px] font-medium border border-amber-500/30">高密度</span>
+            <span class="px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 text-[10px] font-medium border border-purple-500/30">等宽数字</span>
+          </div>
+        </div>
+      </a>
+    </div>
+
+    <!-- Decision matrix -->
+    <div class="rounded-2xl bg-white/[0.02] border border-white/[0.05] p-8 backdrop-blur">
+      <h2 class="text-lg font-semibold text-white mb-1 flex items-center gap-2">
+        <i class="ri-scales-3-line text-purple-400"></i>
+        快速决策指南
+      </h2>
+      <p class="text-xs text-zinc-500 mb-5">从你的产品定位出发，三秒选风格：</p>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+        <div class="rounded-lg bg-purple-500/5 border border-purple-500/20 p-4">
+          <div class="text-purple-300 font-bold text-sm mb-2">A · Linear/Cursor</div>
+          <p class="text-zinc-400 leading-relaxed mb-3">想让用户觉得"这个工具好酷，开发者很懂行情"。适合做 <strong class="text-white">个人 / 开发者工具</strong>。</p>
+          <div class="text-[10px] text-purple-300 font-mono">推荐指数：⭐⭐⭐⭐⭐</div>
+        </div>
+        <div class="rounded-lg bg-zinc-500/5 border border-zinc-500/20 p-4">
+          <div class="text-zinc-300 font-bold text-sm mb-2">B · Stripe/Vercel</div>
+          <p class="text-zinc-400 leading-relaxed mb-3">想让用户觉得"这是一个非常专业、可信赖的产品"。适合做 <strong class="text-white">企业级 SaaS</strong>。</p>
+          <div class="text-[10px] text-zinc-400 font-mono">推荐指数：⭐⭐⭐⭐</div>
+        </div>
+        <div class="rounded-lg bg-orange-500/5 border border-orange-500/20 p-4">
+          <div class="text-orange-300 font-bold text-sm mb-2">C · Tailscale/1Password</div>
+          <p class="text-zinc-400 leading-relaxed mb-3">想让用户觉得"这是一个温暖、贴心的产品"。适合做 <strong class="text-white">面向团队 / 同事</strong>。</p>
+          <div class="text-[10px] text-orange-300 font-mono">推荐指数：⭐⭐⭐⭐⭐ (最契合 Conduit 场景)</div>
+        </div>
+        <div class="rounded-lg bg-cyan-500/5 border border-cyan-500/20 p-4">
+          <div class="text-cyan-300 font-bold text-sm mb-2">D · Datadog/Grafana</div>
+          <p class="text-zinc-400 leading-relaxed mb-3">想让用户觉得"我在管一个严肃的生产系统"。适合做 <strong class="text-white">运维 / 监控工具</strong>。</p>
+          <div class="text-[10px] text-cyan-300 font-mono">推荐指数：⭐⭐⭐⭐</div>
+        </div>
+      </div>
+
+      <div class="mt-6 pt-5 border-t border-white/[0.05]">
+        <div class="flex items-start gap-3">
+          <div class="size-8 rounded-lg bg-purple-500/15 flex items-center justify-center shrink-0">
+            <i class="ri-lightbulb-flash-line text-purple-400"></i>
+          </div>
+          <div class="text-xs text-zinc-400 leading-relaxed">
+            <strong class="text-white">我的建议：</strong>结合 Conduit 的本质（让"懂代理的人"帮"不懂代理的人"上网），核心是
+            <strong class="text-orange-300">温暖 + 让别人觉得这是个友好的工具</strong>，所以
+            <strong class="text-orange-300">C 风格（Tailscale/1Password）</strong> 最契合。
+            如果你更想强调技术调性、想吸引开发者圈层，
+            <strong class="text-purple-300">A 风格（Linear/Cursor）</strong> 也是很好的选择。
+            <br><br>
+            选好后告诉我代号（A / B / C / D），我会基于该风格全面改造 <strong class="text-white">Dashboard + 日志 + 设置</strong> 三个页面，并加上暗色模式适配。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center text-xs text-zinc-600">
+      Conduit Design Prototypes · 2026-05-01 · 4 styles for selection
+    </div>
+  </div>
+</body>
+</html>

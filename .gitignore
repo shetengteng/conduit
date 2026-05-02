@@ -1,0 +1,52 @@
+# ── Node / pnpm ──
+node_modules/
+dist/
+*.log
+.pnpm-store/
+
+# ── Rust / Tauri ──
+target/
+**/src-tauri/target/
+**/src-tauri/binaries/
+**/src-tauri/gen/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.eggs/
+*.egg-info/
+build/
+*.spec
+
+# ── PyInstaller / Nuitka 输出 ──
+*.dist/
+*.build/
+
+# ── Editor / OS ──
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Env / 密钥 ──
+.env
+.env.local
+*.pem
+*.key
+
+# ── Test 缓存 ──
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+.tsbuildinfo
+
+# ── Tauri 打包产物已包含在 target/ ──
+# 注意：src-tauri/Cargo.lock 应当提交（应用类项目可重现构建）
+
+# ── 交互/调试临时文件 ──
+prompts.txt
+known-servers.json

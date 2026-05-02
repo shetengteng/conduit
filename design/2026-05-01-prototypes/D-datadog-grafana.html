@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Conduit · Datadog/Grafana 风格</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/remixicon@4.5.0/fonts/remixicon.css" rel="stylesheet">
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif;
+    background: #0b0e14;
+    color: #cfd2da;
+  }
+  .num-display {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+    font-feature-settings: 'tnum';
+  }
+  .panel {
+    background: #14181f;
+    border: 1px solid #232733;
+    border-radius: 4px;
+  }
+  .panel-header {
+    background: linear-gradient(180deg, #181c25 0%, #14181f 100%);
+    border-bottom: 1px solid #232733;
+  }
+  .neon-green { color: #00ff88; text-shadow: 0 0 12px rgba(0,255,136,0.4); }
+  .neon-cyan { color: #22d3ee; text-shadow: 0 0 12px rgba(34,211,238,0.4); }
+  .neon-pink { color: #f472b6; text-shadow: 0 0 12px rgba(244,114,182,0.4); }
+  .neon-amber { color: #fbbf24; text-shadow: 0 0 12px rgba(251,191,36,0.4); }
+  .neon-purple { color: #c084fc; text-shadow: 0 0 12px rgba(192,132,252,0.4); }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(35,39,51,0.4) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(35,39,51,0.4) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .blink { animation: blink 1.5s ease-in-out infinite; }
+  .metric-up::before { content: '▲'; color: #00ff88; margin-right: 4px; font-size: 0.7em; }
+  .metric-down::before { content: '▼'; color: #f87171; margin-right: 4px; font-size: 0.7em; }
+</style>
+</head>
+<body class="min-h-screen">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-[60px] flex flex-col bg-[#0a0d12] border-r border-[#1a1e28]">
+      <div class="h-12 flex items-center justify-center border-b border-[#1a1e28]">
+        <div class="size-8 rounded bg-gradient-to-br from-cyan-500 to-purple-600 flex items-center justify-center">
+          <i class="ri-shield-flash-fill text-white text-base"></i>
+        </div>
+      </div>
+      <nav class="flex flex-col py-2 gap-1">
+        <button class="size-10 mx-2 rounded flex items-center justify-center bg-cyan-500/15 text-cyan-400 border-l-2 border-cyan-400 -ml-px" title="仪表盘">
+          <i class="ri-dashboard-line text-lg"></i>
+        </button>
+        <button class="size-10 mx-2 rounded flex items-center justify-center text-zinc-500 hover:bg-white/5" title="日志">
+          <i class="ri-file-list-line text-lg"></i>
+        </button>
+        <button class="size-10 mx-2 rounded flex items-center justify-center text-zinc-500 hover:bg-white/5" title="设置">
+          <i class="ri-settings-3-line text-lg"></i>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Top bar - SRE style -->
+      <header class="h-12 shrink-0 flex items-center gap-2 px-4 bg-[#0a0d12] border-b border-[#1a1e28]">
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-semibold text-zinc-200 tracking-tight">Conduit / Production Server</h1>
+          <span class="text-xs text-zinc-600 num-display">/dashboards/main</span>
+        </div>
+        <div class="ml-auto flex items-center gap-2 num-display text-[11px]">
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/30">
+            <div class="size-1.5 rounded-full bg-emerald-400 blink"></div>
+            <span class="text-emerald-400 font-semibold">UP</span>
+            <span class="text-zinc-500">2h 14m 32s</span>
+          </div>
+          <div class="px-2 py-1 rounded bg-[#181c25] border border-[#232733] text-zinc-400">
+            <span class="text-zinc-500">REFRESH</span> <span class="text-cyan-400 ml-1">5s</span>
+          </div>
+          <div class="px-2 py-1 rounded bg-[#181c25] border border-[#232733] text-zinc-400">
+            <span class="text-zinc-500">LAST</span> <span class="text-cyan-400 ml-1">1h</span>
+          </div>
+          <button class="px-3 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-semibold flex items-center gap-1">
+            <i class="ri-stop-circle-line"></i>
+            STOP
+          </button>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <main class="flex-1 overflow-y-auto p-3 grid-bg">
+        <div class="grid grid-cols-12 gap-2">
+          <!-- KPI Strip -->
+          <div class="col-span-12 grid grid-cols-6 gap-2">
+            <div class="panel p-3">
+              <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">CLIENTS</div>
+              <div class="num-display text-2xl font-bold neon-green">3</div>
+              <div class="text-[10px] text-zinc-500 num-display mt-1 metric-up">+1 (5m)</div>
+            </div>
+            <div class="panel p-3">
+              <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">DOWN</div>
+              <div class="num-display text-2xl font-bold neon-cyan">2.4 <span class="text-sm text-zinc-500">MB/s</span></div>
+              <div class="text-[10px] text-zinc-500 num-display mt-1 metric-up">+12% (1m)</div>
+            </div>
+            <div class="panel p-3">
+              <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">UP</div>
+              <div class="num-display text-2xl font-bold neon-amber">874 <span class="text-sm text-zinc-500">KB/s</span></div>
+              <div class="text-[10px] text-zinc-500 num-display mt-1 metric-down">-3% (1m)</div>
+            </div>
+            <div class="panel p-3">
+              <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">SESSIONS</div>
+              <div class="num-display text-2xl font-bold neon-pink">17</div>
+              <div class="text-[10px] text-zinc-500 num-display mt-1">cumulative</div>
+            </div>
+            <div class="panel p-3">
+              <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">P99 LATENCY</div>
+              <div class="num-display text-2xl font-bold neon-purple">42 <span class="text-sm text-zinc-500">ms</span></div>
+              <div class="text-[10px] text-zinc-500 num-display mt-1 metric-down">-8ms</div>
+            </div>
+            <div class="panel p-3">
+              <div class="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">ERR RATE</div>
+              <div class="num-display text-2xl font-bold neon-green">0.00<span class="text-sm text-zinc-500">%</span></div>
+              <div class="text-[10px] text-zinc-500 num-display mt-1">no errors</div>
+            </div>
+          </div>
+
+          <!-- Traffic chart -->
+          <div class="col-span-8 panel">
+            <div class="panel-header px-3 py-2 flex items-center gap-2">
+              <i class="ri-line-chart-line text-cyan-400"></i>
+              <h2 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Bandwidth · proxy.bytes</h2>
+              <div class="ml-auto flex items-center gap-2 text-[10px] num-display">
+                <span class="flex items-center gap-1"><span class="size-2 bg-cyan-400"></span><span class="text-zinc-400">downstream</span></span>
+                <span class="flex items-center gap-1"><span class="size-2 bg-amber-400"></span><span class="text-zinc-400">upstream</span></span>
+              </div>
+            </div>
+            <div class="p-3">
+              <svg viewBox="0 0 800 240" preserveAspectRatio="none" class="w-full h-[240px]">
+                <defs>
+                  <linearGradient id="grad-d-cyan" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#22d3ee" stop-opacity="0.3"/>
+                    <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+                  </linearGradient>
+                  <linearGradient id="grad-d-amber" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.2"/>
+                    <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <g stroke="#232733" stroke-dasharray="2 4" stroke-width="0.5">
+                  <line x1="40" x2="780" y1="60" y2="60"/>
+                  <line x1="40" x2="780" y1="120" y2="120"/>
+                  <line x1="40" x2="780" y1="180" y2="180"/>
+                </g>
+                <g class="num-display" font-size="9" fill="#52525b" text-anchor="end">
+                  <text x="36" y="64">3.0M</text>
+                  <text x="36" y="124">2.0M</text>
+                  <text x="36" y="184">1.0M</text>
+                  <text x="36" y="220">0</text>
+                </g>
+                <path d="M 40 200 L 100 150 L 160 170 L 220 110 L 280 130 L 340 90 L 400 100 L 460 75 L 520 85 L 580 60 L 640 80 L 700 95 L 780 70 L 780 220 L 40 220 Z" fill="url(#grad-d-cyan)"/>
+                <path d="M 40 200 L 100 150 L 160 170 L 220 110 L 280 130 L 340 90 L 400 100 L 460 75 L 520 85 L 580 60 L 640 80 L 700 95 L 780 70" fill="none" stroke="#22d3ee" stroke-width="1.5"/>
+                <path d="M 40 215 L 100 195 L 160 200 L 220 175 L 280 185 L 340 165 L 400 170 L 460 155 L 520 165 L 580 145 L 640 160 L 700 170 L 780 155 L 780 220 L 40 220 Z" fill="url(#grad-d-amber)"/>
+                <path d="M 40 215 L 100 195 L 160 200 L 220 175 L 280 185 L 340 165 L 400 170 L 460 155 L 520 165 L 580 145 L 640 160 L 700 170 L 780 155" fill="none" stroke="#fbbf24" stroke-width="1.5"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Health checks -->
+          <div class="col-span-4 panel">
+            <div class="panel-header px-3 py-2 flex items-center gap-2">
+              <i class="ri-heart-pulse-line text-emerald-400"></i>
+              <h2 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Health Checks</h2>
+              <span class="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 num-display font-bold">5/5 OK</span>
+            </div>
+            <div class="p-2 space-y-px">
+              <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 num-display text-xs">
+                <span class="size-2 rounded-full bg-emerald-400"></span>
+                <span class="text-zinc-400">http_port</span>
+                <span class="ml-auto text-zinc-500">127.0.0.1:8080</span>
+                <span class="text-emerald-400 font-bold">OK</span>
+              </div>
+              <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 num-display text-xs">
+                <span class="size-2 rounded-full bg-emerald-400"></span>
+                <span class="text-zinc-400">socks5_port</span>
+                <span class="ml-auto text-zinc-500">127.0.0.1:1080</span>
+                <span class="text-emerald-400 font-bold">OK</span>
+              </div>
+              <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 num-display text-xs">
+                <span class="size-2 rounded-full bg-emerald-400"></span>
+                <span class="text-zinc-400">api_port</span>
+                <span class="ml-auto text-zinc-500">127.0.0.1:23789</span>
+                <span class="text-emerald-400 font-bold">OK</span>
+              </div>
+              <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 num-display text-xs">
+                <span class="size-2 rounded-full bg-emerald-400"></span>
+                <span class="text-zinc-400">lan_ip</span>
+                <span class="ml-auto text-zinc-500">en0=192.168.1.42</span>
+                <span class="text-emerald-400 font-bold">OK</span>
+              </div>
+              <div class="flex items-center gap-2 px-2 py-1.5 hover:bg-white/5 num-display text-xs">
+                <span class="size-2 rounded-full bg-emerald-400"></span>
+                <span class="text-zinc-400">vpn_tunnel</span>
+                <span class="ml-auto text-zinc-500">utun3 (default)</span>
+                <span class="text-emerald-400 font-bold">OK</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Client table -->
+          <div class="col-span-8 panel">
+            <div class="panel-header px-3 py-2 flex items-center gap-2">
+              <i class="ri-team-line text-pink-400"></i>
+              <h2 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Active Sessions</h2>
+              <span class="ml-auto text-[10px] num-display text-zinc-500">3 active · 14 historical</span>
+            </div>
+            <table class="w-full num-display text-xs">
+              <thead>
+                <tr class="text-[10px] uppercase tracking-wider text-zinc-500 bg-[#0e1117]">
+                  <th class="text-left px-3 py-1.5 font-semibold">client_ip</th>
+                  <th class="text-left px-2 py-1.5 font-semibold">protocol</th>
+                  <th class="text-left px-2 py-1.5 font-semibold">target</th>
+                  <th class="text-right px-2 py-1.5 font-semibold">bw_in</th>
+                  <th class="text-right px-2 py-1.5 font-semibold">bw_out</th>
+                  <th class="text-right px-2 py-1.5 font-semibold">total</th>
+                  <th class="text-right px-3 py-1.5 font-semibold">duration</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-t border-[#232733] hover:bg-cyan-500/5">
+                  <td class="px-3 py-1.5 text-cyan-300">192.168.1.18</td>
+                  <td class="px-2 py-1.5"><span class="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 text-[9px] font-bold">HTTP</span></td>
+                  <td class="px-2 py-1.5 text-zinc-400 max-w-[280px] truncate">api.notion.com:443</td>
+                  <td class="px-2 py-1.5 text-right text-emerald-400 font-bold">1.4M</td>
+                  <td class="px-2 py-1.5 text-right text-zinc-300">240K</td>
+                  <td class="px-2 py-1.5 text-right text-zinc-400">128M</td>
+                  <td class="px-3 py-1.5 text-right text-zinc-500">42m</td>
+                </tr>
+                <tr class="border-t border-[#232733] hover:bg-cyan-500/5">
+                  <td class="px-3 py-1.5 text-cyan-300">192.168.1.22</td>
+                  <td class="px-2 py-1.5"><span class="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 text-[9px] font-bold">SOCKS5</span></td>
+                  <td class="px-2 py-1.5 text-zinc-400 max-w-[280px] truncate">git.zoom.us:22</td>
+                  <td class="px-2 py-1.5 text-right text-emerald-400 font-bold">680K</td>
+                  <td class="px-2 py-1.5 text-right text-zinc-300">120K</td>
+                  <td class="px-2 py-1.5 text-right text-zinc-400">42M</td>
+                  <td class="px-3 py-1.5 text-right text-zinc-500">18m</td>
+                </tr>
+                <tr class="border-t border-[#232733] hover:bg-cyan-500/5">
+                  <td class="px-3 py-1.5 text-cyan-300">192.168.1.25</td>
+                  <td class="px-2 py-1.5"><span class="px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 text-[9px] font-bold">HTTP</span></td>
+                  <td class="px-2 py-1.5 text-zinc-400 max-w-[280px] truncate">jenkins.zoom.us:443</td>
+                  <td class="px-2 py-1.5 text-right text-emerald-400 font-bold">320K</td>
+                  <td class="px-2 py-1.5 text-right text-zinc-300">85K</td>
+                  <td class="px-2 py-1.5 text-right text-zinc-400">12M</td>
+                  <td class="px-3 py-1.5 text-right text-zinc-500">5m</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Share endpoints (terminal-like) -->
+          <div class="col-span-4 panel">
+            <div class="panel-header px-3 py-2 flex items-center gap-2">
+              <i class="ri-share-forward-line text-amber-400"></i>
+              <h2 class="text-xs font-semibold text-zinc-200 uppercase tracking-wider">Endpoints</h2>
+            </div>
+            <div class="p-3 space-y-3 num-display text-xs">
+              <div>
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-[10px] uppercase tracking-wider text-amber-400 font-bold">PAC</span>
+                  <span class="text-[10px] text-zinc-600">recommended</span>
+                  <button class="ml-auto text-zinc-500 hover:text-cyan-400"><i class="ri-file-copy-2-line text-sm"></i></button>
+                </div>
+                <pre class="bg-[#0a0d12] border border-[#232733] rounded p-2 text-cyan-300 overflow-x-auto text-[11px]">http://192.168.1.42:8080/proxy.pac</pre>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-[10px] uppercase tracking-wider text-zinc-400 font-bold">HTTP</span>
+                  <button class="ml-auto text-zinc-500 hover:text-cyan-400"><i class="ri-file-copy-2-line text-sm"></i></button>
+                </div>
+                <pre class="bg-[#0a0d12] border border-[#232733] rounded p-2 text-zinc-300 overflow-x-auto text-[11px]">192.168.1.42:8080</pre>
+              </div>
+              <div>
+                <div class="flex items-center gap-2 mb-1.5">
+                  <span class="text-[10px] uppercase tracking-wider text-zinc-400 font-bold">SOCKS5</span>
+                  <button class="ml-auto text-zinc-500 hover:text-cyan-400"><i class="ri-file-copy-2-line text-sm"></i></button>
+                </div>
+                <pre class="bg-[#0a0d12] border border-[#232733] rounded p-2 text-zinc-300 overflow-x-auto text-[11px]">192.168.1.42:1080</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "name": "conduit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LAN VPN proxy desktop apps (server + client)",
+  "packageManager": "pnpm@9.12.3",
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev:server-ui": "pnpm --filter @conduit/server-ui dev",
+    "dev:client-ui": "pnpm --filter @conduit/client-ui dev",
+    "dev:server": "pnpm --filter @conduit/server-app dev",
+    "dev:client": "pnpm --filter @conduit/client-app dev",
+    "dev:all": "concurrently -n server,client -c blue,green \"pnpm dev:server\" \"pnpm dev:client\"",
+    "build:server": "pnpm --filter @conduit/server-app build",
+    "build:client": "pnpm --filter @conduit/client-app build",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}

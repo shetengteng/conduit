@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Conduit Server",
+  "version": "0.1.0",
+  "identifier": "com.terrellshe.conduit.server",
+  "build": {
+    "frontendDist": "../ui/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm --filter @conduit/server-ui dev",
+    "beforeBuildCommand": "pnpm --filter @conduit/server-ui build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Conduit Server",
+        "width": 1200,
+        "height": 720,
+        "minWidth": 880,
+        "minHeight": 540,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
+    "category": "Utility",
+    "shortDescription": "Share LAN VPN access through Conduit",
+    "longDescription": "Conduit lets you share your VPN connection over the local network with other devices."
+  }
+}
