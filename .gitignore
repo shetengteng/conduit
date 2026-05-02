@@ -50,3 +50,15 @@ htmlcov/
 # ── 交互/调试临时文件 ──
 prompts.txt
 known-servers.json
+
+# ── Tauri icon 全套 (v0.1 仅 macOS;Windows / iOS / Android 不在此版本) ──
+# 保留 macOS / 通用必需:32x32.png / 64x64.png / 128x128.png / 128x128@2x.png / icon.png / icon.icns
+# 排除非 macOS 平台的 logo,避免提交噪音(下次需要时手动 pnpm tauri icon 即可重新生成)
+**/src-tauri/icons/icon.ico
+**/src-tauri/icons/Square*.png
+**/src-tauri/icons/StoreLogo.png
+**/src-tauri/icons/android/
+**/src-tauri/icons/ios/
+
+# ── 图标生成临时输出 ──
+scripts/build/
