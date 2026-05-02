@@ -78,6 +78,26 @@ class SocksProxyState:
         return self.enabled and self.server == host and self.port == port
 
 
+def _describe_failure(verb: str, svc: str, result: ProcessResult) -> str:
+    """networksetup 的错误信息有时在 stderr,有时在 stdout(macOS 14+ 的
+    'Command requires admin privileges.' 就在 stdout)。统一拼接,并把
+    最常见的 admin-privileges 错误翻译成可操作的中文提示。
+    """
+    raw = (result.stderr or "").strip()
+    if not raw:
+        raw = (result.stdout or "").strip()
+    if not raw:
+        raw = f"exit code {result.returncode} with no output"
+    if "admin privileges" in raw.lower():
+        raw = (
+            f"{raw}  (macOS 13+ 要求管理员权限才能修改系统代理。"
+            "解决方案:在「设置」页关闭「自动切换系统代理」开关,然后在「系统设置 → "
+            "网络 → 详细信息 → 代理」里手动配置 SOCKS5 主机=127.0.0.1 端口=Conduit "
+            "本机 SOCKS5 端口;或赋予本应用对 networksetup 的 sudo 权限。)"
+        )
+    return f"networksetup {verb} {svc!r} failed: {raw}"
+
+
 # ---------------------------------------------------------------------------
 # main API
 # ---------------------------------------------------------------------------
@@ -190,14 +210,10 @@ class MacSystemProxy:
         svc = service or self.active_service()
         a = self._run([NETWORKSETUP, "-setsocksfirewallproxy", svc, host, str(port)])
         if a.returncode != 0:
-            raise RuntimeError(
-                f"-setsocksfirewallproxy {svc!r} failed: {a.stderr.strip()}"
-            )
+            raise RuntimeError(_describe_failure("-setsocksfirewallproxy", svc, a))
         b = self._run([NETWORKSETUP, "-setsocksfirewallproxystate", svc, "on"])
         if b.returncode != 0:
-            raise RuntimeError(
-                f"-setsocksfirewallproxystate {svc!r} on failed: {b.stderr.strip()}"
-            )
+            raise RuntimeError(_describe_failure("-setsocksfirewallproxystate ... on", svc, b))
         logger.info("system proxy enabled: %s -> %s:%d", svc, host, port)
         return svc
 
@@ -205,9 +221,7 @@ class MacSystemProxy:
         svc = service or self.active_service()
         out = self._run([NETWORKSETUP, "-setsocksfirewallproxystate", svc, "off"])
         if out.returncode != 0:
-            raise RuntimeError(
-                f"-setsocksfirewallproxystate {svc!r} off failed: {out.stderr.strip()}"
-            )
+            raise RuntimeError(_describe_failure("-setsocksfirewallproxystate ... off", svc, out))
         logger.info("system proxy disabled: %s", svc)
         return svc
 

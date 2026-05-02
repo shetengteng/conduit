@@ -360,27 +360,47 @@ class ClientRuntime:
             )
 
             # ---- step 4: switch endpoint + system proxy ----
+            # endpoint 切换是关键路径,失败 => 整体连接失败(因为没有上游 PAC 没法路由)
+            # system_proxy 切换是"锦上添花",失败时只发警告,不让整体连接 fail
+            # (用户仍可手动在系统设置里指 SOCKS5 到我们的 :PORT)
             self._publish_progress(step=4, key="switch_endpoint", status="running", server_id=server.server_id)
             try:
                 self.proxy.set_server_endpoint(endpoint)
-                # 仅当 cfg 允许 + 平台支持时才动系统代理。
-                # cfg.enable_system_proxy=False 时(测试 / 用户在 Settings 关掉),
-                # 我们只切换 endpoint,系统代理保持原样,用户须手动配 SOCKS5。
-                if self.cfg.enable_system_proxy and self.system_proxy is not None:
-                    self.system_proxy.enable(host=self.cfg.bind_host, port=self.proxy.actual_port)
-                    self._system_proxy_active = True
             except (RuntimeError, OSError) as exc:
                 return await self._connect_failed(
                     step=4, key="switch_endpoint",
-                    error=f"系统代理切换失败: {exc}",
+                    error=f"切换上游 endpoint 失败: {exc}",
                     server_id=server.server_id,
                 )
-            sp_state = "已切换" if self._system_proxy_active else "未启用(由用户手动配 SOCKS5)"
+
+            system_proxy_warning: str | None = None
+            if self.cfg.enable_system_proxy and self.system_proxy is not None:
+                try:
+                    self.system_proxy.enable(host=self.cfg.bind_host, port=self.proxy.actual_port)
+                    self._system_proxy_active = True
+                except (RuntimeError, OSError) as exc:
+                    # 不让整体连接失败,只在 progress detail 里附带警告
+                    system_proxy_warning = str(exc)
+                    logger.warning("system proxy switch failed (continuing anyway): %s", exc)
+
+            if self._system_proxy_active:
+                sp_state = "已切换"
+            elif system_proxy_warning:
+                sp_state = f"切换失败,需手动配置 SOCKS5 :{self.proxy.actual_port}"
+            else:
+                sp_state = "未启用(由用户手动配 SOCKS5)"
             self._publish_progress(
                 step=4, key="switch_endpoint", status="ok",
                 detail=f"上游 {endpoint.label()} · 本机 SOCKS5 :{self.proxy.actual_port} · 系统代理 {sp_state}",
                 server_id=server.server_id,
             )
+            if system_proxy_warning:
+                # 单独发一个 warning event,前端可以 toast 显示给用户
+                self.bus.publish("system_proxy_warning", {
+                    "server_id": server.server_id,
+                    "message": system_proxy_warning,
+                    "manual_socks_port": self.proxy.actual_port,
+                })
 
             # ---- step 5: start heartbeat ----
             self._publish_progress(step=5, key="start_heartbeat", status="running", server_id=server.server_id)

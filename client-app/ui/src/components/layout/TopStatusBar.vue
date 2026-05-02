@@ -16,7 +16,6 @@
  * heartbeat_warn / global_fallback 等。
  */
 import { computed, onMounted } from 'vue'
-import { Separator } from '@/components/ui/separator'
 import StatusBadge from './StatusBadge.vue'
 import { clientStore } from '@/stores/clientStore'
 import { discoveryStore } from '@/stores/discoveryStore'
@@ -84,7 +83,7 @@ const uptime = computed(() => formatUptimeShort(clientStore.uptimeSec.value))
       </span>
     </div>
 
-    <Separator orientation="vertical" class="mx-1 !h-5" />
+    <span class="mx-2 hidden text-muted-foreground/40 md:inline" aria-hidden="true">•</span>
 
     <div class="flex items-center gap-1.5 text-xs">
       <template v-if="ports.length">

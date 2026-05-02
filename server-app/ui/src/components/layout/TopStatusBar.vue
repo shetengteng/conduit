@@ -9,7 +9,6 @@
  */
 import { computed } from 'vue'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { RiStopCircleLine } from '@remixicon/vue'
 import StatusBadge from './StatusBadge.vue'
 import { proxyStore } from '@/stores/proxy'
@@ -86,7 +85,7 @@ async function handleStop() {
       </span>
     </div>
 
-    <Separator orientation="vertical" class="mx-1 !h-5" />
+    <span class="mx-2 hidden text-muted-foreground/40 md:inline" aria-hidden="true">•</span>
 
     <div class="flex items-center gap-1.5 text-xs">
       <template v-if="ports.length">

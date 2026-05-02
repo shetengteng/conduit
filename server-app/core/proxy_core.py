@@ -196,6 +196,11 @@ class ProxyCore:
             "socks5_port": self.cfg.socks_port,
             "api_port": self.cfg.api_port,
             "pac_url": self._pac_url(),
+            "mdns": {
+                "enabled": self.cfg.mdns_enabled,
+                "name": self._effective_mdns_name(),
+                "service_type": "_conduit._tcp.local.",
+            },
             "vpn": {
                 "available": bool(vpn_check and vpn_check["ok"]),
                 "iface": vpn_check["detail"] if vpn_check else None,
@@ -211,6 +216,13 @@ class ProxyCore:
             "uptime_sec": self.uptime_sec,
             "ready": health_dict["ready"],
         }
+
+    def _effective_mdns_name(self) -> str:
+        """返回 mDNS 实际广播用的 instance name:用户传 --mdns-name 时用之,
+        否则与 mdns_advertiser._hostname_short 同步,显示系统短主机名。
+        """
+        from mdns_advertiser import _hostname_short
+        return self.cfg.mdns_service_name or _hostname_short()
 
     def _pac_url(self) -> Optional[str]:
         host = self.cfg.pac_advertised_host or self.cfg.bind

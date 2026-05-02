@@ -25,6 +25,13 @@ export interface LanStatus {
   detail: string | null;
 }
 
+export interface MdnsStatus {
+  enabled: boolean;
+  /** 实际广播出去的 instance name（用户指定 --mdns-name 时为它，否则为系统短主机名） */
+  name: string;
+  service_type: string;
+}
+
 export interface ServerStatus {
   running: boolean;
   version: string;
@@ -32,6 +39,7 @@ export interface ServerStatus {
   socks5_port: number;
   api_port: number;
   pac_url: string | null;
+  mdns: MdnsStatus;
   vpn: VpnStatus;
   lan: LanStatus;
   clients_count: number;

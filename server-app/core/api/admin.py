@@ -25,7 +25,18 @@ async def stop_proxy(request: web.Request) -> web.Response:
 
     core = request.app["core"]
     log.info("admin stop requested by %s", request.remote)
-    asyncio.create_task(core.stop())
+
+    # 关键:必须延迟触发 stop,否则 core.stop() 会在 response 写出之前
+    # 关掉 control API server,前端拿到 connection reset 误以为停止失败。
+    # 50ms 足够 aiohttp 把 200 响应 flush 给客户端。
+    async def _delayed_stop() -> None:
+        await asyncio.sleep(0.05)
+        try:
+            await core.stop()
+        except Exception:  # noqa: BLE001
+            log.exception("delayed core.stop() failed")
+
+    asyncio.create_task(_delayed_stop())
     return web.json_response({"ok": True})
 
 

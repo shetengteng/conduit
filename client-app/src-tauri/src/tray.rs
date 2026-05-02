@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use log::warn;
 use serde::Deserialize;
+use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Emitter, Manager};
@@ -72,10 +73,19 @@ pub fn setup(app: &App) -> tauri::Result<()> {
         .item(&item_quit)
         .build()?;
 
+    // 菜单栏专用 template icon(透明 PNG,只用 alpha,macOS 自动 light/dark 反色)
+    // 优先用 @2x(44x44),退回到 1x;如果都加载失败,退回到默认窗口图标(会显示成方块,
+    // 但至少能看到托盘存在)。
+    let tray_icon = load_tray_icon(handle).unwrap_or_else(|| {
+        warn!("tray icon assets missing, falling back to default window icon");
+        handle.default_window_icon().unwrap().clone()
+    });
+
     let _tray = TrayIconBuilder::with_id("main")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .icon(handle.default_window_icon().unwrap().clone())
+        .icon(tray_icon)
+        .icon_as_template(true)
         .tooltip("Conduit Client")
         .on_menu_event(move |app, event| match event.id().as_ref() {
             "show" => show_window(app),
@@ -192,6 +202,13 @@ fn spawn_status_poller(
             tick.tick().await;
         }
     });
+}
+
+/// 从二进制内嵌的 PNG 字节构造 menu bar template icon。
+/// 编译期 `include_bytes!` 嵌入,免去 release 模式下查找资源路径的麻烦。
+fn load_tray_icon(_handle: &AppHandle) -> Option<Image<'static>> {
+    const TRAY_PNG: &[u8] = include_bytes!("../icons/tray/tray-client@2x.png");
+    Image::from_bytes(TRAY_PNG).ok()
 }
 
 fn render_status(s: Option<&ConnectionSnapshot>) -> (String, bool) {

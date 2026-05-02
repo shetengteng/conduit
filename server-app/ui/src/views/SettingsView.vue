@@ -154,7 +154,7 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
           <Label for="mdns-enable" class="cursor-pointer text-xs">
             启用 mDNS 广播
           </Label>
-          <Switch id="mdns-enable" :checked="true" disabled />
+          <Switch id="mdns-enable" :checked="status?.mdns?.enabled ?? true" disabled />
         </div>
         <Separator />
         <div class="grid grid-cols-2 gap-3">
@@ -163,17 +163,20 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
               广播名称
             </Label>
             <Input
-              model-value="A 的 MacBook Pro"
+              :model-value="status?.mdns?.name ?? '—'"
               readonly
               class="h-8 text-sm"
             />
+            <p class="text-[10px] text-muted-foreground">
+              默认取系统短主机名;如需自定义请用 <code class="font-mono">--mdns-name "你的服务名"</code> 启动 server
+            </p>
           </div>
           <div class="flex flex-col gap-1.5">
             <Label class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               服务类型
             </Label>
             <Input
-              model-value="_conduit._tcp.local."
+              :model-value="status?.mdns?.service_type ?? '_conduit._tcp.local.'"
               readonly
               class="h-8 font-mono text-sm"
             />
