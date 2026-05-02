@@ -17,7 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { RiCloseCircleLine, RiAlertLine } from '@remixicon/vue'
+import { RiCloseCircleLine, RiAlertLine, RiRestartLine } from '@remixicon/vue'
 import StatusBadge from './StatusBadge.vue'
 import { proxyStore } from '@/stores/proxy'
 import { useToast } from '@/composables/useToast'
@@ -28,6 +28,17 @@ import { formatUptimeShort } from '@/utils/format'
 const toast = useToast()
 const confirmOpen = ref(false)
 const stopping = ref(false)
+const restarting = ref(false)
+
+// Tauri invoke 在浏览器/dev 模式下未必可用,做个软探测
+async function tauriInvoke(cmd: string): Promise<unknown> {
+  const w = window as any
+  const fn = w.__TAURI__?.core?.invoke ?? w.__TAURI_INTERNALS__?.invoke
+  if (typeof fn !== 'function') {
+    throw new Error('Tauri invoke 不可用 (可能在浏览器中预览)')
+  }
+  return fn(cmd)
+}
 
 const status = computed(() => proxyStore.state.status)
 
@@ -93,6 +104,19 @@ async function handleConfirmStop() {
     stopping.value = false
   }
 }
+
+async function handleRestart() {
+  if (restarting.value) return
+  restarting.value = true
+  try {
+    toast.info('正在重启应用…', { detail: '主窗口将立即关闭并重新启动 sidecar' })
+    await tauriInvoke('restart_app')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error('重启失败', { detail: `${msg}\n请手动退出并重新打开 Conduit Server` })
+    restarting.value = false
+  }
+}
 </script>
 
 <template>
@@ -131,13 +155,25 @@ async function handleConfirmStop() {
         运行 {{ uptime }}
       </span>
       <Button
+        v-if="status?.running"
         variant="destructive"
         size="sm"
-        :disabled="!status?.running || stopping"
+        :disabled="stopping"
         @click="openConfirm"
       >
         <RiCloseCircleLine />
         停止代理并退出
+      </Button>
+      <Button
+        v-else
+        variant="default"
+        size="sm"
+        :disabled="restarting"
+        @click="handleRestart"
+        title="重新启动 sidecar 让代理回到运行中"
+      >
+        <RiRestartLine :class="{ 'animate-spin': restarting }" />
+        {{ restarting ? '重启中…' : '重启代理' }}
       </Button>
     </div>
   </header>

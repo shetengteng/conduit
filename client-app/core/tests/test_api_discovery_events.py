@@ -89,6 +89,33 @@ async def _http_get(host: str, port: int, path: str, *, timeout: float = 2.0) ->
             pass
 
 
+async def _http_post_json(
+    host: str, port: int, path: str, payload: dict | None = None, *, timeout: float = 2.0,
+) -> tuple[bytes, bytes]:
+    """简易 HTTP/1.1 POST application/json,返回 (header_bytes, body_bytes)。"""
+    body_bytes = b"" if payload is None else json.dumps(payload).encode()
+    r, w = await asyncio.open_connection(host, port)
+    try:
+        req = (
+            f"POST {path} HTTP/1.1\r\n"
+            f"Host: {host}\r\n"
+            f"Connection: close\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: {len(body_bytes)}\r\n\r\n"
+        ).encode() + body_bytes
+        w.write(req)
+        await w.drain()
+        head = await asyncio.wait_for(r.readuntil(b"\r\n\r\n"), timeout=timeout)
+        body = await asyncio.wait_for(r.read(), timeout=timeout)
+        return head, body
+    finally:
+        try:
+            w.close()
+            await w.wait_closed()
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # /api/servers
 # ---------------------------------------------------------------------------
@@ -217,6 +244,102 @@ async def test_api_events_emits_ready_then_server_discovered():
         # 等 SSE handler 退出（handler 里 await q.get()）。
         if w is not None:
             await _close_writer(w)
+        await rt.stop()
+
+
+# ---------------------------------------------------------------------------
+# /api/servers/forget(_all)
+# ---------------------------------------------------------------------------
+
+
+async def test_forget_server_removes_history_entry():
+    api_port = _free_port()
+    rt = ClientRuntime(_make_cfg(api_port))
+    await rt.start()
+    try:
+        # 模拟有一个历史 server (非 online)
+        rt.discoverer._state.history.append(DiscoveredServer(
+            server_id="ghost@10.0.0.9:8080",
+            name="ghost", host="10.0.0.9", port=8080, socks=1080, api=9090,
+            vpn=False, version="0.1.0", pac="/proxy.pac",
+            source="history", last_seen_at=time.time() - 3600, healthy=False,
+        ))
+
+        head, body = await _http_post_json(
+            "127.0.0.1", api_port, "/api/servers/forget",
+            {"server_id": "ghost@10.0.0.9:8080"},
+        )
+        assert b"HTTP/1.1 200" in head
+        data = json.loads(body)
+        assert data == {"ok": True, "removed": True, "server_id": "ghost@10.0.0.9:8080"}
+        assert all(it.server_id != "ghost@10.0.0.9:8080" for it in rt.discoverer._state.history)
+    finally:
+        await rt.stop()
+
+
+async def test_forget_server_unknown_returns_removed_false():
+    api_port = _free_port()
+    rt = ClientRuntime(_make_cfg(api_port))
+    await rt.start()
+    try:
+        head, body = await _http_post_json(
+            "127.0.0.1", api_port, "/api/servers/forget",
+            {"server_id": "nope@1.2.3.4:5"},
+        )
+        assert b"HTTP/1.1 200" in head
+        data = json.loads(body)
+        assert data["ok"] is True
+        assert data["removed"] is False
+    finally:
+        await rt.stop()
+
+
+async def test_forget_server_invalid_body_returns_400_with_error_envelope():
+    api_port = _free_port()
+    rt = ClientRuntime(_make_cfg(api_port))
+    await rt.start()
+    try:
+        head, body = await _http_post_json(
+            "127.0.0.1", api_port, "/api/servers/forget", {"foo": "bar"},
+        )
+        assert b"HTTP/1.1 400" in head
+        data = json.loads(body)
+        # 验错误信封契约: { "error": { "code", "message" } }
+        assert "error" in data
+        assert data["error"]["code"] == "BAD_REQUEST"
+    finally:
+        await rt.stop()
+
+
+async def test_forget_all_clears_history_only():
+    api_port = _free_port()
+    rt = ClientRuntime(_make_cfg(api_port))
+    await rt.start()
+    try:
+        # 注入: 2 条历史 + 1 条 online
+        for i in range(2):
+            rt.discoverer._state.history.append(DiscoveredServer(
+                server_id=f"old{i}@10.0.0.{i}:8080",
+                name=f"old{i}", host=f"10.0.0.{i}", port=8080, socks=1080, api=9090,
+                vpn=False, version="0.1.0", pac="/proxy.pac",
+                source="history", last_seen_at=time.time() - 7200, healthy=False,
+            ))
+        rt.discoverer._state.online["live@10.0.0.5:8080"] = DiscoveredServer(
+            server_id="live@10.0.0.5:8080",
+            name="live", host="10.0.0.5", port=8080, socks=1080, api=9090,
+            vpn=True, version="0.1.0", pac="/proxy.pac",
+            source="mdns", last_seen_at=time.time(), healthy=True,
+        )
+
+        head, body = await _http_post_json("127.0.0.1", api_port, "/api/servers/forget_all")
+        assert b"HTTP/1.1 200" in head
+        data = json.loads(body)
+        assert data["ok"] is True
+        assert data["removed_count"] == 2
+
+        assert rt.discoverer._state.history == []
+        assert "live@10.0.0.5:8080" in rt.discoverer._state.online
+    finally:
         await rt.stop()
 
 

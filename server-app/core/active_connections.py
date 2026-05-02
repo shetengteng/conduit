@@ -197,3 +197,137 @@ class TrafficSampler:
 
     def snapshot_tick(self) -> dict[str, tuple[float, int, int]]:
         return {ip: dq[-1] for ip, dq in self._series.items() if dq}
+
+
+# ---------------------------------------------------------------------------
+# 被动客户端注册表 (M-δ 验收期补丁)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PassiveClient:
+    """通过 control API 心跳"声明在线"但暂未传输代理流量的客户端。
+
+    与 ConnectionInfo 语义不同:ConnectionInfo 只在真正发起 SOCKS5/HTTP CONNECT
+    且产生字节传输时登记;PassiveClient 通过 client-app 的心跳 POST 主动注册,
+    用于"客户端已链接 server,但还没真正过流量"这一场景。
+
+    UI 侧应该将两者分开展示,避免和"传输中会话数"混淆。
+    """
+    peer_ip: str
+    client_name: str
+    version: str
+    first_seen: float
+    last_seen: float
+
+
+class PassiveClientRegistry:
+    """In-process passive-client registry with TTL eviction.
+
+    生命周期:
+    - ``touch(peer_ip, client_name, version)`` —— client 心跳调用,upsert;
+      新建时 publish ``passive_client_seen``,已存在仅 last_seen 刷新。
+    - 后台 evict loop 每 ``evict_interval`` 秒扫一次,移除 last_seen >
+      ``ttl`` 的项,publish ``passive_client_lost``。
+    - ``stop()`` cancel evict loop。
+
+    注意:peer_ip 作为主键。同一台机器多次跑 client 会替换前一个 client_name
+    (合理:同 IP 同时只有一个 sidecar 在跑;client_name 会用最新的覆盖)。
+    """
+
+    DEFAULT_TTL = 60.0
+    DEFAULT_EVICT_INTERVAL = 10.0
+
+    def __init__(
+        self,
+        publish: Optional[PublishFn] = None,
+        ttl: float = DEFAULT_TTL,
+        evict_interval: float = DEFAULT_EVICT_INTERVAL,
+    ) -> None:
+        self._clients: dict[str, PassiveClient] = {}
+        self._publish = publish
+        self._ttl = ttl
+        self._evict_interval = evict_interval
+        self._task: asyncio.Task | None = None
+        self._stop_event = asyncio.Event()
+
+    def set_publisher(self, publish: PublishFn) -> None:
+        self._publish = publish
+
+    def start(self) -> None:
+        if self._task is None or self._task.done():
+            self._stop_event = asyncio.Event()
+            self._task = asyncio.create_task(self._evict_loop(), name="conduit.passive.evict")
+
+    async def stop(self) -> None:
+        if self._task is None:
+            return
+        self._stop_event.set()
+        try:
+            await asyncio.wait_for(self._task, timeout=self._evict_interval + 1.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+            self._task.cancel()
+        self._task = None
+
+    def touch(self, peer_ip: str, client_name: str, version: str) -> bool:
+        """upsert 一条记录。返回是否是新建(True)。"""
+        now = time.time()
+        existing = self._clients.get(peer_ip)
+        if existing is None:
+            self._clients[peer_ip] = PassiveClient(
+                peer_ip=peer_ip,
+                client_name=client_name,
+                version=version,
+                first_seen=now,
+                last_seen=now,
+            )
+            if self._publish is not None:
+                self._publish("passive_client_seen", {
+                    "peer_ip": peer_ip,
+                    "client_name": client_name,
+                    "version": version,
+                    "first_seen": now,
+                })
+            return True
+        existing.last_seen = now
+        existing.client_name = client_name
+        existing.version = version
+        return False
+
+    def snapshot(self) -> list[dict]:
+        now = time.time()
+        return [
+            {
+                "peer_ip": c.peer_ip,
+                "client_name": c.client_name,
+                "version": c.version,
+                "first_seen": c.first_seen,
+                "last_seen": c.last_seen,
+                "idle_sec": int(now - c.last_seen),
+            }
+            for c in sorted(self._clients.values(), key=lambda x: -x.last_seen)
+        ]
+
+    def __len__(self) -> int:
+        return len(self._clients)
+
+    async def _evict_loop(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=self._evict_interval)
+            except asyncio.TimeoutError:
+                pass
+            self._evict_once()
+
+    def _evict_once(self) -> None:
+        now = time.time()
+        cutoff = now - self._ttl
+        expired = [ip for ip, c in self._clients.items() if c.last_seen < cutoff]
+        for ip in expired:
+            client = self._clients.pop(ip, None)
+            if client is not None and self._publish is not None:
+                self._publish("passive_client_lost", {
+                    "peer_ip": client.peer_ip,
+                    "client_name": client.client_name,
+                    "duration_sec": int(now - client.first_seen),
+                })

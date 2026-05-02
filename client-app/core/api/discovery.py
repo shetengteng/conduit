@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from aiohttp import web
 
+from api.errors import err_response
 from discoverer import server_to_payload
 
 routes = web.RouteTableDef()
@@ -51,3 +52,41 @@ async def list_servers(request: web.Request) -> web.Response:
         "available": discoverer.available,
         "servers": [server_to_payload(it) for it in items],
     })
+
+
+@routes.post("/api/servers/forget")
+async def forget_server(request: web.Request) -> web.Response:
+    """从 known-servers.json 永久移除一个历史 server。
+
+    Body: { "server_id": "name@host:port" }
+
+    若该 server 当前 mDNS 在线,只会清掉它在历史里的"上次见过"记录,
+    在线条目仍会保留(因为 zeroconf 还在广播);下次 client 重启时,
+    若该 server 仍未出现,就不会再显示了。
+    """
+    try:
+        data = await request.json()
+        server_id = str(data["server_id"]).strip()
+        if not server_id:
+            raise ValueError("empty server_id")
+    except (KeyError, ValueError, TypeError) as exc:
+        return err_response("BAD_REQUEST", f"invalid body: {exc}", status=400)
+
+    runtime = request.app["runtime"]
+    discoverer = getattr(runtime, "discoverer", None)
+    if discoverer is None:
+        return err_response("NOT_AVAILABLE", "discoverer not initialized", status=503)
+
+    removed = discoverer.forget(server_id)
+    return web.json_response({"ok": True, "removed": removed, "server_id": server_id})
+
+
+@routes.post("/api/servers/forget_all")
+async def forget_all_history(request: web.Request) -> web.Response:
+    """清空所有"曾见过"的历史 server。当前 mDNS 在线的不受影响。"""
+    runtime = request.app["runtime"]
+    discoverer = getattr(runtime, "discoverer", None)
+    if discoverer is None:
+        return err_response("NOT_AVAILABLE", "discoverer not initialized", status=503)
+    removed = discoverer.forget_all_history()
+    return web.json_response({"ok": True, "removed_count": removed})

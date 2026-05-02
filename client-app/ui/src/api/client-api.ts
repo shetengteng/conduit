@@ -22,6 +22,13 @@ import { apiDelete, apiGet, apiPost } from "./client";
 export const ClientApi = {
   healthz: () => apiGet<HealthzResponse>("/healthz"),
   servers: () => apiGet<ServerListResponse>("/api/servers"),
+  forgetServer: (serverId: string) =>
+    apiPost<{ ok: boolean; removed: boolean; server_id: string }>(
+      "/api/servers/forget",
+      { body: { server_id: serverId } },
+    ),
+  forgetAllHistory: () =>
+    apiPost<{ ok: boolean; removed_count: number }>("/api/servers/forget_all"),
   connection: () => apiGet<ConnectionSnapshot>("/api/connection"),
   connect: (serverId: string) =>
     apiPost<ConnectionSnapshot>(`/api/connect/${encodeURIComponent(serverId)}`),

@@ -334,6 +334,40 @@ class Discoverer:
         items = items[:32]
         _save_history(self.storage_path, items)
 
+    # ----- forget API（M-δ 验收期补丁:用户可以主动清理"曾见过") -----
+
+    def forget(self, server_id: str) -> bool:
+        """从历史记录中移除指定 server。返回是否真的删除了一条(False = 不存在)。
+
+        注意:若该 server 当前 mDNS 在线,本方法 *只清历史记录*,不影响当前 online 列表
+        (因为 zeroconf 还在广播,任何刷新都会再加回来)。要彻底"踢掉"必须同时让对方
+        停止广播,或者关闭本机的 mDNS。
+        """
+        before = len(self._state.history)
+        self._state.history = [it for it in self._state.history if it.server_id != server_id]
+        removed = len(self._state.history) < before
+        if removed:
+            _save_history(self.storage_path, self._state.history)
+            log.info("forget(%s): removed from known-servers.json", server_id)
+            try:
+                self.bus.publish("server_forgotten", {"server_id": server_id})
+            except Exception:  # noqa: BLE001
+                pass
+        return removed
+
+    def forget_all_history(self) -> int:
+        """清空全部"曾见过"。返回清掉的条数。online 列表不动。"""
+        n = len(self._state.history)
+        self._state.history = []
+        _save_history(self.storage_path, [])
+        if n > 0:
+            log.info("forget_all_history(): wiped %d historical server(s)", n)
+            try:
+                self.bus.publish("server_forgotten", {"server_id": None, "removed_count": n})
+            except Exception:  # noqa: BLE001
+                pass
+        return n
+
 
 # ---------------------------------------------------------------------------
 # JSON 序列化辅助

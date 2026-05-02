@@ -32,12 +32,16 @@ import {
   RiAlertLine,
   RiSignalWifi1Line,
   RiTimeLine,
+  RiCloseLine,
+  RiDeleteBinLine,
 } from '@remixicon/vue'
 
 import { useDiscovery } from '@/composables/useDiscovery'
 import { connectionStore } from '@/stores/connectionStore'
 import { uiStore } from '@/stores/ui'
 import { useToast } from '@/composables/useToast'
+import { ClientApi } from '@/api/client-api'
+import { ApiError } from '@/api/client'
 import type { DiscoveredServer } from '@/types/client'
 
 const toast = useToast()
@@ -62,6 +66,37 @@ async function handleConnect(srv: DiscoveredServer) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     toast.error('连接失败', { detail: msg })
+  }
+}
+
+async function handleForget(srv: DiscoveredServer) {
+  if (!confirm(`确定从历史中移除「${srv.name}」？\n该 server 重新广播时仍会自动出现。`)) return
+  try {
+    const resp = await ClientApi.forgetServer(srv.server_id)
+    if (resp.removed) {
+      toast.success('已移除', { detail: srv.name })
+    } else {
+      toast.info('未找到该 server', { detail: '它可能已自行清理' })
+    }
+    await manualRefresh()
+  } catch (e) {
+    const code = e instanceof ApiError ? e.code : 'UNKNOWN'
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error('移除失败', { detail: `${code}: ${msg}` })
+  }
+}
+
+async function handleForgetAll() {
+  if (historyCount.value === 0) return
+  if (!confirm(`确定清空全部 ${historyCount.value} 条历史 server？\n（在线 server 不受影响）`)) return
+  try {
+    const resp = await ClientApi.forgetAllHistory()
+    toast.success('历史已清空', { detail: `共移除 ${resp.removed_count} 条` })
+    await manualRefresh()
+  } catch (e) {
+    const code = e instanceof ApiError ? e.code : 'UNKNOWN'
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error('清空失败', { detail: `${code}: ${msg}` })
   }
 }
 
@@ -115,16 +150,28 @@ const headerSubtitle = computed(() => {
           {{ headerSubtitle }}
         </p>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        :disabled="loading"
-        @click="manualRefresh"
-        class="gap-1.5"
-      >
-        <RiRefreshLine class="size-3.5" :class="{ 'animate-spin': loading }" />
-        重新扫描
-      </Button>
+      <div class="flex items-center gap-2">
+        <Button
+          v-if="historyCount > 0"
+          variant="ghost"
+          size="sm"
+          @click="handleForgetAll"
+          class="gap-1.5 text-muted-foreground hover:text-destructive"
+        >
+          <RiDeleteBinLine class="size-3.5" />
+          清空历史
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="loading"
+          @click="manualRefresh"
+          class="gap-1.5"
+        >
+          <RiRefreshLine class="size-3.5" :class="{ 'animate-spin': loading }" />
+          重新扫描
+        </Button>
+      </div>
     </div>
 
     <!-- 错误条 -->
@@ -218,6 +265,16 @@ const headerSubtitle = computed(() => {
               </CardDescription>
             </div>
           </div>
+          <Button
+            v-if="!isOnline(srv)"
+            variant="ghost"
+            size="icon"
+            class="size-6 -mt-1 text-muted-foreground hover:text-destructive"
+            title="从历史中移除"
+            @click="handleForget(srv)"
+          >
+            <RiCloseLine class="size-3.5" />
+          </Button>
         </CardHeader>
 
         <CardContent class="flex flex-col gap-3">

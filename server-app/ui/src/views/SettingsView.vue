@@ -47,8 +47,10 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
     <Alert variant="default">
       <RiInformationLine />
       <AlertDescription>
-        v0.1 阶段为只读占位，实际配置写回 IPC 与代理热重启将在 S4
-        与打包同步发布
+        v0.1 阶段所有配置项为<strong class="font-medium text-foreground">只读展示</strong>,与代理运行状态无关。
+        如需自定义,请通过启动参数(如 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">--mdns-name "MyServer"</code> /
+        <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">--http-port 8080</code>)指定。
+        在窗口里编辑并热重启的能力将在 S4 与打包同步发布。
       </AlertDescription>
     </Alert>
 

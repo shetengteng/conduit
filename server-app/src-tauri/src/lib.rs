@@ -51,6 +51,7 @@ pub fn run() {
             commands::open_external,
             commands::show_main_window,
             commands::quit_app,
+            commands::restart_app,
         ])
         .setup(move |app| {
             tray::setup(app)?;

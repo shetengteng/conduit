@@ -30,3 +30,8 @@ pub fn show_main_window(app: AppHandle) -> Result<(), ConduitError> {
 pub fn quit_app(app: AppHandle) {
     app.exit(0);
 }
+
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
+}
