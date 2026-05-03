@@ -48,6 +48,16 @@ let healthzPollTimer: ReturnType<typeof setInterval> | null = null
 onMounted(async () => {
   await clientStore.refresh()
   await connectionStore.refresh()
+  // 首次挂载若发现已连接(例如 reload 后),自动落到「已连接」视图,
+  // 避免用户停留在「发现」页看不到流量曲线。
+  if (
+    connectionStore.connectionState.value === 'connected' ||
+    connectionStore.connectionState.value === 'connecting'
+  ) {
+    if (uiStore.state.active === 'discovery') {
+      uiStore.setActive('connected')
+    }
+  }
   healthzPollTimer = setInterval(() => {
     clientStore.refreshSilently()
   }, 8000)

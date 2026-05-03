@@ -230,12 +230,27 @@ def _check_system_proxy(runtime) -> dict[str, Any]:
             "remediation": None,
         }
     if not runtime._system_proxy_active:
+        # 连接本身是好的,只是系统代理没切换成功 ——
+        # 用户用 SOCKS5 :{port} 手动配置浏览器/系统也能正常走代理,
+        # 因此返回 ok=True(警示性 detail),而不是直接 FAIL 误导用户。
+        last_err = getattr(runtime, "_system_proxy_last_error", None) or ""
+        port = runtime.proxy.actual_port
+        # 提取 networksetup 报错首行,避免 detail 过长
+        err_brief = last_err.splitlines()[0][:120] if last_err else ""
+        detail = f"未自动切换 · 请手动配 SOCKS5 127.0.0.1:{port}"
+        if err_brief:
+            detail += f" · {err_brief}"
         return {
             "key": "system_proxy",
             "label": "系统代理",
-            "ok": False,
-            "detail": "已连接 server 但系统代理未激活",
-            "remediation": "断开后重连;若仍失败,在终端运行 networksetup 查看错误",
+            "ok": True,
+            "detail": detail,
+            "remediation": (
+                f"macOS 13+ 修改系统代理需管理员权限,Conduit 默认不要求 sudo,因此采用手动配置:\n"
+                f"  • 浏览器/App 内直接填 SOCKS5 主机=127.0.0.1 端口={port}\n"
+                f"  • 或『系统设置 → 网络 → 详细信息 → 代理』里手动添加同样配置\n"
+                f"如希望自动切换:在『设置』页关闭后再开,会重新尝试;仍失败则需以管理员身份启动 Conduit。"
+            ),
         }
     return {
         "key": "system_proxy",

@@ -210,6 +210,8 @@ class ClientRuntime:
         self.api: ApiServer = ApiServer(self, port=cfg.api_port, loopback_only=True)
         self._stop_event = asyncio.Event()
         self._system_proxy_active = False
+        # 记录最近一次 system_proxy.enable() 的错误信息,供 diagnose 显示
+        self._system_proxy_last_error: Optional[str] = None
 
         # M-β.2 连接状态机
         # state: "idle" | "connecting" | "connected" | "failed" | "disconnecting"
@@ -249,7 +251,9 @@ class ClientRuntime:
                     host=self.cfg.bind_host, port=self.proxy.actual_port,
                 )
                 self._system_proxy_active = True
+                self._system_proxy_last_error = None
             except RuntimeError as exc:
+                self._system_proxy_last_error = str(exc)
                 logger.warning("system proxy enable failed: %s", exc)
 
         # mDNS 发现：失败不阻断启动（zeroconf 缺包 / 沙箱无网卡都允许降级到手动添加）。
@@ -379,9 +383,11 @@ class ClientRuntime:
                 try:
                     self.system_proxy.enable(host=self.cfg.bind_host, port=self.proxy.actual_port)
                     self._system_proxy_active = True
+                    self._system_proxy_last_error = None
                 except (RuntimeError, OSError) as exc:
                     # 不让整体连接失败,只在 progress detail 里附带警告
                     system_proxy_warning = str(exc)
+                    self._system_proxy_last_error = str(exc)
                     logger.warning("system proxy switch failed (continuing anyway): %s", exc)
 
             if self._system_proxy_active:
