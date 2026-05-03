@@ -16,14 +16,42 @@
  * heartbeat_warn / global_fallback 等。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { Button } from '@/components/ui/button'
+import { RiRestartLine } from '@remixicon/vue'
 import StatusBadge from './StatusBadge.vue'
 import { clientStore } from '@/stores/clientStore'
 import { discoveryStore } from '@/stores/discoveryStore'
 import { getRuntime } from '@/api/runtime'
 import { formatUptimeShort } from '@/utils/format'
+import { useToast } from '@/composables/useToast'
 import type { AppRuntime } from '@/types/client'
 
 const runtime = ref<AppRuntime | null>(null)
+const toast = useToast()
+const restarting = ref(false)
+
+// Tauri invoke 在浏览器/dev 模式下未必可用,做个软探测
+async function tauriInvoke(cmd: string): Promise<unknown> {
+  const w = window as any
+  const fn = w.__TAURI__?.core?.invoke ?? w.__TAURI_INTERNALS__?.invoke
+  if (typeof fn !== 'function') {
+    throw new Error('Tauri invoke 不可用 (可能在浏览器中预览)')
+  }
+  return fn(cmd)
+}
+
+async function handleRestart() {
+  if (restarting.value) return
+  restarting.value = true
+  try {
+    toast.info('正在重启应用…', { detail: '主窗口将立即关闭并重新启动 sidecar' })
+    await tauriInvoke('restart_app')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error('重启失败', { detail: `${msg}\n请手动退出并重新打开 Conduit Client` })
+    restarting.value = false
+  }
+}
 
 // 每秒 reactive tick:让顶栏的 "运行 Xs" 在 healthz polling 间隔之间也能持续增长。
 const nowMs = ref(Date.now())
@@ -126,6 +154,17 @@ const uptime = computed(() => {
       <span class="hidden font-mono text-xs text-muted-foreground tabular-nums md:inline">
         运行 {{ uptime }}
       </span>
+      <Button
+        v-if="tone === 'error' || tone === 'stopped'"
+        variant="default"
+        size="sm"
+        :disabled="restarting"
+        title="重启 Tauri 主进程,会顺带重新拉起 sidecar"
+        @click="handleRestart"
+      >
+        <RiRestartLine :class="{ 'animate-spin': restarting }" />
+        {{ restarting ? '重启中…' : '重启应用' }}
+      </Button>
     </div>
   </header>
 </template>

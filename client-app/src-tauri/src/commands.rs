@@ -34,6 +34,11 @@ pub fn quit_app(app: AppHandle) {
 }
 
 #[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
+}
+
+#[tauri::command]
 pub fn autostart_status() -> Result<bool, ConduitError> {
     #[cfg(target_os = "macos")]
     {

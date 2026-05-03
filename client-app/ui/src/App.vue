@@ -17,6 +17,7 @@ import TopStatusBar from '@/components/layout/TopStatusBar.vue'
 import BootScreen from '@/components/layout/BootScreen.vue'
 import BootFailedScreen from '@/components/layout/BootFailedScreen.vue'
 import ToastHost from '@/components/feedback/ToastHost.vue'
+import SystemProxyWarningBanner from '@/components/feedback/SystemProxyWarningBanner.vue'
 import DiscoveryView from '@/views/DiscoveryView.vue'
 import ConnectedView from '@/views/ConnectedView.vue'
 import DiagnoseView from '@/views/DiagnoseView.vue'
@@ -142,6 +143,7 @@ function handleRetry() {
       <Sidebar />
       <div class="flex flex-1 flex-col overflow-hidden">
         <TopStatusBar />
+        <SystemProxyWarningBanner />
         <main class="flex-1 overflow-y-auto">
           <DiscoveryView v-if="uiStore.state.active === 'discovery'" />
           <ConnectedView v-else-if="uiStore.state.active === 'connected'" />
