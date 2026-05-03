@@ -11,7 +11,7 @@
  *   - mounted: 拉一次 status / clients / healthz；订阅 SSE
  *   - unmounted: SSE 由各 composable 自行清理
  */
-import { onMounted, computed } from 'vue'
+import { onMounted, onBeforeUnmount, computed } from 'vue'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import TopStatusBar from '@/components/layout/TopStatusBar.vue'
 import BootScreen from '@/components/layout/BootScreen.vue'
@@ -33,9 +33,24 @@ useBootPhase()
 const isReady = computed(() => uiStore.state.bootPhase === 'Ready')
 const isFailed = computed(() => uiStore.state.bootPhase === 'Failed')
 
+// 后端在被动客户端心跳到来后,touch existing 不会广播 SSE event,前端 last_seen 会停滞,
+// 用一个 8s 间隔的轻量轮询拉一次 status+clients(只动 store 不弹 toast)。同时也作为
+// status/uptime 的兜底刷新源 —— 否则只有 ready/disconnect 等少数事件会更新 status。
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(async () => {
   await proxyStore.refresh()
   trafficStore.loadInitial(60).catch((e) => console.warn('[traffic] init', e))
+  pollTimer = setInterval(() => {
+    proxyStore.refreshSilently()
+  }, 8000)
+})
+
+onBeforeUnmount(() => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
 })
 
 useEvents({

@@ -5,7 +5,7 @@
  * 数据：useEvents composable 订阅所有 ServerEventType。
  * UI：shadcn-vue Card + Input + Switch + ScrollArea。
  */
-import { ref, computed, nextTick, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import {
   Card,
   CardContent,
@@ -53,12 +53,20 @@ const { connected } = useEvents({
       'INFO',
       `客户端离开 ${p.peer_ip} sent=${p.sent_bytes}B recv=${p.recv_bytes}B duration=${p.duration_sec.toFixed(1)}s`,
     ),
+  passive_client_seen: (p) =>
+    push('INFO', `待命客户端登记 ${p.client_name} (${p.peer_ip}, v${p.version})`),
+  passive_client_lost: (p) =>
+    push('INFO', `待命客户端离线 ${p.client_name} (${p.peer_ip}) — 心跳超时`),
   traffic_tick: () => {},
   vpn_state_changed: (p) =>
     push(
       p.available ? 'INFO' : 'WARN',
       `VPN 状态变更 available=${p.available} iface=${p.iface ?? '(none)'}`,
     ),
+})
+
+onMounted(() => {
+  push('INFO', '[ui] 日志面板已挂载,等待 sidecar 事件流')
 })
 
 const filtered = computed(() => {
@@ -189,9 +197,16 @@ function clearLogs() {
             </div>
             <div
               v-if="!filtered.length"
-              class="py-10 text-center text-muted-foreground"
+              class="flex flex-col gap-2 py-8 text-center text-muted-foreground"
             >
-              {{ search ? '未匹配到任何日志' : '尚无事件流入，等待客户端接入…' }}
+              <p>{{ search ? '未匹配到任何日志' : '尚无事件流入' }}</p>
+              <p v-if="!search" class="text-[11px] leading-relaxed">
+                日志只在以下事件发生时被推送:<br />
+                · 代理引擎重启 (ready)<br />
+                · 客户端经 SOCKS5/HTTP 发起请求 (connected/disconnected)<br />
+                · 客户端心跳上报 (passive_client_seen)<br />
+                · macOS 路由表的 VPN 状态变更
+              </p>
             </div>
           </div>
         </ScrollArea>

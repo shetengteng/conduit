@@ -71,3 +71,22 @@ export function formatTime(ts: number): string {
   if (!Number.isFinite(ts) || ts <= 0) return "—";
   return new Date(ts).toLocaleTimeString();
 }
+
+/**
+ * 待命客户端"距上次心跳"的展示。
+ *
+ * - 客户端默认 10s 心跳一次,所以 ≤ 30s 视为在线/活跃,直接显示"在线",避免来回闪 0/8/12s 误导用户;
+ * - 30s ~ 60s 显示秒数(开始可疑);
+ * - ≥ 60s 转为分钟; ≥ 1h 转为小时;
+ * - 兜底 "—"。
+ */
+export function formatIdleSec(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const s = Math.floor(seconds);
+  if (s <= 30) return "在线";
+  if (s < 60) return `${s}s 前`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} 分钟前`;
+  const h = Math.floor(m / 60);
+  return `${h} 小时前`;
+}

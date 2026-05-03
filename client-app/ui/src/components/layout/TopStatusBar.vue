@@ -15,20 +15,33 @@
  * M-β.2 接入连接状态后会再加：connecting / connected / disconnected /
  * heartbeat_warn / global_fallback 等。
  */
-import { computed, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import StatusBadge from './StatusBadge.vue'
 import { clientStore } from '@/stores/clientStore'
 import { discoveryStore } from '@/stores/discoveryStore'
 import { getRuntime } from '@/api/runtime'
-import { ref } from 'vue'
 import { formatUptimeShort } from '@/utils/format'
 import type { AppRuntime } from '@/types/client'
 
 const runtime = ref<AppRuntime | null>(null)
 
+// 每秒 reactive tick:让顶栏的 "运行 Xs" 在 healthz polling 间隔之间也能持续增长。
+const nowMs = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(async () => {
   runtime.value = await getRuntime()
   await clientStore.refresh()
+  tickTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+})
+
+onBeforeUnmount(() => {
+  if (tickTimer) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
 })
 
 const tone = computed<'running' | 'warning' | 'stopped' | 'error'>(() => {
@@ -69,7 +82,13 @@ const ports = computed(() => {
   ]
 })
 
-const uptime = computed(() => formatUptimeShort(clientStore.uptimeSec.value))
+const uptime = computed(() => {
+  const snapshot = clientStore.uptimeSec.value
+  const fetchedAt = clientStore.state.healthzFetchedAtMs
+  if (!fetchedAt || snapshot <= 0) return formatUptimeShort(snapshot)
+  const drift = Math.max(0, Math.floor((nowMs.value - fetchedAt) / 1000))
+  return formatUptimeShort(snapshot + drift)
+})
 </script>
 
 <template>

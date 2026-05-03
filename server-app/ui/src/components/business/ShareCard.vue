@@ -2,31 +2,24 @@
 /**
  * 接入信息卡 —— 让同事一键复制即可接入。
  *
- * 三种接入方式（PAC 推荐 / HTTP / SOCKS5）：
- *   - 用 Tabs 切换，每个面板顶部一句话说明"什么场景用"
- *   - PAC 直接显示完整 URL（mono 大字号 + 全选友好）
- *   - HTTP / SOCKS5 合并为 host:port 一行，一键复制完整 endpoint
- *
- * 空态：
- *   - 代理未启动 → 显示「请先启动代理」占位，复制按钮全部 disabled
- *   - LAN IP 解析失败 → 显示警告，提醒同事必须在同一局域网
+ * 三种接入方式(PAC 推荐 / HTTP / SOCKS5)平铺展示,无 tab 切换:
+ *   - 用户反馈"只有 3 行,放在一起"
+ *   - 每行: 模式 badge + 端点 + 复制按钮 + 一句使用场景
  */
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { RiFileCopy2Line, RiInformationLine, RiAlertLine, RiLinkM } from '@remixicon/vue'
+import { RiFileCopy2Line, RiInformationLine, RiAlertLine } from '@remixicon/vue'
 import { proxyStore } from '@/stores/proxy'
 import { useToast } from '@/composables/useToast'
 
 const toast = useToast()
-const tab = ref<'pac' | 'http' | 'socks5'>('pac')
 
 const status = computed(() => proxyStore.state.status)
 const running = computed(() => Boolean(status.value?.running))
@@ -121,134 +114,107 @@ async function copy(text: string, label: string) {
         </AlertDescription>
       </Alert>
 
-      <Tabs v-model="tab">
-        <TabsList class="h-8 w-full bg-muted p-0.5">
-          <TabsTrigger
-            value="pac"
-            class="flex-1 text-[11px] font-medium data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            PAC
-          </TabsTrigger>
-          <TabsTrigger
-            value="http"
-            class="flex-1 text-[11px] font-medium data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            HTTP
-          </TabsTrigger>
-          <TabsTrigger
-            value="socks5"
-            class="flex-1 text-[11px] font-medium data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
-          >
-            SOCKS5
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pac" class="mt-2.5 flex flex-col gap-2">
-          <p class="text-[11px] text-muted-foreground">
-            <span class="mr-1 inline-flex items-center rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
-              推荐
-            </span>
-            填到系统代理的「自动配置脚本」即可，按规则智能分流，国内站不绕路
-          </p>
-          <div
-            class="group flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50"
-          >
-            <div class="flex items-center justify-center px-2.5 text-muted-foreground">
-              <RiLinkM class="size-3.5" />
+      <!-- 平铺三行接入方式: PAC / HTTP / SOCKS5。无 tab,所有信息一眼看完。 -->
+      <div class="flex flex-col gap-2">
+        <!-- PAC: 强烈推荐,显著标识 -->
+        <div class="flex flex-col gap-1">
+          <div class="flex items-baseline justify-between gap-2">
+            <div class="flex items-center gap-1.5">
+              <span class="rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
+                推荐
+              </span>
+              <span class="text-[11px] font-medium text-foreground">PAC 自动配置</span>
             </div>
+            <span class="text-[10px] text-muted-foreground">智能分流,国内不绕路</span>
+          </div>
+          <div class="flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50">
             <code
               v-if="pacUrl"
-              class="flex-1 select-all overflow-x-auto whitespace-nowrap py-2 pr-2 font-mono text-xs leading-tight"
+              class="flex-1 select-all overflow-x-auto whitespace-nowrap py-1.5 px-2.5 font-mono text-[11px] leading-tight"
               :title="pacUrl"
             >
               {{ pacUrl }}
             </code>
             <span
               v-else
-              class="flex-1 py-2 pr-2 text-[11px] italic text-muted-foreground"
+              class="flex-1 py-1.5 px-2.5 text-[11px] italic text-muted-foreground"
             >
-              启动代理后将在此显示完整 PAC URL
+              启动后显示
             </span>
             <Button
               variant="ghost"
               size="sm"
-              class="h-auto rounded-none border-l border-border px-3"
+              class="h-auto rounded-none border-l border-border px-2.5"
               :disabled="!pacUrl"
               @click="copy(pacUrl, 'PAC URL')"
             >
               <RiFileCopy2Line class="size-3.5" />
             </Button>
           </div>
-        </TabsContent>
+        </div>
 
-        <TabsContent value="http" class="mt-2.5 flex flex-col gap-2">
-          <p class="text-[11px] text-muted-foreground">
-            手动配「HTTP 代理」时填这一行（host:port）—— 全局走代理，国内站会变慢
-          </p>
-          <div
-            class="group flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50"
-          >
-            <div class="flex items-center px-2.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-              host:port
-            </div>
+        <!-- HTTP -->
+        <div class="flex flex-col gap-1">
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="text-[11px] font-medium text-foreground">HTTP 代理</span>
+            <span class="text-[10px] text-muted-foreground">全局走代理,国内会变慢</span>
+          </div>
+          <div class="flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50">
             <code
               v-if="httpEndpoint"
-              class="flex-1 select-all overflow-x-auto whitespace-nowrap py-2 pr-2 text-right font-mono text-sm font-medium"
+              class="flex-1 select-all overflow-x-auto whitespace-nowrap py-1.5 px-2.5 font-mono text-[11px] font-medium leading-tight"
             >
               {{ httpEndpoint }}
             </code>
             <span
               v-else
-              class="flex-1 py-2 pr-2 text-right text-[11px] italic text-muted-foreground"
+              class="flex-1 py-1.5 px-2.5 text-[11px] italic text-muted-foreground"
             >
               启动后显示
             </span>
             <Button
               variant="ghost"
               size="sm"
-              class="h-auto rounded-none border-l border-border px-3"
+              class="h-auto rounded-none border-l border-border px-2.5"
               :disabled="!httpEndpoint"
               @click="copy(httpEndpoint, 'HTTP 代理')"
             >
               <RiFileCopy2Line class="size-3.5" />
             </Button>
           </div>
-        </TabsContent>
+        </div>
 
-        <TabsContent value="socks5" class="mt-2.5 flex flex-col gap-2">
-          <p class="text-[11px] text-muted-foreground">
-            适合 curl / git / SSH 等命令行工具的 TCP 全协议代理
-          </p>
-          <div
-            class="group flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50"
-          >
-            <div class="flex items-center px-2.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-              host:port
-            </div>
+        <!-- SOCKS5 -->
+        <div class="flex flex-col gap-1">
+          <div class="flex items-baseline justify-between gap-2">
+            <span class="text-[11px] font-medium text-foreground">SOCKS5</span>
+            <span class="text-[10px] text-muted-foreground">curl / git / SSH 命令行</span>
+          </div>
+          <div class="flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50">
             <code
               v-if="socksEndpoint"
-              class="flex-1 select-all overflow-x-auto whitespace-nowrap py-2 pr-2 text-right font-mono text-sm font-medium"
+              class="flex-1 select-all overflow-x-auto whitespace-nowrap py-1.5 px-2.5 font-mono text-[11px] font-medium leading-tight"
             >
               {{ socksEndpoint }}
             </code>
             <span
               v-else
-              class="flex-1 py-2 pr-2 text-right text-[11px] italic text-muted-foreground"
+              class="flex-1 py-1.5 px-2.5 text-[11px] italic text-muted-foreground"
             >
               启动后显示
             </span>
             <Button
               variant="ghost"
               size="sm"
-              class="h-auto rounded-none border-l border-border px-3"
+              class="h-auto rounded-none border-l border-border px-2.5"
               :disabled="!socksEndpoint"
               @click="copy(socksEndpoint, 'SOCKS5 代理')"
             >
               <RiFileCopy2Line class="size-3.5" />
             </Button>
           </div>
-        </TabsContent>
-      </Tabs>
+        </div>
+      </div>
     </CardContent>
   </Card>
 </template>

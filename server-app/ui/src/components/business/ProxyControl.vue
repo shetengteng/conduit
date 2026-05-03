@@ -1,16 +1,15 @@
 <script setup lang="ts">
 /**
- * 仪表盘核心 KPI 卡片 —— 在线客户端数 / 总流量 / 运行时长 / VPN 状态。
+ * 仪表盘核心 KPI 卡片 —— 已链接客户端数 / 下行 / 上行 / 运行时长。
  *
- * 数据全部读自 proxyStore + trafficStore，本组件只做展示。
- * 布局：2x2 KPI 网格（紧凑模式）+ 底部 VPN 状态行。
- *   - tile 内 icon 移到右上角 + 大数字主体 + 副信息槽，避免一行只有一个数字的"广告位"感
- *   - 数字尺寸提到 22px / mono / tabular-nums
+ * 数据全部读自 proxyStore + trafficStore,本组件只做展示。
+ * 布局: 2x2 KPI 网格(紧凑模式)。
+ *
+ * VPN 状态不再在此卡展示 —— 与右侧 NetworkPanel"VPN 出口"完全重复,
+ * 引擎卡只承载流量/客户端 KPI。
  */
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
-import { RiShieldCheckLine, RiShieldCrossLine } from '@remixicon/vue'
 import StatusBadge from '../layout/StatusBadge.vue'
 import { proxyStore } from '@/stores/proxy'
 import { trafficStore } from '@/stores/traffic'
@@ -20,6 +19,32 @@ const status = computed(() => proxyStore.state.status)
 const loading = computed(() => proxyStore.state.loading && !status.value)
 
 const totalBps = trafficStore.totalBps
+
+// 每秒 reactive tick,用于让"运行时长"在 polling 间隔(8s)之间也能平滑增长。
+// backend 的 uptime_sec 是快照;UI 用 (snapshot + (now - statusFetchedAtMs)/1000) 外推。
+const nowMs = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  tickTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+})
+onBeforeUnmount(() => {
+  if (tickTimer) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
+})
+
+const liveUptimeSec = computed(() => {
+  const s = status.value
+  if (!s || !s.running) return 0
+  const snapshot = s.uptime_sec ?? 0
+  const fetchedAt = proxyStore.state.statusFetchedAtMs
+  if (!fetchedAt) return snapshot
+  const drift = Math.max(0, Math.floor((nowMs.value - fetchedAt) / 1000))
+  return snapshot + drift
+})
 
 /**
  * KPI 配置 —— B 风格采用左侧 2px 彩色细线 + 极细字重大数字作为视觉签名。
@@ -69,7 +94,7 @@ const kpis = computed(() => {
     {
       key: 'uptime',
       label: '运行时长',
-      value: formatUptimeShort(s?.uptime_sec ?? 0),
+      value: formatUptimeShort(liveUptimeSec.value),
       unit: '',
       sub: s?.running ? '稳定运行中' : '尚未启动',
       accent: 'border-l-border',
@@ -77,8 +102,6 @@ const kpis = computed(() => {
   ]
 })
 
-const vpnAvailable = computed(() => Boolean(status.value?.vpn?.available))
-const vpnIface = computed(() => status.value?.vpn?.iface ?? '—')
 </script>
 
 <template>
@@ -123,23 +146,6 @@ const vpnIface = computed(() => status.value?.vpn?.iface ?? '—')
         </div>
       </div>
 
-      <Separator class="my-2.5" />
-
-      <div class="flex items-center gap-2 text-xs">
-        <component
-          :is="vpnAvailable ? RiShieldCheckLine : RiShieldCrossLine"
-          class="size-3.5"
-          :class="vpnAvailable ? 'text-status-ok' : 'text-status-warn'"
-        />
-        <span class="text-muted-foreground">VPN 出口</span>
-        <span class="font-mono font-medium">{{ vpnIface }}</span>
-        <span
-          class="ml-auto text-[10px] uppercase tracking-wide"
-          :class="vpnAvailable ? 'text-status-ok' : 'text-status-warn'"
-        >
-          {{ vpnAvailable ? '可用' : '未检测到' }}
-        </span>
-      </div>
     </CardContent>
   </Card>
 </template>

@@ -127,6 +127,10 @@ function isOnline(srv: DiscoveredServer): boolean {
   return srv.source === 'mdns'
 }
 
+// 与 backend client-app/core/discoverer.py:_persist_merged_history 的容量上限保持一致。
+// 改这里前请同步检查后端常量。
+const HISTORY_MAX = 32
+
 const headerSubtitle = computed(() => {
   if (loading.value && servers.value.length === 0) return '正在扫描…'
   if (!available.value) return 'mDNS 服务未启用'
@@ -135,6 +139,11 @@ const headerSubtitle = computed(() => {
   if (onlineCount.value > 0) parts.push(`${onlineCount.value} 个在线`)
   if (historyCount.value > 0) parts.push(`${historyCount.value} 个曾见过`)
   return parts.join(' · ')
+})
+
+const headerHint = computed(() => {
+  if (historyCount.value === 0) return ''
+  return `"曾见过"会持久保存(本地最多 ${HISTORY_MAX} 条,按最近见过的时间倒序),用右上角"清空历史"或单条 X 按钮可移除`
 })
 </script>
 
@@ -148,6 +157,12 @@ const headerSubtitle = computed(() => {
         </h1>
         <p class="text-sm text-muted-foreground">
           {{ headerSubtitle }}
+        </p>
+        <p
+          v-if="headerHint"
+          class="text-[11px] leading-relaxed text-muted-foreground/80"
+        >
+          {{ headerHint }}
         </p>
       </div>
       <div class="flex items-center gap-2">

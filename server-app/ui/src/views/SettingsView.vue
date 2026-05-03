@@ -55,14 +55,19 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
     </Alert>
 
     <Card>
-      <CardHeader>
-        <CardTitle class="flex items-center gap-2 text-[13px] font-semibold">
-          <RiSettings4Line class="size-3.5 text-foreground" />
-          端口
-        </CardTitle>
-        <CardDescription class="text-xs">
-          这些端口由 Tauri 主进程在启动时通过 portpicker 动态分配
-        </CardDescription>
+      <CardHeader class="flex flex-row items-start justify-between gap-3 space-y-0">
+        <div class="flex flex-col gap-1">
+          <CardTitle class="flex items-center gap-2 text-[13px] font-semibold">
+            <RiSettings4Line class="size-3.5 text-foreground" />
+            端口
+          </CardTitle>
+          <CardDescription class="text-xs">
+            这些端口由 Tauri 主进程在启动时通过 portpicker 动态分配,无法在窗口里修改
+          </CardDescription>
+        </div>
+        <span class="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[10px] tracking-wide text-muted-foreground">
+          只读
+        </span>
       </CardHeader>
       <CardContent class="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div class="flex flex-col gap-1.5">
@@ -72,7 +77,9 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
           <Input
             :model-value="String(status?.http_port ?? '—')"
             readonly
-            class="h-8 font-mono text-sm tabular-nums"
+            disabled
+            title="v0.1 阶段不支持窗口内编辑;启动 server 时用 --http-port 指定"
+            class="h-8 cursor-not-allowed bg-muted/40 font-mono text-sm tabular-nums opacity-90"
           />
         </div>
         <div class="flex flex-col gap-1.5">
@@ -82,7 +89,9 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
           <Input
             :model-value="String(status?.socks5_port ?? '—')"
             readonly
-            class="h-8 font-mono text-sm tabular-nums"
+            disabled
+            title="v0.1 阶段不支持窗口内编辑;启动 server 时用 --socks5-port 指定"
+            class="h-8 cursor-not-allowed bg-muted/40 font-mono text-sm tabular-nums opacity-90"
           />
         </div>
         <div class="flex flex-col gap-1.5">
@@ -92,7 +101,9 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
           <Input
             :model-value="String(status?.api_port ?? '—')"
             readonly
-            class="h-8 font-mono text-sm tabular-nums"
+            disabled
+            title="v0.1 阶段不支持窗口内编辑;启动 server 时用 --api-port 指定(loopback only)"
+            class="h-8 cursor-not-allowed bg-muted/40 font-mono text-sm tabular-nums opacity-90"
           />
         </div>
       </CardContent>
@@ -167,7 +178,9 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
             <Input
               :model-value="status?.mdns?.name ?? '—'"
               readonly
-              class="h-8 text-sm"
+              disabled
+              title="v0.1 不支持窗口内编辑;启动时用 --mdns-name '你的服务名' 指定"
+              class="h-8 cursor-not-allowed bg-muted/40 text-sm opacity-90"
             />
             <p class="text-[10px] text-muted-foreground">
               默认取系统短主机名;如需自定义请用 <code class="font-mono">--mdns-name "你的服务名"</code> 启动 server
@@ -180,7 +193,8 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
             <Input
               :model-value="status?.mdns?.service_type ?? '_conduit._tcp.local.'"
               readonly
-              class="h-8 font-mono text-sm"
+              disabled
+              class="h-8 cursor-not-allowed bg-muted/40 font-mono text-sm opacity-90"
             />
           </div>
         </div>

@@ -42,10 +42,15 @@ const isFailed = computed(() => uiStore.state.bootPhase === 'Failed')
 // 全局 SSE 订阅:连接相关事件全部交给 connectionStore
 let stopEvents: (() => void) | null = null
 let unlistenTrayNav: UnlistenFn | null = null
+// healthz polling:让顶栏的 uptime 在 SSE 之外也能持续刷新(uptime 不会有 event)
+let healthzPollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(async () => {
   await clientStore.refresh()
   await connectionStore.refresh()
+  healthzPollTimer = setInterval(() => {
+    clientStore.refreshSilently()
+  }, 8000)
 
   const evt = useEvents(
     {
@@ -76,6 +81,10 @@ onMounted(async () => {
 onUnmounted(() => {
   stopEvents?.()
   unlistenTrayNav?.()
+  if (healthzPollTimer) {
+    clearInterval(healthzPollTimer)
+    healthzPollTimer = null
+  }
 })
 
 // 进入 connecting / connected 时,自动跳到「已连接」视图;

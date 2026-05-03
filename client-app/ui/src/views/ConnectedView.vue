@@ -40,10 +40,12 @@ onMounted(() => {
   tick = window.setInterval(() => {
     now.value = Date.now() / 1000
   }, 1000)
-  if (connectionStore.isConnected.value) {
-    trafficStore.refresh()
-    cacheStore.refresh()
-  }
+  // 总是 refresh 一次,不依赖 isConnected:
+  //   - 浏览器刷新后 ConnectedView 可能在 App.vue 的 connectionStore.refresh 之前就 mount 了,
+  //     此时 isConnected=false 会让 traffic/cache 永远是 0,直到用户切换标签
+  //   - backend /api/traffic 返回的累计值在未连接也安全(只是返回 baseline 0)
+  trafficStore.refresh()
+  cacheStore.refresh()
 })
 
 onUnmounted(() => {

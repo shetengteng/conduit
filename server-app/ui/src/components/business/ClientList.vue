@@ -32,7 +32,7 @@ import {
 import { proxyStore } from '@/stores/proxy'
 import { trafficStore } from '@/stores/traffic'
 import { useTableSort } from '@/composables/useTableSort'
-import { formatBps, formatBytes, formatUptimeShort } from '@/utils/format'
+import { formatBps, formatBytes, formatIdleSec, formatUptimeShort } from '@/utils/format'
 import type { ClientSession } from '@/types/proxy'
 
 type SortKey =
@@ -47,6 +47,11 @@ type SortKey =
 const clients = computed(() => proxyStore.state.clients)
 const passiveClients = computed(() => proxyStore.state.passiveClients)
 const totalCount = computed(() => clients.value.length + passiveClients.value.length)
+
+// 直接用 backend 的 idle_sec(随每次 refreshSilently 刷新)。
+function formatIdle(s: number | null | undefined): string {
+  return formatIdleSec(typeof s === 'number' ? s : Number.NaN)
+}
 
 function liveBps(peer: string, dir: 'in' | 'out'): number {
   const arr = trafficStore.state.series[peer]
@@ -232,7 +237,7 @@ const columns: Column[] = [
             </div>
             <span class="flex items-center gap-1 font-mono text-[11px] text-muted-foreground tabular-nums">
               <RiPulseLine class="size-3 text-blue-500/80" />
-              心跳 {{ pc.idle_sec }}s 前
+              {{ formatIdle(pc.idle_sec) }}
             </span>
           </div>
         </div>

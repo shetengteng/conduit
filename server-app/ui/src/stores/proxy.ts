@@ -25,6 +25,9 @@ interface ProxyState {
   healthz: HealthzResponse | null;
   loading: boolean;
   error: string | null;
+  // 上一次成功拉到 status 的本地时间戳(ms),用于 UI 端外推 uptime/run-time。
+  // backend 给的 uptime_sec 是个快照,UI 想要每秒平滑增长就必须本地外推。
+  statusFetchedAtMs: number;
 }
 
 const state = reactive<ProxyState>({
@@ -34,6 +37,7 @@ const state = reactive<ProxyState>({
   healthz: null,
   loading: false,
   error: null,
+  statusFetchedAtMs: 0,
 });
 
 async function refresh(): Promise<void> {
@@ -50,6 +54,7 @@ async function refresh(): Promise<void> {
     state.clients = clients.clients;
     state.passiveClients = clients.passive_clients ?? [];
     state.healthz = healthz;
+    state.statusFetchedAtMs = Date.now();
   } catch (e) {
     const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
     state.error = msg;
@@ -63,6 +68,24 @@ async function refresh(): Promise<void> {
     }
   } finally {
     state.loading = false;
+  }
+}
+
+// 仅刷新 clients(含 idle_sec)+ status:用于轻量 polling,不动 healthz/不报错。
+// 主要服务于"待命客户端最后心跳秒数"场景 —— 客户端心跳 backend 不会广播
+// SSE event(touch existing 不发事件),所以必须靠前端轮询拉新值。
+async function refreshSilently(): Promise<void> {
+  try {
+    const [status, clients] = await Promise.all([
+      ServerApi.status(),
+      ServerApi.clients(),
+    ]);
+    state.status = status;
+    state.clients = clients.clients;
+    state.passiveClients = clients.passive_clients ?? [];
+    state.statusFetchedAtMs = Date.now();
+  } catch (_) {
+    /* 静默:正式 refresh 已负责报错 */
   }
 }
 
@@ -110,6 +133,7 @@ function applyPassiveClientLost(p: PassiveClientLostPayload): void {
 export const proxyStore = {
   state,
   refresh,
+  refreshSilently,
   applyClientConnected,
   applyClientDisconnected,
   applyVpnState,

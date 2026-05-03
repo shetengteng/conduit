@@ -7,7 +7,7 @@
  *
  * 高度 56px，与 Sidebar logo 区视觉对齐。
  */
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -85,9 +85,28 @@ const ports = computed(() => {
   ]
 })
 
+// 每秒 tick 让顶栏的 "运行 Xs" 在 polling 间隔之间持续增长。
+const nowMs = ref(Date.now())
+let tickTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  tickTimer = setInterval(() => {
+    nowMs.value = Date.now()
+  }, 1000)
+})
+onBeforeUnmount(() => {
+  if (tickTimer) {
+    clearInterval(tickTimer)
+    tickTimer = null
+  }
+})
+
 const uptime = computed(() => {
-  const sec = status.value?.uptime_sec ?? 0
-  return formatUptimeShort(sec)
+  const s = status.value
+  if (!s || !s.running) return formatUptimeShort(0)
+  const snapshot = s.uptime_sec ?? 0
+  const fetchedAt = proxyStore.state.statusFetchedAtMs
+  const drift = fetchedAt ? Math.max(0, Math.floor((nowMs.value - fetchedAt) / 1000)) : 0
+  return formatUptimeShort(snapshot + drift)
 })
 
 function openConfirm() {

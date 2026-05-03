@@ -16,12 +16,16 @@ interface ClientState {
   healthz: HealthzResponse | null;
   loading: boolean;
   error: string | null;
+  // 上一次成功拉到 healthz 的本地时间戳(ms),用于 UI 端外推 uptime_sec。
+  // backend 的 uptime_sec 是个快照,UI 想要每秒平滑增长就必须本地外推。
+  healthzFetchedAtMs: number;
 }
 
 const state = reactive<ClientState>({
   healthz: null,
   loading: false,
   error: null,
+  healthzFetchedAtMs: 0,
 });
 
 async function refresh(): Promise<void> {
@@ -30,6 +34,7 @@ async function refresh(): Promise<void> {
   state.error = null;
   try {
     state.healthz = await ClientApi.healthz();
+    state.healthzFetchedAtMs = Date.now();
   } catch (e) {
     const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
     state.error = msg;
@@ -46,9 +51,20 @@ async function refresh(): Promise<void> {
   }
 }
 
+// 仅刷新 healthz,不弹错误 toast。专门服务于 polling 让 uptime/ready 持续新鲜。
+async function refreshSilently(): Promise<void> {
+  try {
+    state.healthz = await ClientApi.healthz();
+    state.healthzFetchedAtMs = Date.now();
+  } catch (_) {
+    /* 静默:正式 refresh 已负责报错 */
+  }
+}
+
 export const clientStore = {
   state,
   refresh,
+  refreshSilently,
   isReady: computed(() => Boolean(state.healthz?.ready)),
   uptimeSec: computed(() => state.healthz?.uptime_sec ?? 0),
   checks: computed(() => state.healthz?.checks ?? []),

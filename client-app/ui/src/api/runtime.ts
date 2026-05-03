@@ -50,6 +50,12 @@ export async function getRuntime(): Promise<AppRuntime | null> {
 }
 
 export async function apiBase(): Promise<string> {
+  // ?api_port=xxx 永远优先,不缓存 —— 浏览器 dev 时换端口立即生效
+  if (typeof window !== "undefined") {
+    const sp = new URLSearchParams(window.location.search);
+    const p = sp.get("api_port");
+    if (p && /^\d{2,5}$/.test(p)) return `http://127.0.0.1:${p}`;
+  }
   if (cachedBase) return cachedBase;
   const rt = await getRuntime();
   cachedBase = rt ? `http://127.0.0.1:${rt.api_port}` : FALLBACK_BASE;
