@@ -1,0 +1,1038 @@
+<!doctype html>
+<html lang="zh-CN" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conduit — 零配置局域网 VPN 共享 / Zero-config LAN VPN Sharing</title>
+  <meta
+    name="description"
+    content="Conduit 让一台拥有 VPN 的 Mac 自动成为同一 Wi-Fi 下其它设备的代理网关。Two macOS desktop apps that share one VPN to your whole LAN — zero config." />
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        container: { center: true, padding: { DEFAULT: '1.25rem', lg: '2rem' } },
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+            display: ['Space Grotesk', 'Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          },
+          colors: {
+            background: 'hsl(var(--background))',
+            foreground: 'hsl(var(--foreground))',
+            muted: 'hsl(var(--muted))',
+            'muted-foreground': 'hsl(var(--muted-foreground))',
+            border: 'hsl(var(--border))',
+            primary: 'hsl(var(--primary))',
+            'primary-foreground': 'hsl(var(--primary-foreground))',
+            card: 'hsl(var(--card))',
+            'card-foreground': 'hsl(var(--card-foreground))',
+            ring: 'hsl(var(--ring))',
+          },
+          boxShadow: {
+            soft: '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 4px 12px -2px rgb(0 0 0 / 0.04)',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    :root {
+      --background: 0 0% 100%;
+      --foreground: 240 10% 4%;
+      --muted: 240 5% 96%;
+      --muted-foreground: 240 4% 46%;
+      --border: 240 6% 90%;
+      --primary: 221 83% 53%;
+      --primary-foreground: 0 0% 100%;
+      --card: 0 0% 100%;
+      --card-foreground: 240 10% 4%;
+      --ring: 221 83% 53%;
+    }
+    .dark {
+      --background: 240 10% 4%;
+      --foreground: 0 0% 98%;
+      --muted: 240 4% 12%;
+      --muted-foreground: 240 5% 65%;
+      --border: 240 4% 16%;
+      --primary: 217 91% 60%;
+      --primary-foreground: 240 10% 4%;
+      --card: 240 6% 7%;
+      --card-foreground: 0 0% 98%;
+      --ring: 217 91% 60%;
+    }
+    html { font-feature-settings: 'cv11', 'ss01', 'ss03'; }
+    body { font-family: 'Inter', sans-serif; background: hsl(var(--background)); color: hsl(var(--foreground)); }
+    h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -0.02em; }
+    code, pre, kbd { font-family: 'JetBrains Mono', monospace; }
+
+    .grid-bg {
+      background-image:
+        linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+        linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, black 40%, transparent 100%);
+      -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 0%, black 40%, transparent 100%);
+    }
+
+    .terminal-dot { width: 12px; height: 12px; border-radius: 9999px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { animation: none !important; transition: none !important; }
+    }
+
+    [data-i18n-en], [data-i18n-zh] { display: none; }
+    html[lang='zh-CN'] [data-i18n-zh] { display: inline; }
+    html[lang='zh-CN'] [data-i18n-zh].block-i18n { display: block; }
+    html[lang='en'] [data-i18n-en] { display: inline; }
+    html[lang='en'] [data-i18n-en].block-i18n { display: block; }
+
+    .nav-blur {
+      backdrop-filter: saturate(180%) blur(12px);
+      -webkit-backdrop-filter: saturate(180%) blur(12px);
+      background: hsl(var(--background) / 0.72);
+    }
+
+    .focus-ring:focus-visible {
+      outline: 2px solid hsl(var(--ring));
+      outline-offset: 2px;
+    }
+
+    .anim-pulse-dot::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 9999px;
+      background: hsl(142 71% 45%);
+      opacity: 0.6;
+      animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+    }
+    @keyframes ping {
+      75%, 100% { transform: scale(2.2); opacity: 0; }
+    }
+  </style>
+</head>
+
+<body class="antialiased">
+  <a
+    href="#main"
+    class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-primary focus:px-3 focus:py-2 focus:text-primary-foreground">
+    <span data-i18n-zh>跳到主要内容</span><span data-i18n-en>Skip to main content</span>
+  </a>
+
+  <!-- ============== Navbar ============== -->
+  <header class="nav-blur sticky top-0 z-40 border-b border-border">
+    <div class="container flex h-14 items-center justify-between">
+      <a href="#" class="focus-ring flex items-center gap-2 rounded">
+        <span
+          aria-hidden="true"
+          class="grid h-7 w-7 place-items-center rounded-md border border-border bg-card">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round" stroke-linejoin="round" class="text-foreground">
+            <path d="M5 12h14M5 12a3 3 0 0 0 3 3M5 12a3 3 0 0 1 3-3M19 12a3 3 0 0 1-3 3M19 12a3 3 0 0 0-3-3" />
+          </svg>
+        </span>
+        <span class="font-display text-base font-semibold tracking-tight">Conduit</span>
+        <span
+          class="ml-1 hidden rounded-full border border-border bg-muted px-2 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-block">
+          v0.1
+        </span>
+      </a>
+
+      <nav class="hidden items-center gap-7 text-sm md:flex" aria-label="primary">
+        <a href="#features" class="focus-ring rounded text-muted-foreground hover:text-foreground">
+          <span data-i18n-zh>特性</span><span data-i18n-en>Features</span>
+        </a>
+        <a href="#architecture" class="focus-ring rounded text-muted-foreground hover:text-foreground">
+          <span data-i18n-zh>架构</span><span data-i18n-en>Architecture</span>
+        </a>
+        <a href="#download" class="focus-ring rounded text-foreground hover:text-foreground">
+          <span data-i18n-zh>下载</span><span data-i18n-en>Download</span>
+        </a>
+        <a href="#install" class="focus-ring rounded text-muted-foreground hover:text-foreground">
+          <span data-i18n-zh>从源码</span><span data-i18n-en>From source</span>
+        </a>
+      </nav>
+
+      <div class="flex items-center gap-1.5">
+        <button
+          id="lang-toggle"
+          type="button"
+          class="focus-ring inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          aria-label="Toggle language">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+          <span id="lang-label">中 / EN</span>
+        </button>
+
+        <button
+          id="theme-toggle"
+          type="button"
+          class="focus-ring inline-grid h-8 w-8 place-items-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-muted"
+          aria-label="Toggle theme">
+          <svg id="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden dark:block">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <svg id="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="dark:hidden">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
+
+        <a
+          href="#"
+          class="focus-ring ml-1 hidden h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:inline-flex"
+          aria-label="GitHub repository (placeholder)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M12 .5C5.65.5.5 5.65.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.55v-1.92c-3.2.7-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18A10.9 10.9 0 0 1 12 6.81c.97 0 1.95.13 2.86.39 2.18-1.49 3.14-1.18 3.14-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.07.78 2.16v3.2c0 .31.21.66.8.55A11.5 11.5 0 0 0 23.5 12.02C23.5 5.65 18.35.5 12 .5z" />
+          </svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- ============== Hero ============== -->
+    <section class="relative overflow-hidden">
+      <div class="grid-bg pointer-events-none absolute inset-0 -z-10 opacity-60"></div>
+
+      <div class="container max-w-5xl pb-16 pt-20 text-center sm:pt-28">
+        <a
+          href="#download"
+          class="focus-ring inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted">
+          <span class="relative inline-block h-1.5 w-1.5">
+            <span class="absolute inset-0 rounded-full bg-emerald-500"></span>
+            <span class="anim-pulse-dot absolute inset-0 rounded-full"></span>
+          </span>
+          <span data-i18n-zh>v0.1.0 · 210 条 pytest 全绿</span>
+          <span data-i18n-en>v0.1.0 · 210 pytest cases passing</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 5l7 7-7 7" />
+          </svg>
+        </a>
+
+        <h1 class="mx-auto mt-6 max-w-3xl text-balance font-display text-4xl font-semibold leading-[1.1] tracking-tight sm:text-5xl md:text-6xl">
+          <span data-i18n-zh>把一台 Mac 的 VPN<br />共享给整个 Wi-Fi。</span>
+          <span data-i18n-en>One Mac's VPN,<br />shared to the whole Wi-Fi.</span>
+        </h1>
+
+        <p class="mx-auto mt-5 max-w-2xl text-balance text-base leading-relaxed text-muted-foreground sm:text-lg">
+          <span data-i18n-zh>
+            Conduit 由两个 macOS 桌面应用组成。Server 在持有 VPN 的那台 Mac 上跑 HTTP / SOCKS5 + mDNS，
+            Client 在其它设备上自动发现、5 步连接、自动切换系统代理。零配置，零路由器修改。
+          </span>
+          <span data-i18n-en>
+            Conduit ships as two macOS desktop apps. Server exposes HTTP / SOCKS5 with mDNS, Client
+            auto-discovers, connects in 5 steps and switches the system proxy. Zero config, no router tweaks.
+          </span>
+        </p>
+
+        <div class="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <a
+            href="#download"
+            class="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
+            </svg>
+            <span data-i18n-zh>下载 DMG</span><span data-i18n-en>Download DMG</span>
+            <span class="ml-1 rounded bg-background/15 px-1.5 py-0.5 font-mono text-[10px]">macOS 13+</span>
+          </a>
+          <a
+            href="#install"
+            class="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-card px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+            </svg>
+            <span data-i18n-zh>从源码构建</span><span data-i18n-en>Build from source</span>
+          </a>
+        </div>
+
+        <!-- terminal mock -->
+        <div class="mx-auto mt-14 max-w-3xl text-left">
+          <div class="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">pnpm dev:server</span>
+            </div>
+            <pre class="overflow-x-auto px-5 py-5 text-[12.5px] leading-relaxed text-muted-foreground"><span class="text-foreground">$</span> pnpm dev:server
+<span class="text-emerald-500">[INFO]</span>  boot http=15723 socks5=22142 api=16983
+<span class="text-emerald-500">[INFO]</span>  HTTP   listening on 0.0.0.0:15723
+<span class="text-emerald-500">[INFO]</span>  SOCKS5 listening on 0.0.0.0:22142
+<span class="text-emerald-500">[INFO]</span>  control API listening on 127.0.0.1:16983
+<span class="text-sky-500">mDNS</span>    advertised: Conduit on _conduit._tcp.local. @ 192.168.1.14:15723
+<span class="text-emerald-500">[OK]</span>    healthz ready · tray icon up · vpn=on</pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Two-app split ============== -->
+    <section id="apps" class="border-t border-border bg-muted/40">
+      <div class="container max-w-6xl py-20">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>两个独立桌面应用</span><span data-i18n-en>Two desktop apps</span>
+          </p>
+          <h2 class="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <span data-i18n-zh>Server 共享，Client 接入。</span>
+            <span data-i18n-en>Server shares. Client connects.</span>
+          </h2>
+        </div>
+
+        <div class="mt-12 grid gap-5 md:grid-cols-2">
+          <!-- Server card -->
+          <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft transition-colors hover:border-foreground/30">
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="3" width="20" height="6" rx="1.5" />
+                  <rect x="2" y="15" width="20" height="6" rx="1.5" />
+                  <path d="M6 6h.01M6 18h.01" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="font-display text-lg font-semibold">Conduit Server</h3>
+                <p class="font-mono text-[11px] text-muted-foreground">@conduit/server-app</p>
+              </div>
+            </div>
+            <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>跑在持有公司 VPN 的那台 Mac 上。同时开 HTTP / SOCKS5 代理、mDNS 广播、PAC 服务和 控制 API。</span>
+              <span data-i18n-en>Runs on the Mac that holds your corporate VPN. Exposes HTTP / SOCKS5, mDNS, a PAC endpoint and a control API.</span>
+            </p>
+            <ul class="mt-6 space-y-2.5 text-sm">
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>HTTP 15723 · SOCKS5 22142 · 控制 API 16983</span>
+                <span data-i18n-en>HTTP 15723 · SOCKS5 22142 · Control API 16983</span></li>
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>DIRECT-first → VPN fallback 智能出站</span>
+                <span data-i18n-en>DIRECT-first → VPN-fallback smart routing</span></li>
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>PAC 内置 7 + 19 + 14 条规则</span>
+                <span data-i18n-en>PAC bundles 7 + 19 + 14 rules</span></li>
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>菜单栏托盘 + Vue 控制台</span>
+                <span data-i18n-en>Menu-bar tray + Vue console</span></li>
+            </ul>
+            <div class="mt-7 inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 font-mono text-xs">
+              <span class="text-muted-foreground">$</span>
+              <span class="text-foreground">pnpm dev:server</span>
+            </div>
+          </article>
+
+          <!-- Client card -->
+          <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft transition-colors hover:border-foreground/30">
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="12" rx="1.5" />
+                  <path d="M2 20h20M9 16l-1 4M15 16l1 4" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="font-display text-lg font-semibold">Conduit Client</h3>
+                <p class="font-mono text-[11px] text-muted-foreground">@conduit/client-app</p>
+              </div>
+            </div>
+            <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>跑在每一台想用共享 VPN 的设备上。自动发现 Server，5 步连接，自动切换 macOS 系统代理。</span>
+              <span data-i18n-en>Runs on every device that wants the shared VPN. Auto-discovers Server, 5-step connect, switches macOS system proxy.</span>
+            </p>
+            <ul class="mt-6 space-y-2.5 text-sm">
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>mDNS 自动发现 + 历史 Server 列表</span>
+                <span data-i18n-en>mDNS discovery + known-server history</span></li>
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>5 步连接向导 · 心跳 · 自动断线重连</span>
+                <span data-i18n-en>5-step wizard · heartbeat · auto reconnect</span></li>
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>1 Hz 流量曲线 + per-host 路由缓存</span>
+                <span data-i18n-en>1 Hz traffic chart + per-host route cache</span></li>
+              <li class="flex items-start gap-2.5"><span class="mt-1 h-1 w-1 rounded-full bg-foreground"></span>
+                <span data-i18n-zh>5 步诊断 + 登录自启 + 系统托盘</span>
+                <span data-i18n-en>5-step diagnose + login autostart + tray</span></li>
+            </ul>
+            <div class="mt-7 inline-flex items-center gap-2 rounded-md bg-muted px-3 py-2 font-mono text-xs">
+              <span class="text-muted-foreground">$</span>
+              <span class="text-foreground">pnpm dev:client</span>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Features ============== -->
+    <section id="features" class="border-t border-border">
+      <div class="container max-w-6xl py-20">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>核心特性</span><span data-i18n-en>Core features</span>
+          </p>
+          <h2 class="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <span data-i18n-zh>该有的都有，不需要的统统没有。</span>
+            <span data-i18n-en>Everything you need. Nothing you don't.</span>
+          </h2>
+        </div>
+
+        <div class="mt-12 grid gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-2 lg:grid-cols-3">
+          <!-- 1 -->
+          <div class="bg-card p-6 transition-colors hover:bg-muted/40">
+            <div class="grid h-10 w-10 place-items-center rounded-md border border-border bg-muted text-foreground">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M3 12a9 9 0 0 1 9-9M21 12a9 9 0 0 1-9 9M12 3a9 9 0 0 1 9 9M12 21a9 9 0 0 1-9-9" />
+              </svg>
+            </div>
+            <h3 class="mt-5 font-display text-base font-semibold">
+              <span data-i18n-zh>mDNS 零配置发现</span><span data-i18n-en>Zero-config mDNS</span>
+            </h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>同一 Wi-Fi 下 5–10 秒自动找到 Server，告别手填 IP / 端口。</span>
+              <span data-i18n-en>Server appears in 5–10s on the same Wi-Fi. No manual IP / port.</span>
+            </p>
+          </div>
+          <!-- 2 -->
+          <div class="bg-card p-6 transition-colors hover:bg-muted/40">
+            <div class="grid h-10 w-10 place-items-center rounded-md border border-border bg-muted text-foreground">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 12h4l3-9 4 18 3-9h4" />
+              </svg>
+            </div>
+            <h3 class="mt-5 font-display text-base font-semibold">
+              <span data-i18n-zh>5 步连接向导</span><span data-i18n-en>5-step connect wizard</span>
+            </h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>分配本地端口 → 探活 → 系统代理 → 心跳 → 就绪，每一步可视、可重试。</span>
+              <span data-i18n-en>Port → probe → system proxy → heartbeat → ready, every step visible and retriable.</span>
+            </p>
+          </div>
+          <!-- 3 -->
+          <div class="bg-card p-6 transition-colors hover:bg-muted/40">
+            <div class="grid h-10 w-10 place-items-center rounded-md border border-border bg-muted text-foreground">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 17l6-6 4 4 8-8M14 7h7v7" />
+              </svg>
+            </div>
+            <h3 class="mt-5 font-display text-base font-semibold">
+              <span data-i18n-zh>1 Hz 流量曲线</span><span data-i18n-en>1 Hz traffic meter</span>
+            </h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>SSE 实时推送上下行字节，连接质量一眼看清。</span>
+              <span data-i18n-en>SSE-streamed up / down bytes — see your link health at a glance.</span>
+            </p>
+          </div>
+          <!-- 4 -->
+          <div class="bg-card p-6 transition-colors hover:bg-muted/40">
+            <div class="grid h-10 w-10 place-items-center rounded-md border border-border bg-muted text-foreground">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 2v6M12 16v6M2 12h6M16 12h6M5 5l4 4M15 15l4 4M19 5l-4 4M9 15l-4 4" />
+              </svg>
+            </div>
+            <h3 class="mt-5 font-display text-base font-semibold">
+              <span data-i18n-zh>智能 per-host 路由</span><span data-i18n-en>Smart per-host routing</span>
+            </h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>DIRECT-first 1.5s head-start，失败回落 VPN，结果按域名缓存 5 分钟。</span>
+              <span data-i18n-en>DIRECT-first with 1.5s head-start. Fallback to VPN. Per-host cached for 5 min.</span>
+            </p>
+          </div>
+          <!-- 5 -->
+          <div class="bg-card p-6 transition-colors hover:bg-muted/40">
+            <div class="grid h-10 w-10 place-items-center rounded-md border border-border bg-muted text-foreground">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 12l2 2 4-4" />
+                <path d="M5 7h14v10a3 3 0 0 1-3 3H8a3 3 0 0 1-3-3V7zM9 7V5a3 3 0 0 1 6 0v2" />
+              </svg>
+            </div>
+            <h3 class="mt-5 font-display text-base font-semibold">
+              <span data-i18n-zh>5 步诊断面板</span><span data-i18n-en>5-step diagnostics</span>
+            </h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>一键检查端口、mDNS、心跳、系统代理、出站连通，问题不再玄学。</span>
+              <span data-i18n-en>One-click checks: port, mDNS, heartbeat, system proxy, egress. No guesswork.</span>
+            </p>
+          </div>
+          <!-- 6 -->
+          <div class="bg-card p-6 transition-colors hover:bg-muted/40">
+            <div class="grid h-10 w-10 place-items-center rounded-md border border-border bg-muted text-foreground">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <path d="M9 9h6v6H9z" />
+              </svg>
+            </div>
+            <h3 class="mt-5 font-display text-base font-semibold">
+              <span data-i18n-zh>菜单栏托盘 + 自启</span><span data-i18n-en>Menu-bar tray + autostart</span>
+            </h3>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>关窗口不退出，登录即启动，状态颜色一目了然。</span>
+              <span data-i18n-en>Closing the window keeps it running. Launches on login. Status colour at a glance.</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Architecture ============== -->
+    <section id="architecture" class="border-t border-border bg-muted/40">
+      <div class="container max-w-5xl py-20">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>架构</span><span data-i18n-en>Architecture</span>
+          </p>
+          <h2 class="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <span data-i18n-zh>三层栈，进程隔离。</span>
+            <span data-i18n-en>Three layers. Process-isolated.</span>
+          </h2>
+          <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <span data-i18n-zh>Tauri 主进程负责窗口与托盘，Vue 控制台只画 UI，所有网络逻辑跑在独立的 Python Sidecar 里 —— localhost HTTP + SSE 通信。</span>
+            <span data-i18n-en>Tauri owns the window & tray. Vue only renders. All networking lives in an isolated Python sidecar — talking over localhost HTTP + SSE.</span>
+          </p>
+        </div>
+
+        <div class="mt-12 grid gap-5 sm:grid-cols-3">
+          <div class="rounded-xl border border-border bg-card p-6">
+            <p class="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">layer 1</p>
+            <h3 class="mt-2 font-display text-base font-semibold">UI · Vue 3</h3>
+            <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>shadcn-vue + Tailwind v4。Stripe / Vercel 风的企业白底。</span>
+              <span data-i18n-en>shadcn-vue + Tailwind v4. Stripe / Vercel enterprise white.</span>
+            </p>
+            <code class="mt-4 block break-all font-mono text-[11px] text-muted-foreground">{server,client}-app/ui</code>
+          </div>
+          <div class="rounded-xl border border-border bg-card p-6">
+            <p class="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">layer 2</p>
+            <h3 class="mt-2 font-display text-base font-semibold">Shell · Tauri 2 + Rust</h3>
+            <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>窗口、托盘、自启、Sidecar 监管、healthz 探活。</span>
+              <span data-i18n-en>Window, tray, autostart, sidecar supervision, healthz.</span>
+            </p>
+            <code class="mt-4 block break-all font-mono text-[11px] text-muted-foreground">{server,client}-app/src-tauri</code>
+          </div>
+          <div class="rounded-xl border border-border bg-card p-6">
+            <p class="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">layer 3</p>
+            <h3 class="mt-2 font-display text-base font-semibold">Sidecar · Python 3</h3>
+            <p class="mt-2 text-xs leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>aiohttp / asyncio / zeroconf。HTTP / SOCKS5 / mDNS / 路由缓存全在这。</span>
+              <span data-i18n-en>aiohttp / asyncio / zeroconf. HTTP / SOCKS5 / mDNS / route cache live here.</span>
+            </p>
+            <code class="mt-4 block break-all font-mono text-[11px] text-muted-foreground">{server,client}-app/core</code>
+          </div>
+        </div>
+
+        <!-- pipeline -->
+        <div class="mt-10 rounded-xl border border-border bg-card p-6">
+          <p class="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>请求生命周期</span><span data-i18n-en>Request lifecycle</span>
+          </p>
+          <div class="mt-5 grid grid-cols-2 gap-3 text-xs sm:grid-cols-5">
+            <div class="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-center">
+              <span class="block font-mono text-[10px] text-muted-foreground">1</span>
+              <span data-i18n-zh>Client 浏览器</span><span data-i18n-en>Client browser</span>
+            </div>
+            <div class="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-center">
+              <span class="block font-mono text-[10px] text-muted-foreground">2</span>
+              <span data-i18n-zh>本地 SOCKS5</span><span data-i18n-en>Local SOCKS5</span>
+            </div>
+            <div class="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-center">
+              <span class="block font-mono text-[10px] text-muted-foreground">3</span>
+              <span data-i18n-zh>Server HTTP/SOCKS5</span><span data-i18n-en>Server HTTP/SOCKS5</span>
+            </div>
+            <div class="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-center">
+              <span class="block font-mono text-[10px] text-muted-foreground">4</span>
+              <span data-i18n-zh>路由判定 (DIRECT/VPN)</span><span data-i18n-en>Route (DIRECT/VPN)</span>
+            </div>
+            <div class="rounded-md border border-border bg-muted/40 px-3 py-2.5 text-center">
+              <span class="block font-mono text-[10px] text-muted-foreground">5</span>
+              <span data-i18n-zh>目标服务</span><span data-i18n-en>Upstream</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Download (recommended) ============== -->
+    <section id="download" class="border-t border-border">
+      <div class="container max-w-5xl py-20">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>下载 · 推荐方式</span><span data-i18n-en>Download · recommended</span>
+          </p>
+          <h2 class="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <span data-i18n-zh>装两个 DMG，搞定。</span>
+            <span data-i18n-en>Two DMGs. That's it.</span>
+          </h2>
+          <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <span data-i18n-zh>持有 VPN 的那台 Mac 装 Server，其它设备装 Client。Apple Silicon 30 MB / 30 MB。</span>
+            <span data-i18n-en>Install Server on the VPN-holding Mac, Client on every other device. 30 MB each (Apple Silicon).</span>
+          </p>
+        </div>
+
+        <div class="mt-12 grid gap-5 md:grid-cols-2">
+          <!-- Server DMG -->
+          <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
+            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · 30 MB</span>
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="3" width="20" height="6" rx="1.5" />
+                  <rect x="2" y="15" width="20" height="6" rx="1.5" />
+                  <path d="M6 6h.01M6 18h.01" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="font-display text-lg font-semibold">Conduit Server</h3>
+                <p class="font-mono text-[11px] text-muted-foreground">v0.1.0 · macOS 13+</p>
+              </div>
+            </div>
+            <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>装在持有公司 VPN 的那台 Mac 上。</span>
+              <span data-i18n-en>Install on the Mac that holds your VPN.</span>
+            </p>
+            <a
+              href="#"
+              data-disabled
+              class="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background opacity-95 transition-opacity hover:opacity-100 focus-ring"
+              aria-label="Download Conduit Server DMG (link to be configured)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
+              </svg>
+              <span class="font-mono text-xs">Conduit Server_0.1.0_aarch64.dmg</span>
+            </a>
+            <details class="mt-4 text-xs">
+              <summary class="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
+                <span data-i18n-zh>SHA-256 校验</span><span data-i18n-en>SHA-256 checksum</span>
+              </summary>
+              <pre class="mt-2 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">9756df997a467cfcf1057ce945f74edcf4dd2c0895a61644acbacd05126a1553</pre>
+            </details>
+          </article>
+
+          <!-- Client DMG -->
+          <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
+            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · 30 MB</span>
+            <div class="flex items-center gap-3">
+              <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="12" rx="1.5" />
+                  <path d="M2 20h20M9 16l-1 4M15 16l1 4" />
+                </svg>
+              </span>
+              <div>
+                <h3 class="font-display text-lg font-semibold">Conduit Client</h3>
+                <p class="font-mono text-[11px] text-muted-foreground">v0.1.0 · macOS 13+</p>
+              </div>
+            </div>
+            <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>装在每一台想用共享 VPN 的设备上。</span>
+              <span data-i18n-en>Install on every device that wants the shared VPN.</span>
+            </p>
+            <a
+              href="#"
+              data-disabled
+              class="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background opacity-95 transition-opacity hover:opacity-100 focus-ring"
+              aria-label="Download Conduit Client DMG (link to be configured)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
+              </svg>
+              <span class="font-mono text-xs">Conduit Client_0.1.0_aarch64.dmg</span>
+            </a>
+            <details class="mt-4 text-xs">
+              <summary class="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
+                <span data-i18n-zh>SHA-256 校验</span><span data-i18n-en>SHA-256 checksum</span>
+              </summary>
+              <pre class="mt-2 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">165a495b15539c1bef1c7252f87326669bb128e28c361ab62bee417f733ae1c1</pre>
+            </details>
+          </article>
+        </div>
+
+        <p class="mt-4 text-center text-xs text-muted-foreground">
+          <span data-i18n-zh>下载链接将在 GitHub Release 上线后填上 —— 当前可在本仓库 dist/ 目录里取本地构建产物。</span>
+          <span data-i18n-en>Direct links will be wired up after the GitHub Release is published — for now grab them from dist/ in this repo.</span>
+        </p>
+
+        <!-- Gatekeeper rescue -->
+        <div class="mt-12 rounded-xl border border-amber-500/40 bg-amber-500/5 p-7">
+          <div class="flex items-start gap-3">
+            <span class="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 9v4M12 17h.01" />
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              </svg>
+            </span>
+            <div class="flex-1">
+              <h3 class="font-display text-base font-semibold">
+                <span data-i18n-zh>未签名 + 暂未公证 —— 一行命令补救</span>
+                <span data-i18n-en>Unsigned &amp; not-yet-notarized — one-line fix</span>
+              </h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                <span data-i18n-zh>DMG 是 ad-hoc 签名、Apple 公证还在路上。第一次打开会被提示「已损坏」或「无法验证开发者」—— 跑下面一行命令即可解决。</span>
+                <span data-i18n-en>DMGs are ad-hoc signed, Apple notarization is pending. First launch shows "damaged" or "cannot be verified" — the one-liner below fixes it.</span>
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-6 rounded-lg border border-foreground/30 bg-card p-6 ring-1 ring-foreground/10">
+            <div class="flex flex-wrap items-center gap-2">
+              <h4 class="font-display text-base font-semibold">
+                <span data-i18n-zh>移除 quarantine 属性</span>
+                <span data-i18n-en>Strip the quarantine attribute</span>
+              </h4>
+              <span class="rounded-full bg-foreground px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-background">
+                <span data-i18n-zh>推荐</span><span data-i18n-en>Recommended</span>
+              </span>
+            </div>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>把 .app 拖进 <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">/Applications</code> 后，跑下面两行命令。之后双击就能正常打开，每次重新下载或替换 .app 再跑一次即可。</span>
+              <span data-i18n-en>Drag the .app into <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[12px]">/Applications</code>, then run the two lines below. Double-click works afterwards. Re-run after any re-download.</span>
+            </p>
+            <div class="relative mt-4">
+              <pre id="rescue-cmd" class="overflow-x-auto rounded-md bg-muted px-4 py-3.5 pr-14 font-mono text-[12.5px] leading-relaxed text-foreground">xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"</pre>
+              <button
+                type="button"
+                class="copy-btn focus-ring absolute right-2 top-2 inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted"
+                data-copy='xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
+                aria-label="Copy rescue command">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span class="copy-label">copy</span>
+              </button>
+            </div>
+          </div>
+
+          <p class="mt-6 text-xs leading-relaxed text-muted-foreground">
+            <span data-i18n-zh>
+              ℹ 校验签名状态：<code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px]">codesign -dvv "/Applications/Conduit Server.app"</code>
+              —— 看到 <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px]">Signature=adhoc · TeamIdentifier=not set</code> 就是 Gatekeeper 拦截的原因。配好 Apple Developer ID 后，
+              <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px]">./scripts/release.sh</code> 会自动跑公证，这些补救都将不再需要。
+            </span>
+            <span data-i18n-en>
+              ℹ Verify signature: <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px]">codesign -dvv "/Applications/Conduit Server.app"</code>
+              — seeing <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px]">Signature=adhoc · TeamIdentifier=not set</code> is exactly why Gatekeeper trips. Once an Apple Developer ID is wired in,
+              <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[10.5px]">./scripts/release.sh</code> will run notarization automatically and these workarounds become moot.
+            </span>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Quick Start (source) ============== -->
+    <section id="install" class="border-t border-border bg-muted/40">
+      <div class="container max-w-5xl py-20">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>从源码 · 备选方式</span><span data-i18n-en>From source · alternative</span>
+          </p>
+          <h2 class="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <span data-i18n-zh>想改代码？跑一下开发模式。</span>
+            <span data-i18n-en>Want to hack on it? Run dev mode.</span>
+          </h2>
+          <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <span data-i18n-zh>只想用？回到 <a href="#download" class="underline underline-offset-4 hover:text-foreground">下载 DMG</a>。这一节是给开发者准备的。</span>
+            <span data-i18n-en>Just want to use it? Go back to <a href="#download" class="underline underline-offset-4 hover:text-foreground">Download DMG</a>. This section is for developers.</span>
+          </p>
+        </div>
+
+        <div class="mt-10 grid gap-5 lg:grid-cols-[1fr,1.4fr]">
+          <!-- requirements -->
+          <div class="rounded-xl border border-border bg-card p-6 shadow-soft">
+            <h3 class="font-display text-base font-semibold">
+              <span data-i18n-zh>环境要求</span><span data-i18n-en>Requirements</span>
+            </h3>
+            <dl class="mt-5 divide-y divide-border text-sm">
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-muted-foreground">macOS</dt>
+                <dd class="font-mono text-xs">13+</dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-muted-foreground">Node</dt>
+                <dd class="font-mono text-xs">≥ 20.10</dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-muted-foreground">pnpm</dt>
+                <dd class="font-mono text-xs">≥ 9</dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-muted-foreground">Python</dt>
+                <dd class="font-mono text-xs">≥ 3.10</dd>
+              </div>
+              <div class="flex items-center justify-between py-2.5">
+                <dt class="text-muted-foreground">Rust</dt>
+                <dd class="font-mono text-xs">≥ 1.78</dd>
+              </div>
+            </dl>
+            <p class="mt-5 text-xs leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>首次启动 macOS 会弹两次授权框（本地网络 + 系统代理），都允许。</span>
+              <span data-i18n-en>On first launch macOS prompts twice (Local Network + System Proxy). Allow both.</span>
+            </p>
+          </div>
+
+          <!-- steps -->
+          <div class="space-y-4">
+            <!-- step 1 -->
+            <article class="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+              <div class="flex items-center gap-3 border-b border-border bg-muted/50 px-5 py-3">
+                <span class="grid h-6 w-6 place-items-center rounded-full border border-border bg-card font-mono text-[11px] font-medium">1</span>
+                <h3 class="font-display text-sm font-semibold">
+                  <span data-i18n-zh>克隆与安装依赖</span><span data-i18n-en>Clone & install</span>
+                </h3>
+                <button
+                  type="button"
+                  class="copy-btn focus-ring ml-auto inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted"
+                  data-copy="git clone <repo> conduit && cd conduit
+pnpm install">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <span class="copy-label">copy</span>
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed"><span class="text-muted-foreground">$</span> git clone &lt;repo&gt; conduit && cd conduit
+<span class="text-muted-foreground">$</span> pnpm install     <span class="text-muted-foreground"># 6 workspaces · ~30s</span></pre>
+            </article>
+
+            <!-- step 2 -->
+            <article class="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+              <div class="flex items-center gap-3 border-b border-border bg-muted/50 px-5 py-3">
+                <span class="grid h-6 w-6 place-items-center rounded-full border border-border bg-card font-mono text-[11px] font-medium">2</span>
+                <h3 class="font-display text-sm font-semibold">
+                  <span data-i18n-zh>启动 Server（共享端 Mac）</span><span data-i18n-en>Start Server (host Mac)</span>
+                </h3>
+                <button
+                  type="button"
+                  class="copy-btn focus-ring ml-auto inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted"
+                  data-copy="pnpm dev:server">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <span class="copy-label">copy</span>
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed"><span class="text-muted-foreground">$</span> pnpm dev:server</pre>
+            </article>
+
+            <!-- step 3 -->
+            <article class="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
+              <div class="flex items-center gap-3 border-b border-border bg-muted/50 px-5 py-3">
+                <span class="grid h-6 w-6 place-items-center rounded-full border border-border bg-card font-mono text-[11px] font-medium">3</span>
+                <h3 class="font-display text-sm font-semibold">
+                  <span data-i18n-zh>启动 Client（接入端设备）</span><span data-i18n-en>Start Client (any device)</span>
+                </h3>
+                <button
+                  type="button"
+                  class="copy-btn focus-ring ml-auto inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted"
+                  data-copy="pnpm dev:client">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <span class="copy-label">copy</span>
+                </button>
+              </div>
+              <pre class="overflow-x-auto px-5 py-4 font-mono text-[12.5px] leading-relaxed"><span class="text-muted-foreground">$</span> pnpm dev:client</pre>
+              <p class="border-t border-border bg-muted/30 px-5 py-3 text-xs leading-relaxed text-muted-foreground">
+                <span data-i18n-zh>Client 窗口的「发现」页 5–10 秒内会出现 Server 卡片，点「连接」走完 5 步即可上网。</span>
+                <span data-i18n-en>Discovery page shows Server in 5–10s. Click Connect, walk through 5 steps, you're online.</span>
+              </p>
+            </article>
+
+            <!-- alt: build dmg -->
+            <article class="overflow-hidden rounded-xl border border-dashed border-border bg-card/60 p-5">
+              <h3 class="font-display text-sm font-semibold">
+                <span data-i18n-zh>想打包成 DMG 给同事？</span><span data-i18n-en>Want a DMG to share?</span>
+              </h3>
+              <pre class="mt-3 overflow-x-auto font-mono text-[12px] leading-relaxed text-muted-foreground">$ ./scripts/build-sidecars.sh
+$ ./scripts/release.sh
+$ ./scripts/e2e.sh                <span class="text-muted-foreground/70"># 11s smoke test</span></pre>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Final CTA ============== -->
+    <section class="border-t border-border">
+      <div class="container max-w-4xl py-20 text-center">
+        <h2 class="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+          <span data-i18n-zh>把 VPN 共享出去，整个 Wi-Fi 一起用。</span>
+          <span data-i18n-en>Share your VPN. Light up the whole LAN.</span>
+        </h2>
+        <p class="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <span data-i18n-zh>两个 Mac 应用，30 MB DMG，五步连接成功。</span>
+          <span data-i18n-en>Two Mac apps. 30 MB DMG each. Five-step connect.</span>
+        </p>
+        <div class="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <a
+            href="#download"
+            class="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
+            </svg>
+            <span data-i18n-zh>下载 DMG</span><span data-i18n-en>Download DMG</span>
+          </a>
+          <a
+            href="../README.md"
+            class="focus-ring inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-card px-5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            <span>README</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============== Footer ============== -->
+  <footer class="border-t border-border bg-muted/30">
+    <div class="container flex flex-col items-start justify-between gap-5 py-8 text-xs text-muted-foreground sm:flex-row sm:items-center">
+      <div class="flex items-center gap-3">
+        <span
+          aria-hidden="true"
+          class="grid h-6 w-6 place-items-center rounded-md border border-border bg-card">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+               stroke-linecap="round" stroke-linejoin="round" class="text-foreground">
+            <path d="M5 12h14M5 12a3 3 0 0 0 3 3M5 12a3 3 0 0 1 3-3M19 12a3 3 0 0 1-3 3M19 12a3 3 0 0 0-3-3" />
+          </svg>
+        </span>
+        <span>
+          <span data-i18n-zh>Conduit · 私人项目 · 仅用于自有局域网</span>
+          <span data-i18n-en>Conduit · Private project · For your own LAN only</span>
+        </span>
+      </div>
+      <nav class="flex flex-wrap items-center gap-x-5 gap-y-2" aria-label="footer">
+        <a href="../README.md" class="focus-ring rounded hover:text-foreground">README (EN)</a>
+        <a href="../README_zh.md" class="focus-ring rounded hover:text-foreground">README (中文)</a>
+        <a href="../design/2026-05-02-1-Conduit-验收指南.md" class="focus-ring rounded hover:text-foreground">
+          <span data-i18n-zh>验收指南</span><span data-i18n-en>Acceptance guide</span>
+        </a>
+        <a href="../design/2026-05-03-1-Conduit-打包与发布说明.md" class="focus-ring rounded hover:text-foreground">
+          <span data-i18n-zh>打包发布</span><span data-i18n-en>Packaging</span>
+        </a>
+      </nav>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const langBtn = document.getElementById('lang-toggle');
+      const langLabel = document.getElementById('lang-label');
+      const themeBtn = document.getElementById('theme-toggle');
+
+      const STORAGE_LANG = 'conduit.lang';
+      const STORAGE_THEME = 'conduit.theme';
+
+      // ---------- language ----------
+      function applyLang(lang) {
+        root.setAttribute('lang', lang);
+        langLabel.textContent = lang === 'zh-CN' ? 'EN' : '中文';
+        try { localStorage.setItem(STORAGE_LANG, lang); } catch (e) {}
+      }
+
+      const savedLang = (() => {
+        try { return localStorage.getItem(STORAGE_LANG); } catch (e) { return null; }
+      })();
+      const initialLang = savedLang || (navigator.language && navigator.language.toLowerCase().startsWith('zh') ? 'zh-CN' : 'en');
+      applyLang(initialLang);
+
+      langBtn.addEventListener('click', () => {
+        applyLang(root.getAttribute('lang') === 'zh-CN' ? 'en' : 'zh-CN');
+      });
+
+      // ---------- theme ----------
+      function applyTheme(t) {
+        root.classList.toggle('dark', t === 'dark');
+        try { localStorage.setItem(STORAGE_THEME, t); } catch (e) {}
+      }
+      const savedTheme = (() => {
+        try { return localStorage.getItem(STORAGE_THEME); } catch (e) { return null; }
+      })();
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      applyTheme(savedTheme || (prefersDark ? 'dark' : 'light'));
+
+      themeBtn.addEventListener('click', () => {
+        applyTheme(root.classList.contains('dark') ? 'light' : 'dark');
+      });
+
+      // ---------- placeholder download links ----------
+      document.querySelectorAll('a[data-disabled]').forEach((a) => {
+        a.addEventListener('click', (e) => {
+          e.preventDefault();
+          const msg = root.getAttribute('lang') === 'zh-CN'
+            ? '下载链接将在 GitHub Release 上线后填上 —— 当前可在仓库的 dist/ 目录里取本地构建产物。'
+            : 'Download link will be wired up after the GitHub Release. For now grab the artifact from dist/ in this repo.';
+          alert(msg);
+        });
+      });
+
+      // ---------- copy buttons ----------
+      document.querySelectorAll('.copy-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const text = btn.getAttribute('data-copy') || '';
+          const label = btn.querySelector('.copy-label');
+          try {
+            await navigator.clipboard.writeText(text);
+            const prev = label.textContent;
+            label.textContent = root.getAttribute('lang') === 'zh-CN' ? '已复制' : 'copied';
+            btn.classList.add('text-foreground');
+            setTimeout(() => {
+              label.textContent = prev;
+              btn.classList.remove('text-foreground');
+            }, 1400);
+          } catch (e) {
+            label.textContent = '✗';
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
