@@ -51,18 +51,40 @@ function normalisePhase(raw: unknown): LifecyclePhase | null {
   return null;
 }
 
+/**
+ * 处理 phase 状态更新 —— 仅允许"前进"，不接受倒退。
+ *
+ * 时间顺序：Booting (初始) → Ready (sidecar healthz 通过) → Stopped (用户停止)
+ *                          ↘ Failed (启动失败)
+ *
+ * 之前的 bug：fallback 兜底 `getRuntime()` 在 listener 已经收到 Ready 后
+ * 又把 state 倒退回 Booting (因为 invoke 完成时 boot_sequence 的 set_phase 还没跑)，
+ * 导致 UI 永远卡在 BootScreen。这里加 ordering 校验防止倒退。
+ */
+function applyPhase(next: LifecyclePhase, reason: string | null = null): void {
+  const current = uiStore.state.bootPhase;
+  // Failed 可以从任何 phase 进入(显式失败信号，不允许覆盖)
+  if (next === "Failed") {
+    uiStore.setBootPhase("Failed", reason ?? uiStore.state.bootError);
+    return;
+  }
+  // 已 Ready/Failed/Stopped，不接受退回 Booting
+  if (next === "Booting" && current !== "Booting") return;
+  uiStore.setBootPhase(next, reason);
+}
+
 export function useBootPhase() {
   const unlisteners: Array<() => void> = [];
 
   onMounted(async () => {
     if (!isTauri()) {
-      uiStore.setBootPhase("Ready");
+      applyPhase("Ready");
       return;
     }
 
     const ev = await getTauriEvent();
     if (!ev) {
-      uiStore.setBootPhase("Ready");
+      applyPhase("Ready");
       return;
     }
 
@@ -70,21 +92,17 @@ export function useBootPhase() {
       await ev.listen("boot:phase", (e) => {
         const next = normalisePhase(e.payload);
         if (!next) return;
-        if (next === "Failed") {
-          uiStore.setBootPhase("Failed", uiStore.state.bootError);
-        } else {
-          uiStore.setBootPhase(next);
-        }
+        applyPhase(next);
       }),
       await ev.listen("boot:error", (e) => {
-        uiStore.setBootPhase("Failed", String(e.payload ?? "unknown"));
+        applyPhase("Failed", String(e.payload ?? "unknown"));
       }),
     );
 
     try {
       const rt = await getRuntime();
       if (!rt) return;
-      uiStore.setBootPhase(rt.phase, rt.failure_reason);
+      applyPhase(rt.phase, rt.failure_reason ?? null);
     } catch (err) {
       console.warn("[useBootPhase] get_runtime failed", err);
     }
