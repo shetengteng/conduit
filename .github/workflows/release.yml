@@ -115,15 +115,24 @@ jobs:
           ls -lh dist/server/ 2>/dev/null || true
           ls -lh dist/client/ 2>/dev/null || true
 
-      - name: upload artifact
+      # 按 app + arch 拆成 4 个独立 artifact（server-aarch64 / server-x86_64 /
+      # client-aarch64 / client-x86_64），下载侧更直观，可以只下需要的那个。
+      # if-no-files-found: ignore —— workflow_dispatch 选 "server" 时 client
+      # 这步会找不到文件（不是错误），跳过即可。
+      - name: upload server dmg
         uses: actions/upload-artifact@v7
         with:
-          name: conduit-${{ matrix.arch }}
-          path: |
-            dist/server/*.dmg
-            dist/client/*.dmg
-          # warn：手动只 build server 时 client 路径找不到，是正常的
-          if-no-files-found: warn
+          name: conduit-server-${{ matrix.arch }}
+          path: dist/server/*.dmg
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: upload client dmg
+        uses: actions/upload-artifact@v7
+        with:
+          name: conduit-client-${{ matrix.arch }}
+          path: dist/client/*.dmg
+          if-no-files-found: ignore
           retention-days: 14
 
   release:
