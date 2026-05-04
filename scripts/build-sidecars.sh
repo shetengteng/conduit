@@ -92,12 +92,17 @@ ensure_pyinstaller() {
 build_one() {
   local app="$1"
   local entry script_basename outdir built_dir tauri_binaries_dir target_dir
+  local -a extra_args=()
 
   case "$app" in
     server)
       entry="server-app/core/proxy_server.py"
       script_basename="conduit-server-sidecar"
       tauri_binaries_dir="server-app/src-tauri/binaries-dir"
+      # proxy.pac 是 http_proxy._serve_pac 在运行时按 __file__ 同目录读取的资源,
+      # PyInstaller 默认只跟踪 .py import,需要显式 add-data 把它带进 _internal/
+      # 路径必须传绝对路径,因为 PyInstaller 相对路径是基于 specpath 的
+      extra_args+=(--add-data "$(pwd)/server-app/core/proxy.pac:.")
       ;;
     client)
       entry="client-app/core/client_main.py"
@@ -138,6 +143,7 @@ build_one() {
     --hidden-import "zeroconf._utils.net" \
     --hidden-import "zeroconf._utils.time" \
     --hidden-import "aiohttp.resolver" \
+    "${extra_args[@]}" \
     --paths "$(dirname "$entry")" \
     "$entry"
 
@@ -173,7 +179,5 @@ fi
 
 echo ""
 echo "═══ done ═══"
-echo "下一步:"
-echo "  - 在 server-app/src-tauri/tauri.conf.json 的 bundle 里加 externalBin"
-echo "  - sidecar.rs 改成在 release 模式调 ../binaries/conduit-*-sidecar-<triple>"
-echo "  - 跑 pnpm tauri build 生成 .app / .dmg"
+echo "已通过 bundle.resources 自动嵌入 .app/.dmg；下一步直接跑:"
+echo "  pnpm tauri build  (会读取 binaries-dir/<name>/ 整个目录)"

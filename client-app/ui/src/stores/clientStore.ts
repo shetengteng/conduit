@@ -32,23 +32,38 @@ async function refresh(): Promise<void> {
   state.loading = true;
   const wasError = state.error;
   state.error = null;
-  try {
-    state.healthz = await ClientApi.healthz();
-    state.healthzFetchedAtMs = Date.now();
-  } catch (e) {
-    const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
-    state.error = msg;
-    if (!wasError) {
-      try {
-        const { useToast } = await import("../composables/useToast");
-        useToast().error("无法连接到客户端服务", { detail: msg });
-      } catch (_) {
-        /* toast 不可用时静默 */
+
+  // 第一次启动时,UI 切换到 Ready 后立即发请求,sidecar control API socket
+  // 刚 LISTEN 可能还没接受连接,fetch 会 "Load failed"。给 3 次重试,300ms 间隔。
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      state.healthz = await ClientApi.healthz();
+      state.healthzFetchedAtMs = Date.now();
+      state.loading = false;
+      return;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 300));
       }
     }
-  } finally {
-    state.loading = false;
   }
+
+  const msg = lastErr instanceof ApiError
+    ? `${lastErr.code}: ${lastErr.message}`
+    : String(lastErr);
+  state.error = msg;
+  if (!wasError) {
+    try {
+      const { useToast } = await import("../composables/useToast");
+      useToast().error("无法连接到客户端服务", { detail: msg });
+    } catch (_) {
+      /* toast 不可用时静默 */
+    }
+  }
+  state.loading = false;
 }
 
 // 仅刷新 healthz,不弹错误 toast。专门服务于 polling 让 uptime/ready 持续新鲜。

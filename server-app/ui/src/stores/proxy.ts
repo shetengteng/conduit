@@ -44,31 +44,47 @@ async function refresh(): Promise<void> {
   state.loading = true;
   const wasError = state.error;
   state.error = null;
-  try {
-    const [status, clients, healthz] = await Promise.all([
-      ServerApi.status(),
-      ServerApi.clients(),
-      ServerApi.healthz(),
-    ]);
-    state.status = status;
-    state.clients = clients.clients;
-    state.passiveClients = clients.passive_clients ?? [];
-    state.healthz = healthz;
-    state.statusFetchedAtMs = Date.now();
-  } catch (e) {
-    const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
-    state.error = msg;
-    if (!wasError) {
-      try {
-        const { useToast } = await import("../composables/useToast");
-        useToast().error("无法连接到代理服务", { detail: msg });
-      } catch (_) {
-        /* toast 不可用时静默 */
+
+  // 第一次启动时,UI 切换到 Ready 后主界面立即挂载并发请求,
+  // 但 sidecar control API socket 刚 LISTEN 可能还没准备好接受连接,
+  // 导致 fetch 抛 "Load failed"。给 3 次重试,每次间隔 300ms,失败才 toast。
+  const MAX_ATTEMPTS = 3;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      const [status, clients, healthz] = await Promise.all([
+        ServerApi.status(),
+        ServerApi.clients(),
+        ServerApi.healthz(),
+      ]);
+      state.status = status;
+      state.clients = clients.clients;
+      state.passiveClients = clients.passive_clients ?? [];
+      state.healthz = healthz;
+      state.statusFetchedAtMs = Date.now();
+      state.loading = false;
+      return;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 300));
       }
     }
-  } finally {
-    state.loading = false;
   }
+
+  const msg = lastErr instanceof ApiError
+    ? `${lastErr.code}: ${lastErr.message}`
+    : String(lastErr);
+  state.error = msg;
+  if (!wasError) {
+    try {
+      const { useToast } = await import("../composables/useToast");
+      useToast().error("无法连接到代理服务", { detail: msg });
+    } catch (_) {
+      /* toast 不可用时静默 */
+    }
+  }
+  state.loading = false;
 }
 
 // 仅刷新 clients(含 idle_sec)+ status:用于轻量 polling,不动 healthz/不报错。

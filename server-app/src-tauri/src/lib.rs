@@ -68,22 +68,30 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |app, event| {
+            // 用户点窗口左上角的红色"关闭"按钮：拦截 close 改成隐藏到 tray，
+            // 保持 sidecar 后台运行（macOS 系统盘类工具的标准行为）。
+            // 真正退出走 tray 菜单的"退出 Conduit Server"或 cmd-Q。
             if let RunEvent::WindowEvent {
-                event: WindowEvent::CloseRequested { .. },
+                label,
+                event: WindowEvent::CloseRequested { api, .. },
                 ..
             } = &event
             {
+                if label == "main" {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.hide();
+                    }
+                    api.prevent_close();
+                    return;
+                }
+            }
+
+            // 真正退出（cmd-Q / tray quit / app.exit()）：先停 sidecar 再走默认流程。
+            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
                 let sc = sidecar_for_runevent.clone();
                 let h = app.clone();
                 tauri::async_runtime::block_on(async move {
                     request_graceful_shutdown(&h, &sc).await;
-                });
-            }
-
-            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-                let sc = sidecar_for_runevent.clone();
-                tauri::async_runtime::block_on(async move {
-                    sc.kill().await;
                 });
             }
         });
