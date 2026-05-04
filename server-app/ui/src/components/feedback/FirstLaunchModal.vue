@@ -88,7 +88,7 @@ function cancel() {
       <div
         class="flex items-center gap-2 rounded-lg border border-border bg-muted/40 p-2.5"
       >
-        <Switch v-model:checked="acknowledged" id="ack-switch" />
+        <Switch v-model="acknowledged" id="ack-switch" />
         <Label for="ack-switch" class="text-xs cursor-pointer">
           我已了解上述风险并自行承担
         </Label>

@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
 # build-sidecars.sh —— 把 server / client 两个 Python sidecar 打成
-# Tauri externalBin 期望的单二进制。
+# PyInstaller --onedir 目录树。
+#
+# 为什么用 onedir 而不是 onefile：
+#   onefile 在 macOS 上每次启动要把 24MB 二进制解压到 /tmp/_MEIxxx/，
+#   叠加 Gatekeeper 的安全扫描，冷启动经常 30+ 秒，超出 healthz 超时。
+#   onedir 直接保留解压后结构，启动 < 1 秒。
+#   参考: https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html
 #
 # 输出:
-#   server-app/src-tauri/binaries/conduit-server-sidecar-<triple>
-#   client-app/src-tauri/binaries/conduit-client-sidecar-<triple>
+#   server-app/src-tauri/binaries-dir/conduit-server-sidecar/
+#       ├── conduit-server-sidecar          (主二进制 launcher)
+#       └── _internal/                      (libpython, deps, .so 等)
+#   client-app/src-tauri/binaries-dir/conduit-client-sidecar/
+#       └── 同上结构
 #
-# Tauri externalBin 命名约定: <name>-<rustc-target-triple>
-#   macOS arm64  -> aarch64-apple-darwin
-#   macOS x64    -> x86_64-apple-darwin
-#   Windows x64  -> x86_64-pc-windows-msvc (生成时加 .exe)
-#   Linux x64    -> x86_64-unknown-linux-gnu
+# 这些目录会通过 tauri.conf.json 的 bundle.resources 一并打入 .app/.dmg。
+# Rust 端 sidecar.rs 通过 app.path().resource_dir() 解析定位目录。
 #
 # 依赖:
 #   - Python 3.10+ + pip
@@ -85,18 +91,18 @@ ensure_pyinstaller() {
 # args: <app_name>  e.g. server / client
 build_one() {
   local app="$1"
-  local entry script_basename outdir target_path tauri_binaries_dir
+  local entry script_basename outdir built_dir tauri_binaries_dir target_dir
 
   case "$app" in
     server)
       entry="server-app/core/proxy_server.py"
       script_basename="conduit-server-sidecar"
-      tauri_binaries_dir="server-app/src-tauri/binaries"
+      tauri_binaries_dir="server-app/src-tauri/binaries-dir"
       ;;
     client)
       entry="client-app/core/client_main.py"
       script_basename="conduit-client-sidecar"
-      tauri_binaries_dir="client-app/src-tauri/binaries"
+      tauri_binaries_dir="client-app/src-tauri/binaries-dir"
       ;;
     *)
       echo "✗ unknown app: $app" >&2
@@ -110,16 +116,16 @@ build_one() {
   fi
 
   echo ""
-  echo "═══ building $app sidecar ═══"
+  echo "═══ building $app sidecar (onedir) ═══"
   echo "  entry: $entry"
 
   outdir="build/sidecars/$app"
   rm -rf "$outdir"
   mkdir -p "$outdir"
 
-  # PyInstaller 单文件模式 + 显式 hidden import (zeroconf 内部动态加载较多模块)
+  # PyInstaller onedir 模式 + 显式 hidden import (zeroconf 内部动态加载较多模块)
   python3 -m PyInstaller \
-    --onefile \
+    --onedir \
     --noconfirm \
     --clean \
     --name "$script_basename" \
@@ -135,20 +141,22 @@ build_one() {
     --paths "$(dirname "$entry")" \
     "$entry"
 
-  local built="$outdir/dist/${script_basename}${EXE_SUFFIX}"
-  if [[ ! -f "$built" ]]; then
-    echo "✗ build failed: $built not found" >&2
+  built_dir="$outdir/dist/${script_basename}"
+  if [[ ! -d "$built_dir" ]] || [[ ! -f "$built_dir/${script_basename}${EXE_SUFFIX}" ]]; then
+    echo "✗ build failed: ${built_dir}/${script_basename}${EXE_SUFFIX} not found" >&2
     exit 1
   fi
 
+  # 把整个 onedir 输出（含 _internal/）替换到 tauri 的 binaries-dir 下
+  target_dir="${tauri_binaries_dir}/${script_basename}"
+  rm -rf "$target_dir"
   mkdir -p "$tauri_binaries_dir"
-  target_path="${tauri_binaries_dir}/${script_basename}-${TRIPLE}${EXE_SUFFIX}"
-  cp "$built" "$target_path"
-  chmod +x "$target_path"
+  cp -R "$built_dir" "$target_dir"
+  chmod +x "$target_dir/${script_basename}${EXE_SUFFIX}"
 
   local size_mb
-  size_mb=$(du -m "$target_path" | cut -f1)
-  echo "✓ $target_path  (${size_mb} MB)"
+  size_mb=$(du -sm "$target_dir" | cut -f1)
+  echo "✓ $target_dir  (${size_mb} MB, onedir)"
 }
 
 # ---------- 入口 ----------

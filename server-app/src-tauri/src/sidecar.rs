@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use log::{info, warn};
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Manager};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
@@ -26,10 +28,11 @@ impl SidecarHandle {
     /// Spawn the sidecar.
     ///
     /// 两种模式自动适配:
-    ///   1. release / 已打包: 找到本地的 `conduit-server-sidecar[-<triple>][.exe]`
-    ///      直接 exec 它(PyInstaller 打的单二进制)。
+    ///   1. release / 已打包: 通过 Tauri resource_dir 定位 PyInstaller onedir
+    ///      产出 `binaries-dir/conduit-server-sidecar/conduit-server-sidecar`，
+    ///      直接 exec。onedir 启动 < 1 秒，对应 _internal/ 在同目录下。
     ///   2. dev: 回退到 `python3 server-app/core/proxy_server.py`。
-    pub async fn spawn(&self) -> ConduitResult<u32> {
+    pub async fn spawn(&self, app: &AppHandle) -> ConduitResult<u32> {
         let mut guard = self.child.lock().await;
         if guard.is_some() {
             return Err(ConduitError::Internal("sidecar already running".into()));
@@ -48,9 +51,9 @@ impl SidecarHandle {
             parent_pid.to_string(),
         ];
 
-        let mut cmd = if let Some(bin) = locate_sidecar_binary("conduit-server-sidecar") {
+        let mut cmd = if let Some(bin) = locate_sidecar_binary(app, "conduit-server-sidecar") {
             info!(
-                "spawning sidecar (bundled binary): {} (http={}, socks={}, api={})",
+                "spawning sidecar (bundled onedir): {} (http={}, socks={}, api={})",
                 bin.display(),
                 self.http_port,
                 self.socks5_port,
@@ -124,14 +127,13 @@ impl SidecarHandle {
     }
 }
 
-/// 在 Tauri externalBin 约定的位置找已打包的 sidecar 二进制。
+/// 找到 PyInstaller onedir 产出的 sidecar 主二进制。
 ///
 /// 查找顺序:
-///   1. $CONDUIT_SIDECAR_BIN 环境变量(直接给绝对路径)
-///   2. <exe_dir>/<name>[.exe]               (Tauri externalBin 部署位置)
-///   3. <exe_dir>/<name>-<host_triple>[.exe]  (cargo run + 直接放在 binaries 里时的 fallback)
-///   4. <repo>/server-app/src-tauri/binaries/<name>-<host_triple>[.exe]  (本地 build-sidecars.sh 产出)
-fn locate_sidecar_binary(name: &str) -> Option<PathBuf> {
+///   1. $CONDUIT_SIDECAR_BIN 环境变量 (直接给绝对路径，主要给手工调试)
+///   2. Tauri Resource: `binaries-dir/<name>/<name>` (release 打包后的位置)
+///   3. <repo>/server-app/src-tauri/binaries-dir/<name>/<name> (本地 build-sidecars.sh 产出)
+fn locate_sidecar_binary(app: &AppHandle, name: &str) -> Option<PathBuf> {
     if let Ok(custom) = std::env::var("CONDUIT_SIDECAR_BIN") {
         let p = PathBuf::from(custom);
         if p.is_file() {
@@ -139,53 +141,26 @@ fn locate_sidecar_binary(name: &str) -> Option<PathBuf> {
         }
     }
 
-    let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
-
     let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
-    let triple = host_triple();
+    let rel = format!("binaries-dir/{name}/{name}{exe_suffix}");
 
-    let candidates = [
-        exe_dir.join(format!("{name}{exe_suffix}")),
-        exe_dir.join(format!("{name}-{triple}{exe_suffix}")),
-    ];
-    for c in candidates.iter() {
-        if c.is_file() {
-            return Some(c.clone());
+    if let Ok(resolved) = app.path().resolve(&rel, BaseDirectory::Resource) {
+        if resolved.is_file() {
+            return Some(resolved);
         }
     }
 
-    // Dev fallback: 仓库根 binaries 目录(允许跑 cargo run 时直接挑选 build-sidecars.sh 的产物)
+    // Dev fallback: 仓库根 binaries-dir 目录 (cargo run / cargo tauri dev 路径)
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dev_path = manifest
-        .join("binaries")
-        .join(format!("{name}-{triple}{exe_suffix}"));
+        .join("binaries-dir")
+        .join(name)
+        .join(format!("{name}{exe_suffix}"));
     if dev_path.is_file() {
         return Some(dev_path);
     }
 
     None
-}
-
-/// 把当前 host 平台映射到 Tauri externalBin 期望的 rustc target triple 字符串。
-fn host_triple() -> &'static str {
-    if cfg!(target_os = "macos") {
-        if cfg!(target_arch = "aarch64") {
-            "aarch64-apple-darwin"
-        } else {
-            "x86_64-apple-darwin"
-        }
-    } else if cfg!(target_os = "windows") {
-        "x86_64-pc-windows-msvc"
-    } else if cfg!(target_os = "linux") {
-        if cfg!(target_arch = "aarch64") {
-            "aarch64-unknown-linux-gnu"
-        } else {
-            "x86_64-unknown-linux-gnu"
-        }
-    } else {
-        "unknown"
-    }
 }
 
 fn locate_core_dir() -> Option<PathBuf> {

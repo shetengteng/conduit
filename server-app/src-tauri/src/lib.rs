@@ -14,7 +14,7 @@ use crate::error::ConduitError;
 use crate::sidecar::SidecarHandle;
 use crate::state::{AppRuntime, AppState, LifecyclePhase};
 
-const HEALTHZ_TIMEOUT_SEC: u64 = 9;
+const HEALTHZ_TIMEOUT_SEC: u64 = 60;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -97,7 +97,7 @@ async fn boot_sequence(
     state.set_phase(LifecyclePhase::Booting, None);
     let _ = handle.emit("boot:phase", "booting");
 
-    match sidecar.spawn().await {
+    match sidecar.spawn(&handle).await {
         Ok(pid) => {
             state.set_sidecar_pid(Some(pid));
             info!("sidecar pid={}", pid);

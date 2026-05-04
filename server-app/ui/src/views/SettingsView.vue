@@ -167,7 +167,7 @@ const allowedPorts = [80, 443, 22, 8080, 8443]
           <Label for="mdns-enable" class="cursor-pointer text-xs">
             启用 mDNS 广播
           </Label>
-          <Switch id="mdns-enable" :checked="status?.mdns?.enabled ?? true" disabled />
+          <Switch id="mdns-enable" :model-value="status?.mdns?.enabled ?? true" disabled />
         </div>
         <Separator />
         <div class="grid grid-cols-2 gap-3">

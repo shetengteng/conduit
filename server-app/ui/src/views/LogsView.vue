@@ -213,7 +213,7 @@ function clearLogs() {
 
         <div class="flex items-center justify-between text-xs">
           <div class="flex items-center gap-2">
-            <Switch v-model:checked="autoScroll" id="auto-scroll" />
+            <Switch v-model="autoScroll" id="auto-scroll" />
             <Label for="auto-scroll" class="cursor-pointer">自动滚动到最新</Label>
           </div>
           <span class="font-mono text-muted-foreground tabular-nums">

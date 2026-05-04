@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use log::{info, warn};
+use tauri::path::BaseDirectory;
+use tauri::{AppHandle, Manager};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
@@ -24,9 +26,9 @@ impl SidecarHandle {
     /// 拉起 client sidecar。
     ///
     /// 两种模式自动适配:
-    ///   1. 已打包: 找到本地的 `conduit-client-sidecar[-<triple>][.exe]` 直接 exec。
+    ///   1. 已打包: Tauri resource_dir 下的 PyInstaller onedir 产出，直接 exec。
     ///   2. dev: 回退到 `python3 client-app/core/client_main.py`。
-    pub async fn spawn(&self) -> ConduitResult<u32> {
+    pub async fn spawn(&self, app: &AppHandle) -> ConduitResult<u32> {
         let mut guard = self.child.lock().await;
         if guard.is_some() {
             return Err(ConduitError::Internal("sidecar already running".into()));
@@ -42,9 +44,9 @@ impl SidecarHandle {
             parent_pid.to_string(),
         ];
 
-        let mut cmd = if let Some(bin) = locate_sidecar_binary("conduit-client-sidecar") {
+        let mut cmd = if let Some(bin) = locate_sidecar_binary(app, "conduit-client-sidecar") {
             info!(
-                "spawning client sidecar (bundled binary): {} (socks={}, api={})",
+                "spawning client sidecar (bundled onedir): {} (socks={}, api={})",
                 bin.display(),
                 self.socks_port,
                 self.api_port,
@@ -119,54 +121,33 @@ impl SidecarHandle {
     }
 }
 
-fn locate_sidecar_binary(name: &str) -> Option<PathBuf> {
+fn locate_sidecar_binary(app: &AppHandle, name: &str) -> Option<PathBuf> {
     if let Ok(custom) = std::env::var("CONDUIT_SIDECAR_BIN") {
         let p = PathBuf::from(custom);
         if p.is_file() {
             return Some(p);
         }
     }
-    let exe = std::env::current_exe().ok()?;
-    let exe_dir = exe.parent()?;
+
     let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
-    let triple = host_triple();
-    let candidates = [
-        exe_dir.join(format!("{name}{exe_suffix}")),
-        exe_dir.join(format!("{name}-{triple}{exe_suffix}")),
-    ];
-    for c in candidates.iter() {
-        if c.is_file() {
-            return Some(c.clone());
+    let rel = format!("binaries-dir/{name}/{name}{exe_suffix}");
+
+    if let Ok(resolved) = app.path().resolve(&rel, BaseDirectory::Resource) {
+        if resolved.is_file() {
+            return Some(resolved);
         }
     }
+
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let dev_path = manifest
-        .join("binaries")
-        .join(format!("{name}-{triple}{exe_suffix}"));
+        .join("binaries-dir")
+        .join(name)
+        .join(format!("{name}{exe_suffix}"));
     if dev_path.is_file() {
         return Some(dev_path);
     }
-    None
-}
 
-fn host_triple() -> &'static str {
-    if cfg!(target_os = "macos") {
-        if cfg!(target_arch = "aarch64") {
-            "aarch64-apple-darwin"
-        } else {
-            "x86_64-apple-darwin"
-        }
-    } else if cfg!(target_os = "windows") {
-        "x86_64-pc-windows-msvc"
-    } else if cfg!(target_os = "linux") {
-        if cfg!(target_arch = "aarch64") {
-            "aarch64-unknown-linux-gnu"
-        } else {
-            "x86_64-unknown-linux-gnu"
-        }
-    } else {
-        "unknown"
-    }
+    None
 }
 
 fn locate_core_dir() -> Option<PathBuf> {

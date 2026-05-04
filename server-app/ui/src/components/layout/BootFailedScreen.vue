@@ -25,9 +25,9 @@ const emit = defineEmits<{
 }>()
 
 const hints = [
-  '检查 8090 / 1080 / 8080 端口是否被其他进程占用',
-  '若是首次启动，请确认 Python 3.10+ 与 zeroconf 已就绪',
-  '可在「设置 → 端口」中为 API/HTTP/SOCKS5 改用其他端口',
+  '点「重试」再启动一次，sidecar 冷启动有时需要更久',
+  '如反复失败，查看日志：~/.conduit/logs/proxy.log',
+  '若怀疑环境问题，可重启电脑或重新安装 Conduit Server',
 ]
 </script>
 
@@ -46,7 +46,7 @@ const hints = [
           <div>
             <CardTitle class="text-base">代理引擎启动失败</CardTitle>
             <p class="mt-1 text-xs text-muted-foreground">
-              Tauri 主进程未能在 9 秒内完成健康检查
+              Tauri 主进程未能在超时时间内完成健康检查
             </p>
           </div>
         </div>

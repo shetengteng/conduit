@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import logging.handlers
 import os
 import re
 import signal
@@ -26,23 +27,49 @@ from proxy_core import ProxyCore
 log = logging.getLogger("proxy")
 
 
+def _resolve_log_file(raw: str) -> str:
+    """Anchor relative log paths under ``~/.conduit/logs`` instead of cwd.
+
+    When the sidecar is launched from Finder, cwd is ``/`` and a relative
+    ``log/proxy.log`` becomes ``/log/proxy.log`` (unwritable). Anchoring under
+    the user's home keeps logs locatable for support/debug regardless of how
+    the host shell launched us.
+    """
+    expanded = os.path.expanduser(raw)
+    if os.path.isabs(expanded):
+        return expanded
+    base = os.path.expanduser("~/.conduit/logs")
+    return os.path.join(base, os.path.basename(expanded) or "sidecar-server.log")
+
+
 def _setup_logging(cfg: Config) -> None:
     level = getattr(logging, cfg.log_level.upper(), logging.INFO)
     fmt = "%(asctime)s %(levelname)s %(name)s %(message)s"
-    log_dir = os.path.dirname(cfg.log_file)
+    resolved = _resolve_log_file(cfg.log_file)
+    cfg.log_file = resolved
+    log_dir = os.path.dirname(resolved)
     if log_dir and not os.path.isdir(log_dir):
         try:
             os.makedirs(log_dir, exist_ok=True)
         except OSError:
             pass
-    logging.basicConfig(
-        level=level,
-        format=fmt,
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-            logging.FileHandler(cfg.log_file, encoding="utf-8"),
-        ],
-    )
+
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    try:
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            resolved,
+            when="midnight",
+            backupCount=7,
+            encoding="utf-8",
+            utc=False,
+        )
+        handlers.append(file_handler)
+    except OSError:
+        # Disk write unavailable (read-only fs, missing perms). Fall back to
+        # stdout-only so the sidecar can still start.
+        pass
+
+    logging.basicConfig(level=level, format=fmt, handlers=handlers)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
@@ -176,20 +203,23 @@ def _print_banner_with_state(cfg: Config, candidates: list[tuple[str, str]],
 
 
 async def _orphan_watchdog(stop: asyncio.Event, parent_pid: int) -> None:
-    """Self-terminate when our parent process dies (PPID becomes 1).
+    """Self-terminate when our designated parent process dies.
 
-    Used by the Tauri shell to make sure the python sidecar gets cleaned up
-    even when the main process is force-killed (SIGKILL / OOM).
+    Probes liveness via ``os.kill(parent_pid, 0)`` instead of comparing
+    ``os.getppid()`` to ``parent_pid``. The latter is unreliable under
+    PyInstaller onefile builds (the real Python process is forked by the
+    bootloader, so its ppid is the bootloader's pid, never the Tauri
+    main-process pid passed in via --watchdog-ppid).
     """
     while not stop.is_set():
         try:
-            current_ppid = os.getppid()
-            if current_ppid in (1, 0) or current_ppid != parent_pid:
-                log.warning(
-                    "watchdog: parent %d gone (now ppid=%d), exiting", parent_pid, current_ppid
-                )
-                stop.set()
-                return
+            os.kill(parent_pid, 0)
+        except ProcessLookupError:
+            log.warning("watchdog: parent pid=%d no longer exists, exiting", parent_pid)
+            stop.set()
+            return
+        except PermissionError:
+            pass
         except Exception as exc:
             log.debug("watchdog tick error: %s", exc)
         try:

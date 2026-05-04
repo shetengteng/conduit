@@ -20,7 +20,7 @@
         "minHeight": 560,
         "resizable": true,
         "fullscreen": false,
-        "visible": false
+        "visible": true
       }
     ],
     "security": {
@@ -38,6 +38,9 @@
       "icons/icon.png",
       "icons/icon.icns"
     ],
+    "resources": {
+      "binaries-dir/conduit-client-sidecar/": "binaries-dir/conduit-client-sidecar/"
+    },
     "category": "Utility",
     "shortDescription": "Use a Conduit Server's VPN through your LAN",
     "longDescription": "Conduit Client connects you to a Conduit Server on your LAN and intelligently routes traffic locally or through the server's VPN."

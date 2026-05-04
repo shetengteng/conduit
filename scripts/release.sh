@@ -71,16 +71,9 @@ build_app() {
 
   echo ""
   echo "═══ step 3/4: tauri build $product ═══"
-  # 临时把 externalBin 注入 tauri.conf.json (release-only,dev 不需要),
-  # 避免 cargo check 时找不到 binary 引发的 build script 失败。
-  local sidecar_name
-  case "$app" in
-    server) sidecar_name="conduit-server-sidecar" ;;
-    client) sidecar_name="conduit-client-sidecar" ;;
-  esac
-  local override_json
-  override_json=$(printf '{"bundle":{"externalBin":["binaries/%s"]}}' "$sidecar_name")
-  (cd "$dir" && pnpm tauri build --config "$override_json")
+  # sidecar 通过 bundle.resources 走 onedir 目录树（见 build-sidecars.sh
+  # 顶部注释），不再使用 externalBin 单二进制约定。
+  (cd "$dir" && pnpm tauri build)
 
   # 归集产物
   local bundle_dir="$dir/src-tauri/target/release/bundle"

@@ -21,7 +21,7 @@
         "minHeight": 540,
         "resizable": true,
         "fullscreen": false,
-        "visible": false
+        "visible": true
       }
     ],
     "security": {
@@ -39,6 +39,9 @@
       "icons/icon.png",
       "icons/icon.icns"
     ],
+    "resources": {
+      "binaries-dir/conduit-server-sidecar/": "binaries-dir/conduit-server-sidecar/"
+    },
     "category": "Utility",
     "shortDescription": "Share LAN VPN access through Conduit",
     "longDescription": "Conduit lets you share your VPN connection over the local network with other devices."
