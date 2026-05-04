@@ -129,6 +129,8 @@ build_one() {
   mkdir -p "$outdir"
 
   # PyInstaller onedir 模式 + 显式 hidden import (zeroconf 内部动态加载较多模块)
+  # 注：${extra_args[@]+"${extra_args[@]}"} 是 bash 3.2 兼容的"空数组安全展开"。
+  # macOS 自带 bash 3.2.57，对空数组在 set -u 下直接 ${arr[@]} 会报 unbound。
   python3 -m PyInstaller \
     --onedir \
     --noconfirm \
@@ -143,7 +145,7 @@ build_one() {
     --hidden-import "zeroconf._utils.net" \
     --hidden-import "zeroconf._utils.time" \
     --hidden-import "aiohttp.resolver" \
-    "${extra_args[@]}" \
+    ${extra_args[@]+"${extra_args[@]}"} \
     --paths "$(dirname "$entry")" \
     "$entry"
 
