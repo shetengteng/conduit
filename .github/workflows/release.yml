@@ -1,0 +1,170 @@
+name: build-dmg
+
+# 触发：
+#   1. 推 tag (v*) → 自动 build + 创建 GitHub Release
+#   2. 手动 workflow_dispatch → 仅 build，dmg 上传到 workflow artifact，
+#      用于在另一台机器下载验证（不打 tag 不发 release）
+#
+# 矩阵：macos-15 (Apple Silicon, aarch64) + macos-15-intel (Intel, x86_64)
+# 跨平台编译不支持（PyInstaller + Tauri 都要本机架构），所以两个 runner 跑两次。
+# Intel 镜像 macos-15-intel 是 GitHub 提供的最后一代 x86_64 镜像（EOL: 2027-08）。
+#
+# 未公证：默认 ad-hoc 签名（APPLE_SIGNING_IDENTITY=-），可在 Apple Silicon
+# 上避免 "App Is Damaged" 错。完整公证需要 APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID
+# 三个 secret，未配置时跳过。用户首次打开仍可能被 Gatekeeper 拦截 → 解决：
+# `xattr -dr com.apple.quarantine /Applications/Conduit*.app` 或 Ctrl+Click → 打开。
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to build'
+        type: choice
+        options:
+          - both
+          - server
+          - client
+        default: both
+
+permissions:
+  contents: write   # 上传 release asset 需要
+
+jobs:
+  build:
+    name: build-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Apple Silicon: macos-15 是 2026 年 Q2 的当前默认（macos-latest）
+          - runner: macos-15
+            arch: aarch64
+          # Intel: macos-15-intel 是 GitHub 提供的最后一代 x86_64 镜像
+          # （macos-13 已 EOL；x86_64 支持到 2027-08，之后只能自建 runner）
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install python sidecar deps
+        run: |
+          python3 -m pip install --upgrade pip
+          # 两个 sidecar 依赖一致（aiohttp + zeroconf），直接合并装
+          python3 -m pip install -e ./server-app/core
+          python3 -m pip install -e ./client-app/core
+          python3 -m pip install --upgrade pyinstaller
+
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: setup rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: cache rust target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server-app/src-tauri/target
+            client-app/src-tauri/target
+          key: rust-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            rust-${{ matrix.arch }}-
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: build sidecars + bundle
+        env:
+          # workflow_dispatch 才有 inputs.app；tag push 时为空，默认 both
+          APP_INPUT: ${{ inputs.app || 'both' }}
+          # ad-hoc codesign：让 Apple Silicon 不报 "App Is Damaged" 错。
+          # 无需 Apple Developer 账号；用户首次打开仍需 xattr -dr com.apple.quarantine
+          # 或在 Finder 里 Ctrl+Click → 打开。
+          APPLE_SIGNING_IDENTITY: '-'
+        run: |
+          chmod +x scripts/build-sidecars.sh scripts/release.sh
+          if [[ "$APP_INPUT" == "both" ]]; then
+            ./scripts/release.sh
+          else
+            ./scripts/release.sh "$APP_INPUT"
+          fi
+
+      - name: list artifacts
+        run: |
+          ls -lh dist/server/ 2>/dev/null || true
+          ls -lh dist/client/ 2>/dev/null || true
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conduit-${{ matrix.arch }}
+          path: |
+            dist/server/*.dmg
+            dist/client/*.dmg
+          # warn：手动只 build server 时 client 路径找不到，是正常的
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    name: github-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: list collected files
+        run: ls -lhR artifacts/
+
+      - name: create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.dmg
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 安装
+
+            按你 Mac 的架构下载对应文件：
+
+            - **Apple Silicon (M1/M2/M3/M4)**: 文件名带 `aarch64`
+            - **Intel Mac**: 文件名带 `x86_64`
+
+            首次打开被 Gatekeeper 拦截 → 在终端执行：
+
+            ```bash
+            xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+            xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"
+            ```
+
+            或在 Finder 里右键（Ctrl+Click）→ 打开 → 确认。
+
+            ## 已知限制
+
+            未签名 / 未公证：需要 Apple Developer 账号和 `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` secret。
