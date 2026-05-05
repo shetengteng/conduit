@@ -122,13 +122,25 @@ async function handleConfirmStop() {
     await ServerApi.adminStop()
     toast.success(t('topbar.toastStopOk'), { detail: t('topbar.toastStopOkDetail') })
     confirmOpen.value = false
-    // 不主动 quit Tauri 主进程 —— sidecar 退出后窗口仍然存在(显示"已停止"),
-    // 让用户自行关闭或者最小化。如果未来想严格 lockstep,这里可以加
-    // window.__TAURI_INTERNALS__.invoke('plugin:app|exit', 0)。
+    // 第一次 200 OK 之后立刻退出 Tauri 主进程,理由:
+    //   1. 文案 "应用即将退出" 与之前 "窗口保留显示已停止" 的设计相互矛盾,
+    //      用户实测里第一次点击成功后顶部按钮仍可再点 → 在 sidecar
+    //      0.5s 优雅退出窗口期内第二次 fetch 必然 connection refused
+    //      / "TypeError: Load failed",toast 误报 "停止失败"。
+    //   2. SidecarHandle 的 spawn 用 .kill_on_drop(true),Tauri 主进程
+    //      退出时 tokio Child drop 会 SIGKILL sidecar,即便 Python 层
+    //      还没走完 graceful 也无僵尸残留。
+    //   3. sidecar 自身有 --watchdog-ppid 监父进程 PID 自杀作为兜底,
+    //      双保险。
+    // 故在 stop 成功后停顿一小会儿(让 toast 渲染出来),再 quit。
+    setTimeout(() => {
+      tauriInvoke('quit_app').catch(() => {
+        // ignore: dev / 浏览器场景下没有 Tauri runtime,留给用户手动关
+      })
+    }, 600)
   } catch (e) {
     const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e)
     toast.error(t('topbar.toastStopFail'), { detail: msg })
-  } finally {
     stopping.value = false
   }
 }
