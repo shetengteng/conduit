@@ -66,9 +66,10 @@ const subLabel = computed(() => {
   if (!s.running) return '代理服务已停止，等待重新启动'
   if (s.vpn && !s.vpn.available) return 'VPN 接口未就绪，部分流量可能无法走代理'
   if (!s.ready) return '代理正在启动中，端口尚未就绪'
-  const active = s.clients_count ?? 0
-  const passive = s.passive_clients_count ?? 0
-  const total = active + passive
+  // 按 peer_ip 去重(同一客户端开多个 tab 不重复计数)
+  const active = proxyStore.activePeerCount.value
+  const passive = proxyStore.passiveOnlyPeerCount.value
+  const total = proxyStore.uniquePeerCount.value
   if (total === 0) return '等待客户端接入'
   if (active === 0) return `${passive} 个客户端已链接(待命中)`
   if (passive === 0) return `${active} 个客户端正在传输流量`

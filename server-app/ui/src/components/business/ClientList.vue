@@ -46,7 +46,19 @@ type SortKey =
 
 const clients = computed(() => proxyStore.state.clients)
 const passiveClients = computed(() => proxyStore.state.passiveClients)
-const totalCount = computed(() => clients.value.length + passiveClients.value.length)
+
+// 表格本身按 session 列展示(可以一个 client 占多行,展示并发会话/不同 target);
+// 顶部统计按 peer_ip 去重,反映"几个独立设备",和 KPI 卡保持一致。
+const activePeerCount = proxyStore.activePeerCount
+const passiveOnlyCount = proxyStore.passiveOnlyPeerCount
+const totalCount = proxyStore.uniquePeerCount
+
+// 待命客户端区只列"仅心跳、当前没传输流量"的 peer。某个 peer 同时存在
+// session 又在心跳时,它会出现在表格里(算 active),不再重复出现在底部。
+const passiveOnlyClients = computed(() => {
+  const activePeers = new Set(clients.value.map((c) => c.peer_ip))
+  return passiveClients.value.filter((p) => !activePeers.has(p.peer_ip))
+})
 
 // 直接用 backend 的 idle_sec(随每次 refreshSilently 刷新)。
 function formatIdle(s: number | null | undefined): string {
@@ -112,9 +124,9 @@ const columns: Column[] = [
         共 {{ totalCount }} 个
         <template v-if="totalCount > 0">
           ·
-          <span class="text-emerald-600 dark:text-emerald-400">{{ clients.length }} 传输中</span>
+          <span class="text-emerald-600 dark:text-emerald-400">{{ activePeerCount }} 传输中</span>
           ·
-          <span class="text-blue-600 dark:text-blue-400">{{ passiveClients.length }} 待命</span>
+          <span class="text-blue-600 dark:text-blue-400">{{ passiveOnlyCount }} 待命</span>
         </template>
       </span>
     </CardHeader>
@@ -193,10 +205,10 @@ const columns: Column[] = [
               </div>
               <div class="flex items-baseline gap-2">
                 <p class="text-xs font-medium">
-                  {{ passiveClients.length > 0 ? '暂无客户端在传输流量' : '还没有客户端连进来' }}
+                  {{ passiveOnlyClients.length > 0 ? '暂无客户端在传输流量' : '还没有客户端连进来' }}
                 </p>
                 <p class="text-[11px] text-muted-foreground">
-                  {{ passiveClients.length > 0
+                  {{ passiveOnlyClients.length > 0
                     ? '下方"待命"客户端正等着发起请求'
                     : '把右侧 PAC URL 分享给同事即可接入' }}
                 </p>
@@ -206,9 +218,9 @@ const columns: Column[] = [
         </TableBody>
       </Table>
 
-      <!-- 被动客户端区(已链接但暂未传输流量)。仅当列表非空才显示。 -->
+      <!-- 被动客户端区(已链接但暂未传输流量)。仅列出顶部"待命"数对应的 peer。 -->
       <div
-        v-if="passiveClients.length > 0"
+        v-if="passiveOnlyClients.length > 0"
         class="border-t border-border/40 bg-muted/30 px-4 py-3"
       >
         <div class="mb-2 flex items-center gap-2">
@@ -219,7 +231,7 @@ const columns: Column[] = [
         </div>
         <div class="flex flex-col gap-1">
           <div
-            v-for="pc in passiveClients"
+            v-for="pc in passiveOnlyClients"
             :key="pc.peer_ip"
             class="flex items-center justify-between gap-3 rounded-md bg-background px-2.5 py-1.5"
           >

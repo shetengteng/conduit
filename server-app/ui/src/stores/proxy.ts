@@ -146,6 +146,31 @@ function applyPassiveClientLost(p: PassiveClientLostPayload): void {
   if (state.status) state.status.passive_clients_count = state.passiveClients.length;
 }
 
+// ConnectionRegistry 是 per-session 的:同一个客户端一个浏览器开 N 个 tab
+// 就有 N 条 ClientSession,但本质只是 1 个客户端设备。KPI/状态栏需要按
+// peer_ip 去重才能反映"几个独立设备在用代理"的真实语义。
+//
+// active = state.clients 里出现过的不同 peer_ip
+// passiveOnly = passiveClients 里、且 active 里没出现过的 peer_ip
+//   (一个 peer 可能同时存在 session 和 心跳记录,这种算 active 不算 passive)
+// unique = active ∪ passiveOnly
+const activePeerSet = computed(
+  () => new Set(state.clients.map((c) => c.peer_ip)),
+);
+const passiveOnlyPeerSet = computed(() => {
+  const ap = activePeerSet.value;
+  const out = new Set<string>();
+  for (const p of state.passiveClients) {
+    if (!ap.has(p.peer_ip)) out.add(p.peer_ip);
+  }
+  return out;
+});
+const activePeerCount = computed(() => activePeerSet.value.size);
+const passiveOnlyPeerCount = computed(() => passiveOnlyPeerSet.value.size);
+const uniquePeerCount = computed(
+  () => activePeerCount.value + passiveOnlyPeerCount.value,
+);
+
 export const proxyStore = {
   state,
   refresh,
@@ -158,8 +183,10 @@ export const proxyStore = {
   isRunning: computed(() => Boolean(state.status?.running)),
   isReady: computed(() => Boolean(state.status?.ready)),
   pacUrl: computed(() => state.status?.pac_url ?? null),
-  /** 总客户端数:活跃会话 + 被动登记 */
-  totalClientsCount: computed(
-    () => state.clients.length + state.passiveClients.length,
-  ),
+  /** 活跃中(正在传输流量)的独立客户端 IP 数 */
+  activePeerCount,
+  /** 仅心跳"待命"、当前没传输流量的独立客户端 IP 数 */
+  passiveOnlyPeerCount,
+  /** 总客户端数(按 peer_ip 去重),= activePeerCount + passiveOnlyPeerCount */
+  uniquePeerCount,
 };

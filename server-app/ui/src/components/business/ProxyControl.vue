@@ -49,13 +49,16 @@ const liveUptimeSec = computed(() => {
 /**
  * KPI 配置 —— B 风格采用左侧 2px 彩色细线 + 极细字重大数字作为视觉签名。
  * accent 字段对应 border-l-2 的颜色（用 Tailwind 直接量类）。
+ *
+ * 客户端计数按 peer_ip 去重(见 proxyStore 注释):一个客户端开 N 个 tab
+ * 会产生 N 条 session,但只算 1 个客户端。
  */
 const kpis = computed(() => {
   const s = status.value
   const t = totalBps.value
-  const passiveCount = s?.passive_clients_count ?? 0
-  const activeCount = s?.clients_count ?? 0
-  const totalCount = activeCount + passiveCount
+  const activeCount = proxyStore.activePeerCount.value
+  const passiveCount = proxyStore.passiveOnlyPeerCount.value
+  const totalCount = proxyStore.uniquePeerCount.value
   let clientsSub: string
   if (totalCount === 0) {
     clientsSub = '等待客户端接入'

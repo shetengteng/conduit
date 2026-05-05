@@ -31,13 +31,17 @@ export interface UseTrafficSeriesOptions {
   palette?: ReadonlyArray<string>;
 }
 
+// Palette ordered so the first 1-2 peers render in green/blue — matching the
+// client-side traffic chart (uplink emerald + downlink blue). chart-1 is the
+// near-black "Stripe-style" tone reserved as a last-resort fallback so a single
+// connected client doesn't show up as a black line.
 const DEFAULT_PALETTE: ReadonlyArray<string> = [
-  "var(--chart-1)",
   "var(--chart-2)",
+  "var(--chart-5)",
   "var(--chart-3)",
   "var(--chart-4)",
-  "var(--chart-5)",
   "var(--status-info)",
+  "var(--chart-1)",
 ];
 
 /**
