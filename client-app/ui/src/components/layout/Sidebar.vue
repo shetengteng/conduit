@@ -10,6 +10,7 @@
  * 5. 客户端品牌副标 "Client"（区别 server 的 "Server"）
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMediaQuery } from '@vueuse/core'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -29,13 +30,14 @@ import {
 import { uiStore, type NavKey } from '@/stores/ui'
 import { connectionStore } from '@/stores/connectionStore'
 
+const { t } = useI18n()
 const collapsed = useMediaQuery('(max-width: 999px)')
 
 const navItems = computed(() => [
-  { key: 'discovery' as NavKey, icon: RiCompass3Line, label: '发现' },
-  { key: 'connected' as NavKey, icon: RiPlugLine, label: '已连接' },
-  { key: 'diagnose' as NavKey, icon: RiStethoscopeLine, label: '诊断' },
-  { key: 'settings' as NavKey, icon: RiSettings4Line, label: '设置' },
+  { key: 'discovery' as NavKey, icon: RiCompass3Line, label: t('nav.discovery') },
+  { key: 'connected' as NavKey, icon: RiPlugLine, label: t('nav.connected') },
+  { key: 'diagnose' as NavKey, icon: RiStethoscopeLine, label: t('nav.diagnose') },
+  { key: 'settings' as NavKey, icon: RiSettings4Line, label: t('nav.settings') },
 ])
 
 // 「已连接」标签的指示色:connecting 黄,connected 绿,failed 红,idle/disconnecting 无。

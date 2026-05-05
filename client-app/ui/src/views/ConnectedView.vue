@@ -10,6 +10,7 @@
  * M-γ 还会在这里加流量曲线 + 路由命中表。
  */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -31,6 +32,7 @@ import { cacheStore } from '@/stores/cacheStore'
 import { uiStore } from '@/stores/ui'
 import { useToast } from '@/composables/useToast'
 
+const { t } = useI18n()
 const toast = useToast()
 const isDisconnecting = ref(false)
 const now = ref(Date.now() / 1000)
@@ -74,20 +76,20 @@ const elapsedSeconds = computed(() => {
 
 const elapsedHuman = computed(() => {
   const s = elapsedSeconds.value
-  if (s < 60) return `${s} 秒`
+  if (s < 60) return t('connected.elapsedSec', { n: s })
   const m = Math.floor(s / 60)
-  if (m < 60) return `${m} 分 ${s % 60} 秒`
+  if (m < 60) return t('connected.elapsedMin', { m, s: s % 60 })
   const h = Math.floor(m / 60)
-  return `${h} 小时 ${m % 60} 分`
+  return t('connected.elapsedHour', { h, m: m % 60 })
 })
 
 const heartbeatTone = computed(() => connectionStore.heartbeatTone.value ?? 'green')
 const heartbeatLabel = computed(() => {
   switch (heartbeatTone.value) {
-    case 'green': return '健康'
-    case 'yellow': return '波动'
-    case 'red': return '丢失'
-    default: return '未知'
+    case 'green': return t('connected.heartbeat.green')
+    case 'yellow': return t('connected.heartbeat.yellow')
+    case 'red': return t('connected.heartbeat.red')
+    default: return t('connected.heartbeat.unknown')
   }
 })
 const heartbeatToneClass = computed(() => {
@@ -103,10 +105,10 @@ async function handleDisconnect() {
   isDisconnecting.value = true
   try {
     await connectionStore.disconnect()
-    toast.info('已断开连接')
+    toast.info(t('connected.toastDisconnected'))
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error('断开失败', { detail: msg })
+    toast.error(t('connected.toastDisconnectFail'), { detail: msg })
   } finally {
     isDisconnecting.value = false
   }
@@ -126,11 +128,14 @@ function backToDiscovery() {
     <div class="flex items-start justify-between gap-4">
       <div class="flex flex-col gap-1">
         <h1 class="text-2xl font-extralight tracking-tight text-foreground flex items-center gap-3">
-          已连接到
-          <span class="font-medium">{{ connectionStore.connectedServer.value.name }}</span>
+          <i18n-t keypath="connected.titleConnectedTo" tag="span">
+            <template #name>
+              <span class="font-medium">{{ connectionStore.connectedServer.value.name }}</span>
+            </template>
+          </i18n-t>
         </h1>
         <p class="text-sm text-muted-foreground">
-          {{ connectionStore.systemProxyActive.value ? '系统代理已开启,流量自动走 Conduit' : '系统代理未开启,需手动配置 SOCKS5' }}
+          {{ connectionStore.systemProxyActive.value ? t('connected.subSysProxyOn') : t('connected.subSysProxyOff') }}
         </p>
       </div>
       <Button
@@ -141,7 +146,7 @@ function backToDiscovery() {
         @click="handleDisconnect"
       >
         <RiCloseLine class="size-3.5" />
-        {{ isDisconnecting ? '断开中…' : '断开连接' }}
+        {{ isDisconnecting ? t('connected.btnDisconnecting') : t('connected.btnDisconnect') }}
       </Button>
     </div>
 
@@ -169,7 +174,7 @@ function backToDiscovery() {
           ]"
         >
           <RiHeartPulseLine class="size-3" />
-          心跳 · {{ heartbeatLabel }}
+          {{ t('connected.heartbeat.label', { state: heartbeatLabel }) }}
         </span>
       </CardHeader>
 
@@ -178,29 +183,29 @@ function backToDiscovery() {
       <CardContent class="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 lg:grid-cols-4">
         <!-- 连接时长 -->
         <div class="flex flex-col gap-1">
-          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">已连接</span>
+          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('connected.elapsed') }}</span>
           <span class="text-lg font-extralight tracking-tight text-foreground">{{ elapsedHuman }}</span>
         </div>
         <!-- SOCKS 端口 -->
         <div class="flex flex-col gap-1">
-          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">远端 SOCKS</span>
+          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('connected.socksRemote') }}</span>
           <span class="text-lg font-mono font-medium text-foreground">{{ connectionStore.connectedServer.value.socks }}</span>
         </div>
         <!-- 控制 API -->
         <div class="flex flex-col gap-1">
-          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">远端控制 API</span>
+          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('connected.apiRemote') }}</span>
           <span class="text-lg font-mono font-medium text-foreground">{{ connectionStore.connectedServer.value.api }}</span>
         </div>
         <!-- VPN -->
         <div class="flex flex-col gap-1">
-          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">远端 VPN</span>
+          <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('connected.vpnRemote') }}</span>
           <span class="flex items-center gap-1.5">
             <RiShieldFlashLine
               v-if="connectionStore.connectedServer.value.vpn"
               class="size-4 text-emerald-600"
             />
             <span :class="connectionStore.connectedServer.value.vpn ? 'text-foreground font-medium' : 'text-muted-foreground'">
-              {{ connectionStore.connectedServer.value.vpn ? '已启用' : '未启用' }}
+              {{ connectionStore.connectedServer.value.vpn ? t('connected.vpnOn') : t('connected.vpnOff') }}
             </span>
           </span>
         </div>
@@ -216,10 +221,9 @@ function backToDiscovery() {
       <CardContent class="flex items-start gap-2.5 py-3 text-xs text-destructive">
         <RiAlertLine class="size-4 shrink-0 mt-px" />
         <div class="flex flex-col gap-0.5">
-          <span class="font-medium">与 server 失联</span>
+          <span class="font-medium">{{ t('connected.failTitle') }}</span>
           <span class="text-destructive/80">
-            连续多次心跳失败,流量可能受影响。Server 会在 mDNS 重新出现时自动恢复;
-            如果长期红色,请尝试断开后重新连接。
+            {{ t('connected.failDesc') }}
           </span>
         </div>
       </CardContent>
@@ -228,8 +232,8 @@ function backToDiscovery() {
     <!-- 流量曲线 (M-γ) -->
     <Card size="sm">
       <CardHeader class="pb-2">
-        <CardTitle class="text-[13px] font-semibold">流量曲线</CardTitle>
-        <CardDescription class="text-xs">最近 60 秒的本地代理上下行速率(只统计已成功建立的连接)</CardDescription>
+        <CardTitle class="text-[13px] font-semibold">{{ t('connected.trafficTitle') }}</CardTitle>
+        <CardDescription class="text-xs">{{ t('connected.trafficDesc') }}</CardDescription>
       </CardHeader>
       <CardContent>
         <TrafficChart />
@@ -239,8 +243,8 @@ function backToDiscovery() {
     <!-- 路由缓存表 (M-γ) -->
     <Card size="sm">
       <CardHeader class="pb-2">
-        <CardTitle class="text-[13px] font-semibold">路由命中</CardTitle>
-        <CardDescription class="text-xs">每个 host 的方向决策与命中次数,direct 走本机,proxy 走 server</CardDescription>
+        <CardTitle class="text-[13px] font-semibold">{{ t('connected.cacheTitle') }}</CardTitle>
+        <CardDescription class="text-xs">{{ t('connected.cacheDesc') }}</CardDescription>
       </CardHeader>
       <CardContent>
         <CacheTable />
@@ -251,9 +255,9 @@ function backToDiscovery() {
   <!-- 其他状态(idle / failed):引导 -->
   <div v-else class="flex flex-col gap-6 p-6">
     <div class="flex flex-col gap-1">
-      <h1 class="text-2xl font-extralight tracking-tight text-foreground">尚未连接</h1>
+      <h1 class="text-2xl font-extralight tracking-tight text-foreground">{{ t('connected.notConnectedTitle') }}</h1>
       <p class="text-sm text-muted-foreground">
-        请到「发现」页选择一个 Conduit Server 进行连接
+        {{ t('connected.notConnectedSub') }}
       </p>
     </div>
 
@@ -261,7 +265,7 @@ function backToDiscovery() {
       <CardContent class="flex items-start gap-2.5 py-3 text-xs text-destructive">
         <RiAlertLine class="size-4 shrink-0 mt-px" />
         <div class="flex flex-col gap-0.5">
-          <span class="font-medium">上次连接失败</span>
+          <span class="font-medium">{{ t('connected.lastErrorTitle') }}</span>
           <span class="text-destructive/80">{{ connectionStore.lastError.value }}</span>
         </div>
       </CardContent>
@@ -273,14 +277,14 @@ function backToDiscovery() {
           <RiPlugLine class="size-5" />
         </div>
         <div class="flex flex-col gap-1">
-          <p class="text-sm font-medium text-foreground">没有活跃的连接</p>
+          <p class="text-sm font-medium text-foreground">{{ t('connected.emptyTitle') }}</p>
           <p class="text-xs text-muted-foreground max-w-md">
-            点击下方按钮去「发现」页选择一个 server
+            {{ t('connected.emptyDesc') }}
           </p>
         </div>
         <Button variant="default" size="sm" class="mt-2 gap-1.5" @click="backToDiscovery">
           <RiCompass3Line class="size-3.5" />
-          去发现页
+          {{ t('connected.btnGoDiscovery') }}
         </Button>
       </CardContent>
     </Card>

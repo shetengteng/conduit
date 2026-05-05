@@ -14,6 +14,7 @@
  *   - "我已知道" 按钮仅本会话隐藏,下次启动还会出现
  */
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { RiAlertLine, RiCloseLine, RiStethoscopeLine } from '@remixicon/vue'
 import { connectionStore } from '@/stores/connectionStore'
@@ -21,6 +22,7 @@ import { clientStore } from '@/stores/clientStore'
 import { uiStore } from '@/stores/ui'
 import { useToast } from '@/composables/useToast'
 
+const { t } = useI18n()
 const dismissed = ref(false)
 const toast = useToast()
 
@@ -50,9 +52,11 @@ async function copyConfig() {
   const text = `SOCKS5 ${socksPort.value === null ? '<port>' : `127.0.0.1:${socksPort.value}`}`
   try {
     await navigator.clipboard.writeText(text)
-    toast.success('已复制', { detail: text })
+    toast.success(t('proxyBanner.toastCopied'), { detail: text })
   } catch {
-    toast.error('复制失败', { detail: '请手动选中后复制' })
+    toast.error(t('proxyBanner.toastCopyFail'), {
+      detail: t('proxyBanner.toastCopyFailHint'),
+    })
   }
 }
 </script>
@@ -64,15 +68,15 @@ async function copyConfig() {
   >
     <RiAlertLine class="mt-0.5 size-4 shrink-0" />
     <div class="flex-1 leading-relaxed">
-      <span class="font-medium">系统代理未自动切换 · </span>
-      <span>
-        请手动在浏览器/App 配置
-        <code v-if="socksPort" class="rounded bg-amber-200/60 px-1.5 py-0.5 font-mono text-xs dark:bg-amber-900/50">
-          SOCKS5 127.0.0.1:{{ socksPort }}
-        </code>
-        <code v-else class="rounded bg-amber-200/60 px-1.5 py-0.5 font-mono text-xs dark:bg-amber-900/50">SOCKS5</code>
-        ,否则浏览不会走 Conduit。
-      </span>
+      <span class="font-medium">{{ t('proxyBanner.title') }}</span>
+      <i18n-t v-if="socksPort" keypath="proxyBanner.bodyWithPort" tag="span">
+        <template #code>
+          <code class="rounded bg-amber-200/60 px-1.5 py-0.5 font-mono text-xs dark:bg-amber-900/50">
+            SOCKS5 127.0.0.1:{{ socksPort }}
+          </code>
+        </template>
+      </i18n-t>
+      <span v-else>{{ t('proxyBanner.bodyNoPort') }}</span>
     </div>
     <div class="flex shrink-0 items-center gap-1.5">
       <Button
@@ -82,7 +86,7 @@ async function copyConfig() {
         class="h-7 px-2 text-xs text-amber-900 hover:bg-amber-200/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
         @click="copyConfig"
       >
-        复制配置
+        {{ t('proxyBanner.copy') }}
       </Button>
       <Button
         variant="ghost"
@@ -91,13 +95,13 @@ async function copyConfig() {
         @click="gotoDiagnose"
       >
         <RiStethoscopeLine class="size-3.5" />
-        查看详情
+        {{ t('proxyBanner.detail') }}
       </Button>
       <Button
         variant="ghost"
         size="sm"
         class="h-7 w-7 p-0 text-amber-900 hover:bg-amber-200/40 dark:text-amber-200 dark:hover:bg-amber-900/40"
-        title="本会话隐藏"
+        :title="t('proxyBanner.dismissTitle')"
         @click="dismissed = true"
       >
         <RiCloseLine class="size-4" />

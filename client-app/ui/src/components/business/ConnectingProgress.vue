@@ -15,14 +15,16 @@
  * 取消按钮 v0 只是 disconnect()。M-β.3 再做"取消未完成"。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card'
 import { RiCheckLine, RiCloseLine, RiLoader4Line, RiAlertLine, RiCloseCircleLine } from '@remixicon/vue'
 import { connectionStore } from '@/stores/connectionStore'
 import { discoveryStore } from '@/stores/discoveryStore'
 
+const { t } = useI18n()
 const STEP_KEYS = connectionStore.STEP_ORDER
-const STEP_LABELS = connectionStore.STEP_LABELS
+const STEP_LABEL_KEYS = connectionStore.STEP_LABEL_KEYS
 
 const pendingServer = computed(() => {
   const id = connectionStore.pendingServerId.value
@@ -36,7 +38,7 @@ const stepDescriptors = computed(() =>
     return {
       idx: idx + 1,
       key,
-      label: STEP_LABELS[key],
+      label: t(STEP_LABEL_KEYS[key]),
       status: p?.status ?? 'pending',
       detail: p?.detail ?? '',
     }
@@ -56,17 +58,20 @@ async function handleCancel() {
   <div class="flex flex-col gap-6 p-6">
     <div class="flex items-start justify-between gap-4">
       <div class="flex flex-col gap-1">
-        <h1 class="text-2xl font-extralight tracking-tight text-foreground">正在连接…</h1>
+        <h1 class="text-2xl font-extralight tracking-tight text-foreground">{{ t('connecting.title') }}</h1>
         <p class="text-sm text-muted-foreground">
           <template v-if="pendingServer">
-            目标 server：<span class="font-medium text-foreground">{{ pendingServer.name }}</span>
-            <span class="font-mono text-xs text-muted-foreground"> ({{ pendingServer.host }}:{{ pendingServer.port }})</span>
+            {{ t('connecting.targetWith', {
+              name: pendingServer.name,
+              host: pendingServer.host,
+              port: pendingServer.port,
+            }) }}
           </template>
-          <template v-else>正在与所选 server 协商连接,等待 5 步完成…</template>
+          <template v-else>{{ t('connecting.targetWithout') }}</template>
         </p>
       </div>
       <Button variant="outline" size="sm" class="gap-1.5" @click="handleCancel">
-        <RiCloseLine class="size-3.5" />取消
+        <RiCloseLine class="size-3.5" />{{ t('connecting.cancel') }}
       </Button>
     </div>
 
@@ -74,7 +79,7 @@ async function handleCancel() {
       <CardContent class="flex items-start gap-2.5 py-3 text-xs text-destructive">
         <RiAlertLine class="size-4 shrink-0 mt-px" />
         <div class="flex flex-col gap-0.5">
-          <span class="font-medium">连接失败</span>
+          <span class="font-medium">{{ t('connecting.failedTitle') }}</span>
           <span class="text-destructive/80">{{ connectionStore.lastError.value }}</span>
         </div>
       </CardContent>
@@ -82,8 +87,8 @@ async function handleCancel() {
 
     <Card size="sm">
       <CardHeader class="pb-2">
-        <CardTitle class="text-[13px] font-semibold">连接进度</CardTitle>
-        <CardDescription class="text-xs">5 步通信契约,与后端 SSE connect_progress 事件对齐</CardDescription>
+        <CardTitle class="text-[13px] font-semibold">{{ t('connecting.panelTitle') }}</CardTitle>
+        <CardDescription class="text-xs">{{ t('connecting.panelDesc') }}</CardDescription>
       </CardHeader>
       <CardContent class="pt-2">
         <ol class="relative flex flex-col">
@@ -134,7 +139,7 @@ async function handleCancel() {
                 ]"
               >{{ step.detail }}</span>
               <span v-else class="text-[11px] leading-snug text-muted-foreground">
-                {{ step.status === 'pending' ? '等待中…' : '处理中…' }}
+                {{ step.status === 'pending' ? t('connecting.stepWaiting') : t('connecting.stepRunning') }}
               </span>
             </div>
           </li>

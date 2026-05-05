@@ -16,6 +16,7 @@
  *   - 操作区：暂禁用"连接"按钮（M-β.2 才启用）
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Card,
   CardContent,
@@ -44,6 +45,7 @@ import { ClientApi } from '@/api/client-api'
 import { ApiError } from '@/api/client'
 import type { DiscoveredServer } from '@/types/client'
 
+const { t } = useI18n()
 const toast = useToast()
 
 const {
@@ -65,38 +67,42 @@ async function handleConnect(srv: DiscoveredServer) {
     await connectionStore.connectTo(srv.server_id)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error('连接失败', { detail: msg })
+    toast.error(t('discovery.toastConnFail'), { detail: msg })
   }
 }
 
 async function handleForget(srv: DiscoveredServer) {
-  if (!confirm(`确定从历史中移除「${srv.name}」？\n该 server 重新广播时仍会自动出现。`)) return
+  if (!confirm(t('discovery.confirmForget', { name: srv.name }))) return
   try {
     const resp = await ClientApi.forgetServer(srv.server_id)
     if (resp.removed) {
-      toast.success('已移除', { detail: srv.name })
+      toast.success(t('discovery.toastRemoved'), { detail: srv.name })
     } else {
-      toast.info('未找到该 server', { detail: '它可能已自行清理' })
+      toast.info(t('discovery.toastNotFound'), {
+        detail: t('discovery.toastNotFoundDetail'),
+      })
     }
     await manualRefresh()
   } catch (e) {
     const code = e instanceof ApiError ? e.code : 'UNKNOWN'
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error('移除失败', { detail: `${code}: ${msg}` })
+    toast.error(t('discovery.toastRemoveFail'), { detail: `${code}: ${msg}` })
   }
 }
 
 async function handleForgetAll() {
   if (historyCount.value === 0) return
-  if (!confirm(`确定清空全部 ${historyCount.value} 条历史 server？\n（在线 server 不受影响）`)) return
+  if (!confirm(t('discovery.confirmForgetAll', { count: historyCount.value }))) return
   try {
     const resp = await ClientApi.forgetAllHistory()
-    toast.success('历史已清空', { detail: `共移除 ${resp.removed_count} 条` })
+    toast.success(t('discovery.toastClearedTitle'), {
+      detail: t('discovery.toastClearedDetail', { count: resp.removed_count }),
+    })
     await manualRefresh()
   } catch (e) {
     const code = e instanceof ApiError ? e.code : 'UNKNOWN'
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error('清空失败', { detail: `${code}: ${msg}` })
+    toast.error(t('discovery.toastClearFail'), { detail: `${code}: ${msg}` })
   }
 }
 
@@ -115,12 +121,12 @@ function isConnectingTo(srv: DiscoveredServer): boolean {
 }
 
 function formatRelativeTime(epochSec: number): string {
-  if (!epochSec) return '从未'
+  if (!epochSec) return t('discovery.relTime.never')
   const diffSec = Math.max(0, Date.now() / 1000 - epochSec)
-  if (diffSec < 60) return `${Math.round(diffSec)} 秒前`
-  if (diffSec < 3600) return `${Math.round(diffSec / 60)} 分钟前`
-  if (diffSec < 86400) return `${Math.round(diffSec / 3600)} 小时前`
-  return `${Math.round(diffSec / 86400)} 天前`
+  if (diffSec < 60) return t('discovery.relTime.secAgo', { n: Math.round(diffSec) })
+  if (diffSec < 3600) return t('discovery.relTime.minAgo', { n: Math.round(diffSec / 60) })
+  if (diffSec < 86400) return t('discovery.relTime.hourAgo', { n: Math.round(diffSec / 3600) })
+  return t('discovery.relTime.dayAgo', { n: Math.round(diffSec / 86400) })
 }
 
 function isOnline(srv: DiscoveredServer): boolean {
@@ -132,18 +138,18 @@ function isOnline(srv: DiscoveredServer): boolean {
 const HISTORY_MAX = 32
 
 const headerSubtitle = computed(() => {
-  if (loading.value && servers.value.length === 0) return '正在扫描…'
-  if (!available.value) return 'mDNS 服务未启用'
-  if (isEmpty.value) return '暂未发现任何 Conduit Server'
+  if (loading.value && servers.value.length === 0) return t('discovery.sub.scanning')
+  if (!available.value) return t('discovery.sub.mdnsOff')
+  if (isEmpty.value) return t('discovery.sub.empty')
   const parts: string[] = []
-  if (onlineCount.value > 0) parts.push(`${onlineCount.value} 个在线`)
-  if (historyCount.value > 0) parts.push(`${historyCount.value} 个曾见过`)
+  if (onlineCount.value > 0) parts.push(t('discovery.sub.onlineCount', { count: onlineCount.value }))
+  if (historyCount.value > 0) parts.push(t('discovery.sub.historyCount', { count: historyCount.value }))
   return parts.join(' · ')
 })
 
 const headerHint = computed(() => {
   if (historyCount.value === 0) return ''
-  return `"曾见过"会持久保存(本地最多 ${HISTORY_MAX} 条,按最近见过的时间倒序),用右上角"清空历史"或单条 X 按钮可移除`
+  return t('discovery.historyHint', { max: HISTORY_MAX })
 })
 </script>
 
@@ -153,7 +159,7 @@ const headerHint = computed(() => {
     <div class="flex items-start justify-between gap-4">
       <div class="flex flex-col gap-1">
         <h1 class="text-2xl font-extralight tracking-tight text-foreground">
-          发现 Conduit 服务
+          {{ t('discovery.title') }}
         </h1>
         <p class="text-sm text-muted-foreground">
           {{ headerSubtitle }}
@@ -174,7 +180,7 @@ const headerHint = computed(() => {
           class="gap-1.5 text-muted-foreground hover:text-destructive"
         >
           <RiDeleteBinLine class="size-3.5" />
-          清空历史
+          {{ t('discovery.forgetAll') }}
         </Button>
         <Button
           variant="outline"
@@ -184,7 +190,7 @@ const headerHint = computed(() => {
           class="gap-1.5"
         >
           <RiRefreshLine class="size-3.5" :class="{ 'animate-spin': loading }" />
-          重新扫描
+          {{ t('discovery.rescan') }}
         </Button>
       </div>
     </div>
@@ -196,7 +202,7 @@ const headerHint = computed(() => {
     >
       <RiAlertLine class="size-4 shrink-0 mt-px" />
       <div class="flex flex-col gap-0.5">
-        <span class="font-medium">无法获取服务列表</span>
+        <span class="font-medium">{{ t('discovery.errorTitle') }}</span>
         <span class="text-destructive/80">{{ error }}</span>
       </div>
     </div>
@@ -207,10 +213,10 @@ const headerHint = computed(() => {
         <RiSignalWifi1Line class="size-4 mt-0.5 text-amber-600" />
         <div class="flex flex-col gap-0.5">
           <p class="font-medium text-amber-900 dark:text-amber-200">
-            自动发现未启用
+            {{ t('discovery.mdnsOffTitle') }}
           </p>
           <p class="text-amber-800/80 dark:text-amber-200/70">
-            Sidecar 未加载 zeroconf 模块，无法广播 / 监听 mDNS。请检查打包配置或手动添加 server（即将推出）。
+            {{ t('discovery.mdnsOffDesc') }}
           </p>
         </div>
       </CardContent>
@@ -223,10 +229,10 @@ const headerHint = computed(() => {
           <RiCompass3Line class="size-5 animate-pulse" />
         </div>
         <div class="flex flex-col gap-1">
-          <p class="text-sm font-medium text-foreground">正在搜索 LAN 上的 Conduit 服务…</p>
+          <p class="text-sm font-medium text-foreground">{{ t('discovery.emptyTitle') }}</p>
           <p class="text-xs text-muted-foreground max-w-md">
-            如果首次启动 macOS 会弹出"本地网络访问"权限请求，请允许。<br />
-            通常 5–10 秒内能看到同网段开着的 server。
+            {{ t('discovery.emptyDescLine1') }}<br />
+            {{ t('discovery.emptyDescLine2') }}
           </p>
         </div>
       </CardContent>
@@ -265,14 +271,14 @@ const headerHint = computed(() => {
                   class="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400"
                 >
                   <span class="size-1.5 rounded-full bg-emerald-500"></span>
-                  在线
+                  {{ t('discovery.cardOnline') }}
                 </span>
                 <span
                   v-else
                   class="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
                 >
                   <RiTimeLine class="size-2.5" />
-                  曾见过
+                  {{ t('discovery.cardSeen') }}
                 </span>
               </CardTitle>
               <CardDescription class="text-[11px] font-mono text-muted-foreground truncate">
@@ -285,7 +291,7 @@ const headerHint = computed(() => {
             variant="ghost"
             size="icon"
             class="size-6 -mt-1 text-muted-foreground hover:text-destructive"
-            title="从历史中移除"
+            :title="t('discovery.forgetTitle')"
             @click="handleForget(srv)"
           >
             <RiCloseLine class="size-3.5" />
@@ -296,22 +302,22 @@ const headerHint = computed(() => {
           <!-- 元信息行 -->
           <div class="grid grid-cols-3 gap-2 text-[11px]">
             <div class="flex flex-col gap-0.5">
-              <span class="text-muted-foreground">SOCKS</span>
+              <span class="text-muted-foreground">{{ t('discovery.cardSocks') }}</span>
               <span class="font-mono font-medium text-foreground">{{ srv.socks }}</span>
             </div>
             <div class="flex flex-col gap-0.5">
-              <span class="text-muted-foreground">控制 API</span>
+              <span class="text-muted-foreground">{{ t('discovery.cardApi') }}</span>
               <span class="font-mono font-medium text-foreground">{{ srv.api }}</span>
             </div>
             <div class="flex flex-col gap-0.5">
-              <span class="text-muted-foreground">VPN</span>
+              <span class="text-muted-foreground">{{ t('discovery.cardVpn') }}</span>
               <span class="flex items-center gap-1 font-medium">
                 <RiShieldFlashLine
                   v-if="srv.vpn"
                   class="size-3 text-emerald-600"
                 />
                 <span :class="srv.vpn ? 'text-foreground' : 'text-muted-foreground'">
-                  {{ srv.vpn ? '已开' : '未开' }}
+                  {{ srv.vpn ? t('discovery.cardVpnOn') : t('discovery.cardVpnOff') }}
                 </span>
               </span>
             </div>
@@ -320,7 +326,7 @@ const headerHint = computed(() => {
           <!-- 时间 + 操作 -->
           <div class="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
             <span class="text-[11px] text-muted-foreground">
-              {{ isOnline(srv) ? '广播于' : '上次见到' }} {{ formatRelativeTime(srv.last_seen_at) }}
+              {{ isOnline(srv) ? t('discovery.seenAtOnline') : t('discovery.seenAtOffline') }} {{ formatRelativeTime(srv.last_seen_at) }}
             </span>
             <Button
               v-if="isConnectedTo(srv)"
@@ -329,7 +335,7 @@ const headerHint = computed(() => {
               disabled
               class="h-7 text-xs gap-1"
             >
-              <span class="size-1.5 rounded-full bg-emerald-500" />已连接
+              <span class="size-1.5 rounded-full bg-emerald-500" />{{ t('discovery.btnConnected') }}
             </Button>
             <Button
               v-else-if="isConnectingTo(srv)"
@@ -338,7 +344,7 @@ const headerHint = computed(() => {
               disabled
               class="h-7 text-xs"
             >
-              连接中…
+              {{ t('discovery.btnConnecting') }}
             </Button>
             <Button
               v-else
@@ -346,10 +352,10 @@ const headerHint = computed(() => {
               size="sm"
               :disabled="!isOnline(srv) || connectionStore.isConnecting.value || connectionStore.isConnected.value"
               class="h-7 text-xs"
-              :title="!isOnline(srv) ? '历史 server,等其重新广播后再连接' : connectionStore.isConnected.value ? '请先在已连接页断开当前 server' : ''"
+              :title="!isOnline(srv) ? t('discovery.btnTitleHistory') : connectionStore.isConnected.value ? t('discovery.btnTitleAlreadyConnected') : ''"
               @click="handleConnect(srv)"
             >
-              连接
+              {{ t('discovery.btnConnect') }}
             </Button>
           </div>
         </CardContent>

@@ -16,6 +16,7 @@
  * heartbeat_warn / global_fallback 等。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import { RiRestartLine } from '@remixicon/vue'
 import StatusBadge from './StatusBadge.vue'
@@ -26,6 +27,7 @@ import { formatUptimeShort } from '@/utils/format'
 import { useToast } from '@/composables/useToast'
 import type { AppRuntime } from '@/types/client'
 
+const { t } = useI18n()
 const runtime = ref<AppRuntime | null>(null)
 const toast = useToast()
 const restarting = ref(false)
@@ -35,7 +37,7 @@ async function tauriInvoke(cmd: string): Promise<unknown> {
   const w = window as any
   const fn = w.__TAURI__?.core?.invoke ?? w.__TAURI_INTERNALS__?.invoke
   if (typeof fn !== 'function') {
-    throw new Error('Tauri invoke 不可用 (可能在浏览器中预览)')
+    throw new Error(t('topbar.tauriUnavailable'))
   }
   return fn(cmd)
 }
@@ -44,11 +46,15 @@ async function handleRestart() {
   if (restarting.value) return
   restarting.value = true
   try {
-    toast.info('正在重启应用…', { detail: '主窗口将立即关闭并重新启动 sidecar' })
+    toast.info(t('topbar.toastRestartTip'), {
+      detail: t('topbar.toastRestartTipDetail'),
+    })
     await tauriInvoke('restart_app')
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error('重启失败', { detail: `${msg}\n请手动退出并重新打开 Conduit Client` })
+    toast.error(t('topbar.toastRestartFail'), {
+      detail: `${msg}\n${t('topbar.toastRestartFailHint')}`,
+    })
     restarting.value = false
   }
 }
@@ -82,23 +88,25 @@ const tone = computed<'running' | 'warning' | 'stopped' | 'error'>(() => {
 
 const label = computed(() => {
   const h = clientStore.state.healthz
-  if (clientStore.state.error) return '连接失败'
-  if (!h) return '未启动'
-  if (!h.ready) return '异常'
-  return '就绪'
+  if (clientStore.state.error) return t('status.connFail')
+  if (!h) return t('status.notReady')
+  if (!h.ready) return t('status.error')
+  return t('status.ready')
 })
 
 const subLabel = computed(() => {
   const h = clientStore.state.healthz
-  if (clientStore.state.error) return '与 client sidecar 的本地连接失败'
-  if (!h) return '正在等待本地服务就绪'
+  if (clientStore.state.error) return t('topbar.sub.apiError')
+  if (!h) return t('topbar.sub.waitingHealthz')
   if (!h.ready) {
     const failed = h.checks.filter((c) => !c.ok).map((c) => c.name).join(', ')
-    return `自检未通过：${failed || '未知'}`
+    return t('topbar.sub.selfCheckFail', {
+      names: failed || t('topbar.sub.selfCheckUnknown'),
+    })
   }
   const online = discoveryStore.onlineCount.value
-  if (online === 0) return '正在扫描 LAN 上的 Conduit Server…'
-  return `已发现 ${online} 个 server，请在"发现"页选择连接`
+  if (online === 0) return t('topbar.sub.scanning')
+  return t('topbar.sub.foundServers', { count: online })
 })
 
 const ports = computed(() => {
@@ -146,24 +154,24 @@ const uptime = computed(() => {
         </div>
       </template>
       <span v-else class="text-[11px] italic text-muted-foreground">
-        端口由 Tauri 主进程分配
+        {{ t('topbar.portsAuto') }}
       </span>
     </div>
 
     <div class="ml-auto flex items-center gap-3">
       <span class="hidden font-mono text-xs text-muted-foreground tabular-nums md:inline">
-        运行 {{ uptime }}
+        {{ t('topbar.uptime', { value: uptime }) }}
       </span>
       <Button
         v-if="tone === 'error' || tone === 'stopped'"
         variant="default"
         size="sm"
         :disabled="restarting"
-        title="重启 Tauri 主进程,会顺带重新拉起 sidecar"
+        :title="t('topbar.restartTitle')"
         @click="handleRestart"
       >
         <RiRestartLine :class="{ 'animate-spin': restarting }" />
-        {{ restarting ? '重启中…' : '重启应用' }}
+        {{ restarting ? t('topbar.restarting') : t('topbar.restart') }}
       </Button>
     </div>
   </header>

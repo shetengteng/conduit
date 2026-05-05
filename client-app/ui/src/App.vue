@@ -12,6 +12,7 @@
  *   - 暂未引入 SSE 订阅，M-β 接入 useEvents 后开启
  */
 import { onMounted, onUnmounted, computed, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import Sidebar from '@/components/layout/Sidebar.vue'
 import TopStatusBar from '@/components/layout/TopStatusBar.vue'
 import BootScreen from '@/components/layout/BootScreen.vue'
@@ -35,6 +36,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 
 useBootPhase()
 
+const { t } = useI18n()
 const toast = useToast()
 
 const isReady = computed(() => uiStore.state.bootPhase === 'Ready')
@@ -108,10 +110,14 @@ watch(
     } else if (next === 'connected' && prev === 'connecting') {
       // 连接成功提示
       const srv = connectionStore.connectedServer.value
-      if (srv) toast.success(`已连接到 ${srv.name}`, { detail: `${srv.host}:${srv.port}` })
+      if (srv) {
+        toast.success(t('connected.toastConnected', { name: srv.name }), {
+          detail: `${srv.host}:${srv.port}`,
+        })
+      }
     } else if (next === 'failed') {
-      const err = connectionStore.lastError.value ?? '未知错误'
-      toast.error('连接失败', { detail: err })
+      const err = connectionStore.lastError.value ?? t('connected.toastUnknownErr')
+      toast.error(t('connected.toastConnFail'), { detail: err })
     }
   },
 )

@@ -39,12 +39,14 @@ const STEP_ORDER: ConnectStepKey[] = [
   "start_heartbeat",
 ];
 
-const STEP_LABELS: Record<ConnectStepKey, string> = {
-  probe: "可达性检查",
-  fetch_pac: "拉取 PAC",
-  prefill_cache: "解析 PAC 预填路由",
-  switch_endpoint: "切换上游 server",
-  start_heartbeat: "启动心跳与系统代理",
+// i18n key — UI 渲染时 t('connecting.step.<value>')。
+// 这里只存 key,不存文案,由 vue-i18n 在渲染层翻译。
+const STEP_LABEL_KEYS: Record<ConnectStepKey, string> = {
+  probe: "connecting.step.probe",
+  fetch_pac: "connecting.step.fetchPac",
+  prefill_cache: "connecting.step.prefillCache",
+  switch_endpoint: "connecting.step.switchEndpoint",
+  start_heartbeat: "connecting.step.startHeartbeat",
 };
 
 interface ConnectionStateRefs {
@@ -177,7 +179,7 @@ export const connectionStore = {
 
   // 元数据
   STEP_ORDER,
-  STEP_LABELS,
+  STEP_LABEL_KEYS,
 
   // computed accessors
   connectionState: computed(() => state.state),

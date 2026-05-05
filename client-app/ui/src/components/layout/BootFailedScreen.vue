@@ -4,6 +4,8 @@
  *
  * 提供 3 个可执行操作：重试 / 查看日志 / 退出
  */
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,6 +17,8 @@ import {
   RiInformationLine,
 } from '@remixicon/vue'
 
+const { t } = useI18n()
+
 defineProps<{
   reason?: string | null
 }>()
@@ -24,11 +28,11 @@ const emit = defineEmits<{
   (e: 'quit'): void
 }>()
 
-const hints = [
-  '检查 8090 / 1080 / 8080 端口是否被其他进程占用',
-  '若是首次启动，请确认 Python 3.10+ 与 zeroconf 已就绪',
-  '可在「设置 → 端口」中为 API/HTTP/SOCKS5 改用其他端口',
-]
+const hints = computed(() => [
+  t('boot.hint1'),
+  t('boot.hint2'),
+  t('boot.hint3'),
+])
 </script>
 
 <template>
@@ -44,9 +48,9 @@ const hints = [
             <RiAlertLine class="size-5" />
           </div>
           <div>
-            <CardTitle class="text-base">代理引擎启动失败</CardTitle>
+            <CardTitle class="text-base">{{ t('boot.failedTitle') }}</CardTitle>
             <p class="mt-1 text-xs text-muted-foreground">
-              Tauri 主进程未能在 9 秒内完成健康检查
+              {{ t('boot.failedSub') }}
             </p>
           </div>
         </div>
@@ -63,7 +67,7 @@ const hints = [
         <Separator />
 
         <div class="flex flex-col gap-2">
-          <p class="text-xs font-medium text-foreground">可以这样做：</p>
+          <p class="text-xs font-medium text-foreground">{{ t('boot.failedHints') }}</p>
           <ul class="flex flex-col gap-1.5">
             <li
               v-for="(h, idx) in hints"
@@ -84,11 +88,11 @@ const hints = [
       <CardFooter class="flex justify-end gap-2 pb-4">
         <Button variant="outline" @click="emit('quit')">
           <RiCloseCircleLine />
-          退出
+          {{ t('boot.quit') }}
         </Button>
         <Button @click="emit('retry')">
           <RiRefreshLine />
-          重试
+          {{ t('boot.retry') }}
         </Button>
       </CardFooter>
     </Card>

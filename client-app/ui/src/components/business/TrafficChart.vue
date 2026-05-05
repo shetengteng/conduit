@@ -10,7 +10,10 @@
  *   - 暗色模式适配 stroke-current + opacity
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { trafficStore } from '@/stores/trafficStore'
+
+const { t } = useI18n()
 
 const VW = 600
 const VH = 120
@@ -71,22 +74,22 @@ const isEmpty = computed(() => trafficStore.samples.value.length === 0)
     <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
       <div class="flex flex-col gap-0.5">
         <span class="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-          <span class="size-1.5 rounded-full bg-emerald-500" />上行速率
+          <span class="size-1.5 rounded-full bg-emerald-500" />{{ t('traffic.upRate') }}
         </span>
         <span class="text-base font-mono font-medium text-foreground">{{ fmtRate(trafficStore.latestUplink.value) }}</span>
       </div>
       <div class="flex flex-col gap-0.5">
         <span class="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
-          <span class="size-1.5 rounded-full bg-blue-500" />下行速率
+          <span class="size-1.5 rounded-full bg-blue-500" />{{ t('traffic.downRate') }}
         </span>
         <span class="text-base font-mono font-medium text-foreground">{{ fmtRate(trafficStore.latestDownlink.value) }}</span>
       </div>
       <div class="flex flex-col gap-0.5">
-        <span class="text-[11px] uppercase tracking-wide text-muted-foreground">累计上行</span>
+        <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('traffic.upTotal') }}</span>
         <span class="text-base font-mono font-medium text-foreground">{{ fmtBytes(trafficStore.totalUplink.value) }}</span>
       </div>
       <div class="flex flex-col gap-0.5">
-        <span class="text-[11px] uppercase tracking-wide text-muted-foreground">累计下行</span>
+        <span class="text-[11px] uppercase tracking-wide text-muted-foreground">{{ t('traffic.downTotal') }}</span>
         <span class="text-base font-mono font-medium text-foreground">{{ fmtBytes(trafficStore.totalDownlink.value) }}</span>
       </div>
     </div>
@@ -109,13 +112,13 @@ const isEmpty = computed(() => trafficStore.samples.value.length === 0)
         </template>
       </svg>
       <div v-if="isEmpty" class="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground pointer-events-none">
-        等待流量…浏览任意网站后曲线会实时更新
+        {{ t('traffic.waiting') }}
       </div>
     </div>
 
     <div class="flex items-center justify-between text-[10px] text-muted-foreground">
-      <span>窗口 60 秒 · 每秒一个采样</span>
-      <span>峰值 {{ fmtRate(trafficStore.peakAny.value) }}</span>
+      <span>{{ t('traffic.windowDesc') }}</span>
+      <span>{{ t('traffic.peak', { value: fmtRate(trafficStore.peakAny.value) }) }}</span>
     </div>
   </div>
 </template>

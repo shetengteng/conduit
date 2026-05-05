@@ -4,15 +4,19 @@
  *
  * 4 阶段进度链：分配端口 → 启动 sidecar → 健康检查 → 就绪
  */
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Card, CardContent } from '@/components/ui/card'
 import { RiLoader4Line, RiShieldKeyholeLine } from '@remixicon/vue'
 
-const phases = [
-  { label: '分配端口' },
-  { label: '启动代理引擎' },
-  { label: '健康检查' },
-  { label: '就绪' },
-]
+const { t } = useI18n()
+
+const phases = computed(() => [
+  { label: t('boot.phase.port') },
+  { label: t('boot.phase.engine') },
+  { label: t('boot.phase.health') },
+  { label: t('boot.phase.ready') },
+])
 </script>
 
 <template>
@@ -30,10 +34,10 @@ const phases = [
             class="flex items-center justify-center gap-2 text-base font-semibold tracking-tight"
           >
             <RiShieldKeyholeLine class="size-4 text-primary" />
-            Conduit Client
+            {{ t('boot.splashTitle') }}
           </h1>
           <p class="mt-1 text-xs text-muted-foreground">
-            正在启动代理引擎,请稍候…
+            {{ t('boot.splashSub') }}
           </p>
         </div>
 
