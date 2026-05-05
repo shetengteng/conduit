@@ -494,8 +494,8 @@
 
         <div class="mt-12 grid gap-5 md:grid-cols-2">
           <!-- Server DMG -->
-          <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
-            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · x86_64</span>
+          <article data-dmg-card="server" class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
+            <span data-dmg-arch-chip class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · x64</span>
             <div class="flex items-center gap-3">
               <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -507,7 +507,7 @@
               </span>
               <div>
                 <h3 class="font-display text-lg font-semibold">Conduit Server</h3>
-                <p class="font-mono text-[11px] text-muted-foreground">v0.1.0 · macOS 13+</p>
+                <p class="font-mono text-[11px] text-muted-foreground"><span data-dmg-version>v0.1.0</span> · macOS 13+</p>
               </div>
             </div>
             <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
@@ -515,29 +515,43 @@
               <span data-i18n-en>Install on the Mac that holds your VPN.</span>
             </p>
             <a
+              data-dmg-primary
+              data-asset-prefix="Conduit.Server"
+              data-asset-arch="aarch64"
               href="https://github.com/shetengteng/conduit/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
               class="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background opacity-95 transition-opacity hover:opacity-100 focus-ring"
-              aria-label="Download Conduit Server DMG from GitHub Releases">
+              aria-label="Download Conduit Server DMG for Apple Silicon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
               </svg>
               <span class="font-mono text-xs">
-                <span data-i18n-zh>下载 Server.dmg</span>
-                <span data-i18n-en>Download Server.dmg</span>
+                <span data-i18n-zh>下载 Server · Apple Silicon</span>
+                <span data-i18n-en>Download Server · Apple Silicon</span>
               </span>
             </a>
-            <p class="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              <span data-i18n-zh>跳转到 GitHub Releases，按你 Mac 架构选 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code>(M 系列) 或 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code>(Intel)。</span>
-              <span data-i18n-en>Opens GitHub Releases — pick <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code> for Apple Silicon or <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code> for Intel.</span>
-            </p>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+              <a
+                data-dmg-secondary
+                data-asset-prefix="Conduit.Server"
+                data-asset-arch="x64"
+                href="https://github.com/shetengteng/conduit/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="focus-ring rounded font-mono underline-offset-2 hover:text-foreground hover:underline"
+                aria-label="Download Conduit Server DMG for Intel Mac">
+                <span data-i18n-zh>Intel Mac (x64) →</span>
+                <span data-i18n-en>Intel Mac (x64) →</span>
+              </a>
+              <span data-dmg-size class="font-mono text-muted-foreground"></span>
+            </div>
           </article>
 
           <!-- Client DMG -->
-          <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
-            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · x86_64</span>
+          <article data-dmg-card="client" class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
+            <span data-dmg-arch-chip class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · x64</span>
             <div class="flex items-center gap-3">
               <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -548,7 +562,7 @@
               </span>
               <div>
                 <h3 class="font-display text-lg font-semibold">Conduit Client</h3>
-                <p class="font-mono text-[11px] text-muted-foreground">v0.1.0 · macOS 13+</p>
+                <p class="font-mono text-[11px] text-muted-foreground"><span data-dmg-version>v0.1.0</span> · macOS 13+</p>
               </div>
             </div>
             <p class="mt-4 text-sm leading-relaxed text-muted-foreground">
@@ -556,30 +570,44 @@
               <span data-i18n-en>Install on every device that wants the shared VPN.</span>
             </p>
             <a
+              data-dmg-primary
+              data-asset-prefix="Conduit.Client"
+              data-asset-arch="aarch64"
               href="https://github.com/shetengteng/conduit/releases/latest"
               target="_blank"
               rel="noopener noreferrer"
               class="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background opacity-95 transition-opacity hover:opacity-100 focus-ring"
-              aria-label="Download Conduit Client DMG from GitHub Releases">
+              aria-label="Download Conduit Client DMG for Apple Silicon">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
               </svg>
               <span class="font-mono text-xs">
-                <span data-i18n-zh>下载 Client.dmg</span>
-                <span data-i18n-en>Download Client.dmg</span>
+                <span data-i18n-zh>下载 Client · Apple Silicon</span>
+                <span data-i18n-en>Download Client · Apple Silicon</span>
               </span>
             </a>
-            <p class="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              <span data-i18n-zh>跳转到 GitHub Releases，按你 Mac 架构选 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code>(M 系列) 或 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code>(Intel)。</span>
-              <span data-i18n-en>Opens GitHub Releases — pick <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code> for Apple Silicon or <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code> for Intel.</span>
-            </p>
+            <div class="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+              <a
+                data-dmg-secondary
+                data-asset-prefix="Conduit.Client"
+                data-asset-arch="x64"
+                href="https://github.com/shetengteng/conduit/releases/latest"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="focus-ring rounded font-mono underline-offset-2 hover:text-foreground hover:underline"
+                aria-label="Download Conduit Client DMG for Intel Mac">
+                <span data-i18n-zh>Intel Mac (x64) →</span>
+                <span data-i18n-en>Intel Mac (x64) →</span>
+              </a>
+              <span data-dmg-size class="font-mono text-muted-foreground"></span>
+            </div>
           </article>
         </div>
 
         <p class="mt-4 text-center text-xs text-muted-foreground">
-          <span data-i18n-zh>SHA-256 校验和与 release notes 见 <a href="https://github.com/shetengteng/conduit/releases" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4 hover:text-foreground">GitHub Releases 页</a>。</span>
-          <span data-i18n-en>SHA-256 checksums and release notes are listed on the <a href="https://github.com/shetengteng/conduit/releases" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4 hover:text-foreground">GitHub Releases page</a>.</span>
+          <span data-i18n-zh>SHA-256 校验和与 release notes 见 <a href="https://github.com/shetengteng/conduit/releases" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4 hover:text-foreground">GitHub Releases 页</a>。<span data-dmg-status></span></span>
+          <span data-i18n-en>SHA-256 checksums and release notes are listed on the <a href="https://github.com/shetengteng/conduit/releases" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4 hover:text-foreground">GitHub Releases page</a>. <span data-dmg-status></span></span>
         </p>
 
         <!-- Gatekeeper rescue -->
@@ -831,6 +859,94 @@ xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
           }
         });
       });
+
+      // ---------- latest release ----------
+      // 走 GitHub API 探测最新 tag, 把 4 个 .dmg 直链回填到下载按钮; 失败时静默
+      // 保留原有 releases/latest 跳转, 用户路径不退化。
+      (function setupLatestRelease() {
+        const RELEASES_API = 'https://api.github.com/repos/shetengteng/conduit/releases/latest';
+        const cards = document.querySelectorAll('[data-dmg-card]');
+        if (!cards.length) return;
+
+        const status = document.querySelectorAll('[data-dmg-status]');
+        const fmtSize = (bytes) => {
+          if (!bytes || bytes < 0) return '';
+          const mb = bytes / (1024 * 1024);
+          return mb >= 100 ? Math.round(mb) + ' MB' : mb.toFixed(1) + ' MB';
+        };
+        const setStatus = (zh, en) => {
+          // [data-dmg-status] 在 zh / en 两个 span 内各放一份, 自己塞自己语言的内容
+          status.forEach((el) => {
+            const owner = el.closest('[data-i18n-zh],[data-i18n-en]');
+            if (!owner) return;
+            el.textContent = owner.hasAttribute('data-i18n-zh') ? zh : en;
+          });
+        };
+
+        fetch(RELEASES_API, { headers: { Accept: 'application/vnd.github+json' } })
+          .then((r) => {
+            if (!r.ok) throw new Error('http ' + r.status);
+            return r.json();
+          })
+          .then((release) => {
+            const tag = (release && release.tag_name) || '';
+            const version = tag.replace(/^v/, '');
+            if (!version) throw new Error('no tag');
+
+            // 版本号 chip
+            document.querySelectorAll('[data-dmg-version]').forEach((el) => {
+              el.textContent = tag;
+            });
+
+            // 资产索引: prefix + arch -> {url, size}
+            const assets = (release.assets || []).reduce((acc, a) => {
+              const m = /^(Conduit\.(?:Server|Client))_.*_(aarch64|x64)\.dmg$/.exec(a.name);
+              if (m) acc[m[1] + '|' + m[2]] = { url: a.browser_download_url, size: a.size };
+              return acc;
+            }, {});
+
+            let allFound = true;
+            cards.forEach((card) => {
+              ['[data-dmg-primary]', '[data-dmg-secondary]'].forEach((sel) => {
+                const link = card.querySelector(sel);
+                if (!link) return;
+                const key = link.dataset.assetPrefix + '|' + link.dataset.assetArch;
+                const asset = assets[key];
+                if (asset) {
+                  link.href = asset.url;
+                  if (link.hasAttribute('data-dmg-primary')) {
+                    const sizeEl = card.querySelector('[data-dmg-size]');
+                    if (sizeEl) sizeEl.textContent = fmtSize(asset.size);
+                  }
+                } else {
+                  allFound = false;
+                }
+              });
+            });
+
+            const releaseDate = release.published_at
+              ? new Date(release.published_at).toISOString().slice(0, 10)
+              : '';
+            if (allFound) {
+              setStatus(
+                releaseDate ? `最新版本 ${tag},发布于 ${releaseDate}。` : `最新版本 ${tag}。`,
+                releaseDate ? `Latest ${tag}, released ${releaseDate}.` : `Latest ${tag}.`,
+              );
+            } else {
+              setStatus(
+                `检测到 ${tag},部分架构资产缺失,链接已回退到 Releases 页。`,
+                `Detected ${tag}, but some arch assets are missing — falling back to the Releases page.`,
+              );
+            }
+          })
+          .catch(() => {
+            // 静默 - 链接已是 releases/latest, 用户体验不会比改之前差。
+            setStatus(
+              '版本检测失败(可能 GitHub API 限流),请直接打开 Releases 页选择对应架构。',
+              "Couldn't reach GitHub API — open the Releases page to pick your architecture.",
+            );
+          });
+      })();
     })();
   </script>
 </body>
