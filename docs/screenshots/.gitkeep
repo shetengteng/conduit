@@ -1,0 +1,12 @@
+# Screenshots dir
+
+把以下 6 张图放进来（PNG，2x retina 也 OK）：
+
+- 01-server-dashboard.png      Server 主控台（端口 + 状态）
+- 02-client-discovery.png      Client 发现页（mDNS Server 卡片）
+- 03-client-connect-wizard.png Client 5 步连接向导（执行中）
+- 04-client-traffic.png        Client 已连接页 + 流量曲线
+- 05-client-diagnose.png       Client 5 步诊断面板
+- 06-server-tray.png           菜单栏托盘 + 弹出菜单
+
+覆盖文件即可，docs/index.html 已用同名引用。

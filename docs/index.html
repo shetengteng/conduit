@@ -155,6 +155,9 @@
         <a href="#features" class="focus-ring rounded text-muted-foreground hover:text-foreground">
           <span data-i18n-zh>特性</span><span data-i18n-en>Features</span>
         </a>
+        <a href="#screenshots" class="focus-ring rounded text-muted-foreground hover:text-foreground">
+          <span data-i18n-zh>截图</span><span data-i18n-en>Screenshots</span>
+        </a>
         <a href="#architecture" class="focus-ring rounded text-muted-foreground hover:text-foreground">
           <span data-i18n-zh>架构</span><span data-i18n-en>Architecture</span>
         </a>
@@ -197,9 +200,11 @@
         </button>
 
         <a
-          href="#"
+          href="https://github.com/shetengteng/conduit"
+          target="_blank"
+          rel="noopener noreferrer"
           class="focus-ring ml-1 hidden h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted sm:inline-flex"
-          aria-label="GitHub repository (placeholder)">
+          aria-label="Conduit on GitHub">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path
               d="M12 .5C5.65.5.5 5.65.5 12.02c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.55v-1.92c-3.2.7-3.87-1.54-3.87-1.54-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.24 3.34.95.1-.74.4-1.24.73-1.53-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .96-.31 3.15 1.18A10.9 10.9 0 0 1 12 6.81c.97 0 1.95.13 2.86.39 2.18-1.49 3.14-1.18 3.14-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.69 5.39-5.26 5.68.41.36.78 1.07.78 2.16v3.2c0 .31.21.66.8.55A11.5 11.5 0 0 0 23.5 12.02C23.5 5.65 18.35.5 12 .5z" />
@@ -269,8 +274,9 @@
           </a>
         </div>
 
-        <!-- terminal mock -->
-        <div class="mx-auto mt-14 max-w-3xl text-left">
+        <!-- hero showcase: terminal mock + main app screenshot -->
+        <div class="mx-auto mt-14 grid max-w-5xl gap-5 text-left lg:grid-cols-[1fr_1.15fr]">
+          <!-- terminal mock -->
           <div class="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
             <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
               <span class="terminal-dot bg-rose-400/80"></span>
@@ -286,6 +292,27 @@
 <span class="text-sky-500">mDNS</span>    advertised: Conduit on _conduit._tcp.local. @ 192.168.1.14:15723
 <span class="text-emerald-500">[OK]</span>    healthz ready · tray icon up · vpn=on</pre>
           </div>
+
+          <!-- hero screenshot: server dashboard -->
+          <a
+            href="#screenshots"
+            class="group focus-ring relative block overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Conduit Server</span>
+            </div>
+            <picture>
+              <img
+                src="screenshots/01-server-dashboard.png"
+                alt="Conduit Server dashboard"
+                loading="lazy"
+                decoding="async"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — drop docs/screenshots/01-server-dashboard.png'}))"
+                class="block aspect-[16/10] w-full object-cover transition-opacity group-hover:opacity-95" />
+            </picture>
+          </a>
         </div>
       </div>
     </section>
@@ -382,6 +409,167 @@
               <span class="text-foreground">pnpm dev:client</span>
             </div>
           </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============== Screenshots ============== -->
+    <section id="screenshots" class="border-t border-border bg-muted/40">
+      <div class="container max-w-6xl py-20">
+        <div class="mx-auto max-w-2xl text-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            <span data-i18n-zh>截图</span><span data-i18n-en>Screenshots</span>
+          </p>
+          <h2 class="mt-3 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
+            <span data-i18n-zh>每一个关键画面，看一眼就懂。</span>
+            <span data-i18n-en>Every key surface, in one glance.</span>
+          </h2>
+          <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            <span data-i18n-zh>菜单栏托盘 + 桌面控制台。点击图片放大查看。</span>
+            <span data-i18n-en>Menu-bar tray + desktop console. Click any image to zoom in.</span>
+          </p>
+        </div>
+
+        <!-- featured: client traffic chart -->
+        <div class="mt-12">
+          <button
+            type="button"
+            data-lightbox
+            data-src="screenshots/04-client-traffic.png"
+            data-caption-zh="Conduit Client · 已连接 + 1 Hz 流量曲线"
+            data-caption-en="Conduit Client · connected + 1 Hz traffic chart"
+            class="focus-ring group block w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Conduit Client · Connected</span>
+            </div>
+            <picture>
+              <img
+                src="screenshots/04-client-traffic.png"
+                alt="Client connected page with 1 Hz traffic chart"
+                loading="lazy"
+                decoding="async"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/9] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — drop docs/screenshots/04-client-traffic.png'}))"
+                class="block aspect-[16/9] w-full object-cover transition-transform group-hover:scale-[1.01]" />
+            </picture>
+          </button>
+        </div>
+
+        <!-- gallery 4 -->
+        <div class="mt-5 grid gap-5 md:grid-cols-2">
+          <button
+            type="button"
+            data-lightbox
+            data-src="screenshots/02-client-discovery.png"
+            data-caption-zh="Client · mDNS 自动发现"
+            data-caption-en="Client · mDNS auto-discovery"
+            class="focus-ring group block overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Discovery</span>
+            </div>
+            <picture>
+              <img
+                src="screenshots/02-client-discovery.png"
+                alt="Client discovery page with detected server cards"
+                loading="lazy"
+                decoding="async"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — 02-client-discovery.png'}))"
+                class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.01]" />
+            </picture>
+            <div class="border-t border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              <span data-i18n-zh>5–10 秒内自动发现同一 Wi-Fi 下的 Server</span>
+              <span data-i18n-en>Server appears in 5–10s on the same Wi-Fi</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            data-lightbox
+            data-src="screenshots/03-client-connect-wizard.png"
+            data-caption-zh="Client · 5 步连接向导"
+            data-caption-en="Client · 5-step connect wizard"
+            class="focus-ring group block overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Connect</span>
+            </div>
+            <picture>
+              <img
+                src="screenshots/03-client-connect-wizard.png"
+                alt="Client connect wizard 5 steps"
+                loading="lazy"
+                decoding="async"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — 03-client-connect-wizard.png'}))"
+                class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.01]" />
+            </picture>
+            <div class="border-t border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              <span data-i18n-zh>分配端口 → 探活 → 系统代理 → 心跳 → 就绪</span>
+              <span data-i18n-en>Port → probe → proxy → heartbeat → ready</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            data-lightbox
+            data-src="screenshots/05-client-diagnose.png"
+            data-caption-zh="Client · 5 步诊断面板"
+            data-caption-en="Client · 5-step diagnostics"
+            class="focus-ring group block overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Diagnose</span>
+            </div>
+            <picture>
+              <img
+                src="screenshots/05-client-diagnose.png"
+                alt="Client diagnose panel with 5 checks"
+                loading="lazy"
+                decoding="async"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — 05-client-diagnose.png'}))"
+                class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.01]" />
+            </picture>
+            <div class="border-t border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              <span data-i18n-zh>端口 / mDNS / 心跳 / 系统代理 / 出站，一键自检</span>
+              <span data-i18n-en>Port / mDNS / heartbeat / proxy / egress checks</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            data-lightbox
+            data-src="screenshots/06-server-tray.png"
+            data-caption-zh="菜单栏托盘 · 关窗口不退出"
+            data-caption-en="Menu-bar tray · keeps running when closed"
+            class="focus-ring group block overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+              <span class="terminal-dot bg-rose-400/80"></span>
+              <span class="terminal-dot bg-amber-400/80"></span>
+              <span class="terminal-dot bg-emerald-400/80"></span>
+              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Tray</span>
+            </div>
+            <picture>
+              <img
+                src="screenshots/06-server-tray.png"
+                alt="macOS menu-bar tray with Conduit"
+                loading="lazy"
+                decoding="async"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — 06-server-tray.png'}))"
+                class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.01]" />
+            </picture>
+            <div class="border-t border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
+              <span data-i18n-zh>状态颜色一目了然，登录即启动</span>
+              <span data-i18n-en>Colour-coded status, launches on login</span>
+            </div>
+          </button>
         </div>
       </div>
     </section>
@@ -601,7 +789,7 @@
         <div class="mt-12 grid gap-5 md:grid-cols-2">
           <!-- Server DMG -->
           <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
-            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · 30 MB</span>
+            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · x86_64</span>
             <div class="flex items-center gap-3">
               <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -621,27 +809,29 @@
               <span data-i18n-en>Install on the Mac that holds your VPN.</span>
             </p>
             <a
-              href="#"
-              data-disabled
+              href="https://github.com/shetengteng/conduit/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
               class="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background opacity-95 transition-opacity hover:opacity-100 focus-ring"
-              aria-label="Download Conduit Server DMG (link to be configured)">
+              aria-label="Download Conduit Server DMG from GitHub Releases">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
               </svg>
-              <span class="font-mono text-xs">Conduit Server_0.1.0_aarch64.dmg</span>
+              <span class="font-mono text-xs">
+                <span data-i18n-zh>下载 Server.dmg</span>
+                <span data-i18n-en>Download Server.dmg</span>
+              </span>
             </a>
-            <details class="mt-4 text-xs">
-              <summary class="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
-                <span data-i18n-zh>SHA-256 校验</span><span data-i18n-en>SHA-256 checksum</span>
-              </summary>
-              <pre class="mt-2 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">9756df997a467cfcf1057ce945f74edcf4dd2c0895a61644acbacd05126a1553</pre>
-            </details>
+            <p class="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>跳转到 GitHub Releases，按你 Mac 架构选 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code>(M 系列) 或 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code>(Intel)。</span>
+              <span data-i18n-en>Opens GitHub Releases — pick <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code> for Apple Silicon or <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code> for Intel.</span>
+            </p>
           </article>
 
           <!-- Client DMG -->
           <article class="group relative overflow-hidden rounded-xl border border-border bg-card p-7 shadow-soft">
-            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · 30 MB</span>
+            <span class="absolute right-5 top-5 rounded-full border border-border bg-muted px-2.5 py-0.5 font-mono text-[10px] text-muted-foreground">aarch64 · x86_64</span>
             <div class="flex items-center gap-3">
               <span class="grid h-9 w-9 place-items-center rounded-md border border-border bg-muted text-foreground">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -660,28 +850,30 @@
               <span data-i18n-en>Install on every device that wants the shared VPN.</span>
             </p>
             <a
-              href="#"
-              data-disabled
+              href="https://github.com/shetengteng/conduit/releases/latest"
+              target="_blank"
+              rel="noopener noreferrer"
               class="mt-6 inline-flex h-10 w-full items-center justify-center gap-2 rounded-md bg-foreground px-4 text-sm font-medium text-background opacity-95 transition-opacity hover:opacity-100 focus-ring"
-              aria-label="Download Conduit Client DMG (link to be configured)">
+              aria-label="Download Conduit Client DMG from GitHub Releases">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
                    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M12 3v12M5 10l7 7 7-7M5 21h14" />
               </svg>
-              <span class="font-mono text-xs">Conduit Client_0.1.0_aarch64.dmg</span>
+              <span class="font-mono text-xs">
+                <span data-i18n-zh>下载 Client.dmg</span>
+                <span data-i18n-en>Download Client.dmg</span>
+              </span>
             </a>
-            <details class="mt-4 text-xs">
-              <summary class="cursor-pointer text-muted-foreground transition-colors hover:text-foreground">
-                <span data-i18n-zh>SHA-256 校验</span><span data-i18n-en>SHA-256 checksum</span>
-              </summary>
-              <pre class="mt-2 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground">165a495b15539c1bef1c7252f87326669bb128e28c361ab62bee417f733ae1c1</pre>
-            </details>
+            <p class="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              <span data-i18n-zh>跳转到 GitHub Releases，按你 Mac 架构选 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code>(M 系列) 或 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code>(Intel)。</span>
+              <span data-i18n-en>Opens GitHub Releases — pick <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">aarch64</code> for Apple Silicon or <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">x86_64</code> for Intel.</span>
+            </p>
           </article>
         </div>
 
         <p class="mt-4 text-center text-xs text-muted-foreground">
-          <span data-i18n-zh>下载链接将在 GitHub Release 上线后填上 —— 当前可在本仓库 dist/ 目录里取本地构建产物。</span>
-          <span data-i18n-en>Direct links will be wired up after the GitHub Release is published — for now grab them from dist/ in this repo.</span>
+          <span data-i18n-zh>SHA-256 校验和与 release notes 见 <a href="https://github.com/shetengteng/conduit/releases" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4 hover:text-foreground">GitHub Releases 页</a>。</span>
+          <span data-i18n-en>SHA-256 checksums and release notes are listed on the <a href="https://github.com/shetengteng/conduit/releases" target="_blank" rel="noopener noreferrer" class="underline underline-offset-4 hover:text-foreground">GitHub Releases page</a>.</span>
         </p>
 
         <!-- Gatekeeper rescue -->
@@ -1002,16 +1194,68 @@ $ ./scripts/e2e.sh                <span class="text-muted-foreground/70"># 11s s
         applyTheme(root.classList.contains('dark') ? 'light' : 'dark');
       });
 
-      // ---------- placeholder download links ----------
-      document.querySelectorAll('a[data-disabled]').forEach((a) => {
-        a.addEventListener('click', (e) => {
-          e.preventDefault();
-          const msg = root.getAttribute('lang') === 'zh-CN'
-            ? '下载链接将在 GitHub Release 上线后填上 —— 当前可在仓库的 dist/ 目录里取本地构建产物。'
-            : 'Download link will be wired up after the GitHub Release. For now grab the artifact from dist/ in this repo.';
-          alert(msg);
+      // ---------- screenshot lightbox ----------
+      (function setupLightbox() {
+        const triggers = document.querySelectorAll('[data-lightbox]');
+        if (!triggers.length) return;
+
+        const overlay = document.createElement('div');
+        overlay.className =
+          'fixed inset-0 z-50 hidden items-center justify-center bg-black/80 p-6 backdrop-blur-sm';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.innerHTML = `
+          <button type="button" data-close
+            class="absolute right-4 top-4 inline-grid h-9 w-9 place-items-center rounded-md border border-white/20 bg-black/40 text-white transition-colors hover:bg-black/60 focus-ring"
+            aria-label="Close">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+          <figure class="flex max-h-full max-w-6xl flex-col items-center gap-3">
+            <img data-lightbox-img alt="" class="max-h-[80vh] w-auto rounded-lg shadow-2xl" />
+            <figcaption data-lightbox-caption class="font-mono text-xs text-white/70"></figcaption>
+          </figure>
+        `;
+        document.body.appendChild(overlay);
+
+        const imgEl = overlay.querySelector('[data-lightbox-img]');
+        const captionEl = overlay.querySelector('[data-lightbox-caption]');
+
+        function open(src, captionZh, captionEn) {
+          imgEl.src = src;
+          imgEl.alt = (root.getAttribute('lang') === 'zh-CN' ? captionZh : captionEn) || '';
+          captionEl.textContent =
+            root.getAttribute('lang') === 'zh-CN' ? captionZh : captionEn;
+          overlay.classList.remove('hidden');
+          overlay.classList.add('flex');
+          document.body.style.overflow = 'hidden';
+        }
+        function close() {
+          overlay.classList.add('hidden');
+          overlay.classList.remove('flex');
+          imgEl.src = '';
+          document.body.style.overflow = '';
+        }
+
+        triggers.forEach((t) => {
+          t.addEventListener('click', () => {
+            open(
+              t.dataset.src,
+              t.dataset.captionZh || '',
+              t.dataset.captionEn || ''
+            );
+          });
         });
-      });
+
+        overlay.addEventListener('click', (e) => {
+          if (e.target === overlay || e.target.closest('[data-close]')) close();
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !overlay.classList.contains('hidden')) close();
+        });
+      })();
 
       // ---------- copy buttons ----------
       document.querySelectorAll('.copy-btn').forEach((btn) => {
