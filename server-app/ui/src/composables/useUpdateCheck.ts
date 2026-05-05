@@ -14,6 +14,7 @@
  *   - 不做"打开浏览器跳转"(交给调用方)
  *   - 不做后台轮询 / 定时检查(用户主动点 button 才查)
  */
+import { invoke } from "@tauri-apps/api/core";
 
 const GITHUB_OWNER = "shetengteng";
 const GITHUB_REPO = "conduit";
@@ -149,7 +150,6 @@ export async function openExternal(url: string): Promise<boolean> {
   try {
     // 优先走 Tauri (v2 invoke + commands.rs::open_external) —— 系统默认浏览器,
     // 不会被 webview 拦截。失败说明在 dev 浏览器预览,降级 window.open。
-    const { invoke } = await import("@tauri-apps/api/core");
     await invoke("open_external", { url });
     return true;
   } catch {

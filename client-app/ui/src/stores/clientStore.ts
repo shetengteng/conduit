@@ -11,6 +11,7 @@ import type { HealthzResponse } from "../types/client";
 
 import { ApiError } from "../api/client";
 import { ClientApi } from "../api/client-api";
+import { useToast } from "../composables/useToast";
 
 interface ClientState {
   healthz: HealthzResponse | null;
@@ -57,7 +58,6 @@ async function refresh(): Promise<void> {
   state.error = msg;
   if (!wasError) {
     try {
-      const { useToast } = await import("../composables/useToast");
       useToast().error("无法连接到客户端服务", { detail: msg });
     } catch (_) {
       /* toast 不可用时静默 */

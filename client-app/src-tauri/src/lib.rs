@@ -42,7 +42,7 @@ pub fn run() {
     let sidecar_for_runevent = sidecar.clone();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(app_state)
         .manage(sidecar.clone())
         .invoke_handler(tauri::generate_handler![

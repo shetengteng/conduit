@@ -12,6 +12,7 @@
  *   - 网络错误 / 解析失败 / 限流 → 由调用方 toast warn
  *   - 不在这里做 toast (文案是 i18n)
  */
+import { invoke } from "@tauri-apps/api/core";
 
 const GITHUB_OWNER = "shetengteng";
 const GITHUB_REPO = "conduit";
@@ -125,7 +126,6 @@ export async function checkForUpdate(
 
 export async function openExternal(url: string): Promise<boolean> {
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
     await invoke("open_external", { url });
     return true;
   } catch {

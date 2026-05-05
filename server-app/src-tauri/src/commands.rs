@@ -1,5 +1,5 @@
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::error::ConduitError;
 use crate::state::{AppRuntime, AppState};
@@ -11,8 +11,8 @@ pub fn get_runtime(state: State<'_, AppState>) -> AppRuntime {
 
 #[tauri::command]
 pub async fn open_external(app: AppHandle, url: String) -> Result<(), ConduitError> {
-    app.shell()
-        .open(&url, None)
+    app.opener()
+        .open_url(url, None::<&str>)
         .map_err(|e| ConduitError::Internal(e.to_string()))?;
     Ok(())
 }

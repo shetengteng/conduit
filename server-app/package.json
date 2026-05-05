@@ -1,6 +1,6 @@
 {
   "name": "@conduit/server-app",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Conduit Server desktop app: bundles Tauri shell + Vue UI + Python core",
   "type": "module",

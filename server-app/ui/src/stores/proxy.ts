@@ -17,6 +17,8 @@ import type {
 
 import { ApiError } from "../api/client";
 import { ServerApi } from "../api/server";
+import { useToast } from "../composables/useToast";
+import { i18n } from "../i18n";
 
 interface ProxyState {
   status: ServerStatus | null;
@@ -78,10 +80,6 @@ async function refresh(): Promise<void> {
   state.error = msg;
   if (!wasError) {
     try {
-      const [{ useToast }, { i18n }] = await Promise.all([
-        import("../composables/useToast"),
-        import("../i18n"),
-      ]);
       const title = i18n.global.t("toast.proxyConnectFail");
       useToast().error(title, { detail: msg });
     } catch (_) {

@@ -16,27 +16,11 @@
  *   直接把 phase 置为 "Ready"，让前端可以独立 mock 调试。
  */
 import { onMounted, onUnmounted } from "vue";
+import { listen } from "@tauri-apps/api/event";
 
 import { uiStore } from "../stores/ui";
 import { getRuntime } from "../api/runtime";
 import type { LifecyclePhase } from "../types/proxy";
-
-interface TauriEventApi {
-  listen: (
-    event: string,
-    handler: (e: { payload: unknown }) => void,
-  ) => Promise<() => void>;
-}
-
-async function getTauriEvent(): Promise<TauriEventApi | null> {
-  if (typeof window === "undefined") return null;
-  if (!("__TAURI_INTERNALS__" in window)) return null;
-  try {
-    return (await import("@tauri-apps/api/event")) as unknown as TauriEventApi;
-  } catch (_) {
-    return null;
-  }
-}
 
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -82,22 +66,22 @@ export function useBootPhase() {
       return;
     }
 
-    const ev = await getTauriEvent();
-    if (!ev) {
+    try {
+      unlisteners.push(
+        await listen("boot:phase", (e) => {
+          const next = normalisePhase(e.payload);
+          if (!next) return;
+          applyPhase(next);
+        }),
+        await listen("boot:error", (e) => {
+          applyPhase("Failed", String(e.payload ?? "unknown"));
+        }),
+      );
+    } catch (err) {
+      console.warn("[useBootPhase] listen failed", err);
       applyPhase("Ready");
       return;
     }
-
-    unlisteners.push(
-      await ev.listen("boot:phase", (e) => {
-        const next = normalisePhase(e.payload);
-        if (!next) return;
-        applyPhase(next);
-      }),
-      await ev.listen("boot:error", (e) => {
-        applyPhase("Failed", String(e.payload ?? "unknown"));
-      }),
-    );
 
     try {
       const rt = await getRuntime();

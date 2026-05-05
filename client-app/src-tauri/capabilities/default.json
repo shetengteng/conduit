@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for Conduit Client: window mgmt, event listen, IPC commands, shell open.",
+  "description": "Default capability for Conduit Client: window mgmt, event listen, IPC commands, opener for external URLs.",
   "windows": ["main"],
   "permissions": [
     "core:default",
@@ -9,6 +9,6 @@
     "core:webview:default",
     "core:event:default",
     "core:app:allow-version",
-    "shell:allow-open"
+    "opener:default"
   ]
 }

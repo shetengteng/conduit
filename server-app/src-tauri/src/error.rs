@@ -10,6 +10,7 @@ pub enum ConduitError {
     HealthzTimeout(u64),
 
     #[error("port allocation failed")]
+    #[allow(dead_code)]
     PortAlloc,
 
     #[error("io error: {0}")]
