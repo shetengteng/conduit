@@ -1,6 +1,6 @@
 [package]
 name = "conduit-client"
-version = "0.1.3"
+version = "0.1.4"
 description = "Conduit Client desktop application (smart local proxy, macOS only in v0.1)"
 authors = ["TerrellShe"]
 edition = "2021"

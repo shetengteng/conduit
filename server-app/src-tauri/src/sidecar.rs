@@ -117,14 +117,6 @@ impl SidecarHandle {
             }
         }
     }
-
-    pub async fn is_alive(&self) -> bool {
-        let mut guard = self.child.lock().await;
-        match guard.as_mut() {
-            Some(c) => matches!(c.try_wait(), Ok(None)),
-            None => false,
-        }
-    }
 }
 
 /// 找到 PyInstaller onedir 产出的 sidecar 主二进制。
