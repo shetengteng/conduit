@@ -531,23 +531,23 @@
             </span>
             <div class="flex-1">
               <h3 class="font-display text-sm font-semibold">
-                <span data-i18n-zh>第一次打开提示「已损坏」？跑这一行</span>
-                <span data-i18n-en>"Damaged" warning on first launch? Run this</span>
+                <span data-i18n-zh>打不开 / 提示「已损坏」或「无法验证」？</span>
+                <span data-i18n-en>"Damaged" or "cannot be verified" on first launch?</span>
               </h3>
               <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
-                <span data-i18n-zh>DMG 暂未 Apple 公证，拖进 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/Applications</code> 后在终端跑一次：</span>
-                <span data-i18n-en>DMGs aren't Apple-notarized yet. After dragging to <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/Applications</code>, run once in Terminal:</span>
+                <span data-i18n-zh>DMG 暂未 Apple 公证，拖进 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/Applications</code> 后在终端跑这条（注意 <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">sudo</code>，会要求输入密码）：</span>
+                <span data-i18n-en>DMGs aren't Apple-notarized yet. After dragging to <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">/Applications</code>, run this in Terminal (note the <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">sudo</code> — it'll ask for your password):</span>
               </p>
             </div>
           </div>
           <div class="relative mt-4">
-            <pre class="overflow-x-auto rounded-md bg-muted px-4 py-3 pr-14 font-mono text-[12px] leading-relaxed text-foreground">xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
-xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"</pre>
+            <pre class="overflow-x-auto rounded-md bg-muted px-4 py-3 pr-14 font-mono text-[12px] leading-relaxed text-foreground">sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+sudo xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"</pre>
             <button
               type="button"
               class="copy-btn focus-ring absolute right-2 top-2 inline-flex items-center gap-1 rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-muted-foreground transition-colors hover:bg-muted"
-              data-copy='xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
-xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
+              data-copy='sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+sudo xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
               aria-label="Copy rescue command">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -557,6 +557,10 @@ xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
               <span class="copy-label">copy</span>
             </button>
           </div>
+          <p class="mt-3 text-xs leading-relaxed text-muted-foreground">
+            <span data-i18n-zh>仍报错（macOS 15+ 可能 SIP 拦 xattr）？打开 <strong class="font-semibold text-foreground">系统设置 → 隐私与安全性</strong>，滚到底部找到「Conduit Server 已被阻止使用」，点 <strong class="font-semibold text-foreground">仍要打开</strong> 即可。Client 同样操作一次。</span>
+            <span data-i18n-en>Still blocked (macOS 15+ may guard xattr via SIP)? Open <strong class="font-semibold text-foreground">System Settings → Privacy & Security</strong>, scroll to the bottom to "Conduit Server was blocked", and click <strong class="font-semibold text-foreground">Open Anyway</strong>. Repeat for Client.</span>
+          </p>
         </div>
       </div>
     </section>

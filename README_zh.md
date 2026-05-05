@@ -77,11 +77,15 @@ DMG 是 **ad-hoc 签名 + 尚未 Apple 公证**（等 Apple Developer ID 到位�
 #### 方案 B —— 移除 quarantine 属性  *（推荐，复制 / 重新下载后用这条）*
 
 ```bash
-xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
-xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"
+sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+sudo xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"
 ```
 
+注意 `sudo`，会要求输入开机密码。**不带 sudo** 会报 `Operation not permitted` —— `/Applications/` 下 .app 的 xattr 在 macOS 上需要管理员权限。
+
 执行完后双击就能正常打开。如果你重新下载或替换了 .app，再跑一次就好。
+
+> macOS 15+ 上偶发 SIP 仍拦截 `xattr`。若仍报错，直接走方案 C。
 
 #### 方案 C —— 系统设置里手动放行  *（macOS 13+）*
 
@@ -214,7 +218,7 @@ dist/client/Conduit Client.app
 dist/client/Conduit Client_0.1.0_aarch64.dmg     ~30 MB
 ```
 
-> 同样存在 [§ 2.3](#23--未签名--暂未公证--gatekeeper-补救命令) 的 Gatekeeper 问题。脚本结尾会提示对方需要右键 → 打开 *或* 跑 `xattr -dr com.apple.quarantine`。配好 Apple Developer ID 之后这些都可以省掉，完整公证流程见 [打包与发布说明](./design/2026-05-03-1-Conduit-打包与发布说明.md)。
+> 同样存在 [§ 2.3](#23--未签名--暂未公证--gatekeeper-补救命令) 的 Gatekeeper 问题。脚本结尾会提示对方需要右键 → 打开 *或* 跑 `sudo xattr -dr com.apple.quarantine`。配好 Apple Developer ID 之后这些都可以省掉，完整公证流程见 [打包与发布说明](./design/2026-05-03-1-Conduit-打包与发布说明.md)。
 
 ---
 
@@ -258,7 +262,7 @@ conduit/
 
 | 现象 | 处理 |
 |---|---|
-| 第一次打开提示「`Conduit Server` 已损坏，无法打开」 | 未签名构建被 Gatekeeper 拦截。跑 `xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"`（Client 同理）。完整方案见 [§ 2.3](#23--未签名--暂未公证--gatekeeper-补救命令)。|
+| 第一次打开提示「`Conduit Server` 已损坏，无法打开」 | 未签名构建被 Gatekeeper 拦截。跑 `sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"`（Client 同理）。仍报 `Operation not permitted` 走 [§ 2.3 方案 C](#23--未签名--暂未公证--gatekeeper-补救命令)（系统设置里手动放行）。|
 | Client「发现」页一直空 | 系统设置 → 隐私与安全 → 本地网络 → 启用 client-app。详见 [验收指南 Q1](./design/2026-05-02-1-Conduit-验收指南.md)。|
 | 连接卡在第 1 步 | Server 端口被防火墙拦截：`nc -zv <host> <port>` 验证。|
 | 出现「未自动切换系统代理」琥珀横幅 | macOS 13+ 切换系统代理需要 admin 权限。要么浏览器手动配 SOCKS5，要么 sudo 启动 Conduit（不推荐）。|

@@ -78,11 +78,15 @@ Pick **one** of the workarounds below.
 
 ```bash
 # After dragging into /Applications:
-xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
-xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"
+sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"
+sudo xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"
 ```
 
+Note the `sudo` — it'll prompt for your login password. **Without sudo** you'll get `Operation not permitted` because the xattr on `.app` bundles under `/Applications/` requires admin rights on macOS.
+
 That's it — double-click works normally afterwards. Re-run the command if you ever re-download or replace the app.
+
+> macOS 15+ occasionally still blocks `xattr` via SIP. If it fails, jump straight to Option C.
 
 #### Option C — Whitelist in System Settings  *(macOS 13+)*
 
@@ -214,7 +218,7 @@ dist/client/Conduit Client.app
 dist/client/Conduit Client_0.1.0_aarch64.dmg     ~30 MB
 ```
 
-> Same Gatekeeper caveat as [§ 2.3](#23--unsigned--not-yet-notarized--fix-gatekeeper). The end-of-script line tells you the recipient must right-click → Open *or* run the `xattr -dr com.apple.quarantine` command. Apple Developer ID + `xcrun notarytool submit` will remove this once configured — see the [packaging guide](./design/2026-05-03-1-Conduit-打包与发布说明.md) for the full flow.
+> Same Gatekeeper caveat as [§ 2.3](#23--unsigned--not-yet-notarized--fix-gatekeeper). The end-of-script line tells you the recipient must right-click → Open *or* run the `sudo xattr -dr com.apple.quarantine` command. Apple Developer ID + `xcrun notarytool submit` will remove this once configured — see the [packaging guide](./design/2026-05-03-1-Conduit-打包与发布说明.md) for the full flow.
 
 ---
 
@@ -258,7 +262,7 @@ conduit/
 
 | Symptom | Fix |
 |---|---|
-| `"Conduit Server" is damaged and can't be opened` on first launch | Unsigned-build Gatekeeper. Run `xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"` (and same for Client). Full options in [§ 2.3](#23--unsigned--not-yet-notarized--fix-gatekeeper). |
+| `"Conduit Server" is damaged and can't be opened` on first launch | Unsigned-build Gatekeeper. Run `sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"` (and same for Client). If you still get `Operation not permitted`, use [§ 2.3 Option C](#23--unsigned--not-yet-notarized--fix-gatekeeper) (whitelist in System Settings). |
 | Client "Discovery" page stays empty | Settings → Privacy & Security → Local Network → enable client-app. See [acceptance guide Q1](./design/2026-05-02-1-Conduit-验收指南.md). |
 | Connect stalls on step 1 | Server port blocked by firewall: `nc -zv <host> <port>` to verify. |
 | Amber banner: "system proxy not auto-switched" | macOS 13+ needs admin to call `networksetup`. Either configure SOCKS5 manually in your browser, or launch Conduit with sudo (not recommended). |

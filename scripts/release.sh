@@ -119,8 +119,10 @@ if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "${APPLE_ID:-}" ]]; then
   # done
 else
   echo "ℹ skipping notarization (set APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID to enable)"
-  echo "  未公证的 .dmg 用户首次双击会被 macOS Gatekeeper 拦截,"
-  echo "  解决: 在 Finder 里 Ctrl+Click → 打开 → 确认。"
+  echo "  未公证的 .dmg 首次双击会被 macOS Gatekeeper 拦截。解决（任选一种）:"
+  echo "    a) 终端: sudo xattr -dr com.apple.quarantine \"/Applications/Conduit Server.app\""
+  echo "    b) Finder Ctrl+Click .app → 打开 → 确认 (单次)"
+  echo "    c) 系统设置 → 隐私与安全性 → 滚到底部点 仍要打开 (macOS 15+ 推荐)"
 fi
 
 echo ""
