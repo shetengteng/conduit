@@ -204,6 +204,87 @@ def test_service_info_to_server_handles_ipv6_only_skips(discoverer):
     assert discoverer._service_info_to_server(info) is None
 
 
+def test_service_info_prefers_lan_over_loopback_in_same_record(discoverer):
+    """单个 ServiceInfo 同时携带 127.x + 192.168.x 时,选 LAN。
+
+    回归保护:zeroconf 在 multi-iface 场景下偶尔会把多个 IPv4 一次性塞进
+    addresses;旧实现 break first 可能选到 127.0.0.1。
+    """
+    info = _FakeServiceInfo(
+        name="Conduit on dual._conduit._tcp.local.",
+        addresses=[
+            socket.inet_aton("127.0.0.1"),       # loopback
+            socket.inet_aton("192.168.1.20"),    # LAN, 应当优先
+        ],
+        port=8080,
+        properties={
+            b"name": b"dual",
+            b"port": b"8080",
+            b"socks": b"1080",
+            b"api": b"9090",
+            b"vpn": b"on",
+            b"version": b"0.1.0",
+        },
+    )
+    ds = discoverer._service_info_to_server(info)
+    assert ds is not None
+    assert ds.host == "192.168.1.20"
+    assert ds.server_id == "dual@192.168.1.20:8080"
+
+
+def test_prefer_host_ranks_lan_above_loopback(discoverer):
+    """同名 + 同端口的 LAN entry 优先于 loopback entry。"""
+    lan = DiscoveredServer(
+        server_id="x@192.168.1.14:8080",
+        name="x", host="192.168.1.14", port=8080, socks=1, api=2,
+        vpn=True, version="0.1.0", pac="/proxy.pac",
+        source="mdns", last_seen_at=1.0, healthy=True,
+    )
+    loop = DiscoveredServer(
+        server_id="x@127.0.0.1:8080",
+        name="x", host="127.0.0.1", port=8080, socks=1, api=2,
+        vpn=True, version="0.1.0", pac="/proxy.pac",
+        source="mdns", last_seen_at=2.0, healthy=True,
+    )
+    # _prefer_host(lan, loop) → lan(LAN 排第一档)
+    assert Discoverer._prefer_host(lan, loop) is lan
+    # _prefer_host(loop, lan) → lan
+    assert Discoverer._prefer_host(loop, lan) is lan
+    # 同档时取 b(更新)
+    other_lan = DiscoveredServer(
+        server_id="x@10.0.0.5:8080",
+        name="x", host="10.0.0.5", port=8080, socks=1, api=2,
+        vpn=True, version="0.1.0", pac="/proxy.pac",
+        source="mdns", last_seen_at=3.0, healthy=True,
+    )
+    assert Discoverer._prefer_host(lan, other_lan) is other_lan
+
+
+def test_prefer_host_172_private_range(discoverer):
+    """172.16.0.0/12 是 RFC1918 私网,应当排在第 0 档。172.32+ 不是,排第 1 档。"""
+    private_172 = DiscoveredServer(
+        server_id="x@172.20.5.5:80", name="x", host="172.20.5.5", port=80,
+        socks=0, api=0, vpn=False, version="", pac="/", source="mdns",
+        last_seen_at=0, healthy=True,
+    )
+    public_172 = DiscoveredServer(
+        server_id="x@172.40.5.5:80", name="x", host="172.40.5.5", port=80,
+        socks=0, api=0, vpn=False, version="", pac="/", source="mdns",
+        last_seen_at=0, healthy=True,
+    )
+    loopback = DiscoveredServer(
+        server_id="x@127.0.0.1:80", name="x", host="127.0.0.1", port=80,
+        socks=0, api=0, vpn=False, version="", pac="/", source="mdns",
+        last_seen_at=0, healthy=True,
+    )
+    # 私网 172 优先于 loopback
+    assert Discoverer._prefer_host(private_172, loopback) is private_172
+    # 公网 172 优先于 loopback
+    assert Discoverer._prefer_host(public_172, loopback) is public_172
+    # 私网 172 优先于公网 172
+    assert Discoverer._prefer_host(public_172, private_172) is private_172
+
+
 # ---------------------------------------------------------------------------
 # snapshot 合并 online / history 的排序
 # ---------------------------------------------------------------------------

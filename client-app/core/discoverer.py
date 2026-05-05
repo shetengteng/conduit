@@ -251,10 +251,59 @@ class Discoverer:
         ds = self._service_info_to_server(info)
         if ds is None:
             return
+        # 同名 + 同端口 去重 —— zeroconf 在 client 和 server 跑在同一台 mac
+        # 时,可能通过 loopback (127.x) 和 LAN (192.168.x) 两条路径分别推
+        # 一次 add_service 回调,各自的 ServiceInfo 只带一个 host。结果就是
+        # online dict 出现两条 "HW0023148@127.0.0.1:18367" + "HW0023148@192.168.1.14:18367"。
+        # 这里做"同 name+port"折叠,LAN > 非 loopback > loopback,保留最优。
+        existing = self._find_same_endpoint(ds.name, ds.port)
+        if existing is not None and existing.server_id != ds.server_id:
+            keep = self._prefer_host(existing, ds)
+            drop = ds if keep is existing else existing
+            # 把 dict 里 drop 的那条删掉,确保 online 里同 name+port 永远只剩 1 条
+            self._state.online.pop(drop.server_id, None)
+            log.debug(
+                "discoverer dedup: keep %s, drop %s",
+                keep.server_id, drop.server_id,
+            )
+            if keep is existing:
+                # 远端送来的是次优 host(比如 127.x),existing 已经是优选,直接返回
+                return
         self._state.online[ds.server_id] = ds
         log.info("server discovered: %s (vpn=%s, version=%s)",
                  ds.server_id, ds.vpn, ds.version)
         self.bus.publish("server_discovered", _server_to_payload(ds))
+
+    def _find_same_endpoint(
+        self, name: str, port: int,
+    ) -> Optional[DiscoveredServer]:
+        for ds in self._state.online.values():
+            if ds.name == name and ds.port == port:
+                return ds
+        return None
+
+    @staticmethod
+    def _prefer_host(a: DiscoveredServer, b: DiscoveredServer) -> DiscoveredServer:
+        """优选 LAN IP > 其它 > loopback。两侧同档时取后者(更新鲜)。"""
+        def _rank(ip: str) -> int:
+            if ip.startswith("192.168.") or ip.startswith("10."):
+                return 0
+            if ip.startswith("172."):
+                try:
+                    second = int(ip.split(".")[1])
+                    if 16 <= second <= 31:
+                        return 0
+                except (IndexError, ValueError):
+                    pass
+            if ip.startswith("127."):
+                return 2
+            return 1
+        ra, rb = _rank(a.host), _rank(b.host)
+        if ra < rb:
+            return a
+        if rb < ra:
+            return b
+        return b
 
     async def _on_service_removed(self, name: str) -> None:
         # name 是完整 instance name（例如 "Conduit on host._conduit._tcp.local."）
@@ -278,15 +327,33 @@ class Discoverer:
         if not info.addresses:
             log.debug("ignoring %s: no addresses", info.name)
             return None
-        # IPv4 优先（v0.1 仅支持 LAN IPv4）
-        host: Optional[str] = None
+        # IPv4 优先 + 偏向 LAN —— zeroconf 在多网口同机器场景下,addresses
+        # 可能同时包含 loopback (127.x) 和 LAN (192.168.x / 10.x / 172.16-31)。
+        # 我们偏向真正的 LAN 地址,这样从同一台 mac 跑 client + server 时,
+        # 不会把 server discover 成两条 (一条 127.0.0.1 + 一条 192.168.x)。
+        candidates: list[str] = []
         for addr in info.addresses:
             if len(addr) == 4:
-                host = socket.inet_ntoa(addr)
-                break
-        if host is None:
+                candidates.append(socket.inet_ntoa(addr))
+        if not candidates:
             log.debug("ignoring %s: no IPv4 address", info.name)
             return None
+        # 优先级:LAN > 其它非 loopback > loopback
+        def _ip_priority(ip: str) -> int:
+            if ip.startswith("192.168.") or ip.startswith("10."):
+                return 0
+            if ip.startswith("172."):
+                try:
+                    second = int(ip.split(".")[1])
+                    if 16 <= second <= 31:
+                        return 0
+                except (IndexError, ValueError):
+                    pass
+            if ip.startswith("127."):
+                return 2
+            return 1
+        candidates.sort(key=_ip_priority)
+        host = candidates[0]
 
         props = info.properties or {}
 

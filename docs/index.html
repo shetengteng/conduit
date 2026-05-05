@@ -270,46 +270,6 @@
           </a>
         </div>
 
-        <!-- hero showcase: terminal mock + main app screenshot -->
-        <div class="mx-auto mt-14 grid max-w-5xl gap-5 text-left lg:grid-cols-[1fr_1.15fr]">
-          <!-- terminal mock -->
-          <div class="overflow-hidden rounded-xl border border-border bg-card shadow-soft">
-            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
-              <span class="terminal-dot bg-rose-400/80"></span>
-              <span class="terminal-dot bg-amber-400/80"></span>
-              <span class="terminal-dot bg-emerald-400/80"></span>
-              <span class="ml-2 font-mono text-[11px] text-muted-foreground">pnpm dev:server</span>
-            </div>
-            <pre class="overflow-x-auto px-5 py-5 text-[12.5px] leading-relaxed text-muted-foreground"><span class="text-foreground">$</span> pnpm dev:server
-<span class="text-emerald-500">[INFO]</span>  boot http=15723 socks5=22142 api=16983
-<span class="text-emerald-500">[INFO]</span>  HTTP   listening on 0.0.0.0:15723
-<span class="text-emerald-500">[INFO]</span>  SOCKS5 listening on 0.0.0.0:22142
-<span class="text-emerald-500">[INFO]</span>  control API listening on 127.0.0.1:16983
-<span class="text-sky-500">mDNS</span>    advertised: Conduit on _conduit._tcp.local. @ 192.168.1.14:15723
-<span class="text-emerald-500">[OK]</span>    healthz ready · tray icon up · vpn=on</pre>
-          </div>
-
-          <!-- hero screenshot: server dashboard -->
-          <a
-            href="#screenshots"
-            class="group focus-ring relative block overflow-hidden rounded-xl border border-border bg-card shadow-soft transition-transform hover:-translate-y-0.5">
-            <div class="flex items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
-              <span class="terminal-dot bg-rose-400/80"></span>
-              <span class="terminal-dot bg-amber-400/80"></span>
-              <span class="terminal-dot bg-emerald-400/80"></span>
-              <span class="ml-2 font-mono text-[11px] text-muted-foreground">Conduit Server</span>
-            </div>
-            <picture>
-              <img
-                src="screenshots/01-server-dashboard.png"
-                alt="Conduit Server dashboard"
-                loading="lazy"
-                decoding="async"
-                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground',textContent:'Screenshot pending — drop docs/screenshots/01-server-dashboard.png'}))"
-                class="block aspect-[16/10] w-full object-cover transition-opacity group-hover:opacity-95" />
-            </picture>
-          </a>
-        </div>
       </div>
     </section>
 
@@ -380,19 +340,23 @@
 
         <div class="mx-auto mt-12 max-w-5xl">
           <button
+            id="hero-screenshot"
             type="button"
             data-lightbox
-            data-src="screenshots/01-server-dashboard.png"
+            data-src-zh="screenshots/ds_zh.png"
+            data-src-en="screenshots/ds_en.png"
+            data-src="screenshots/ds_zh.png"
             data-caption-zh="Conduit Server · 主控台"
             data-caption-en="Conduit Server · dashboard"
             class="focus-ring group block w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
             <picture>
               <img
-                src="screenshots/01-server-dashboard.png"
+                id="hero-screenshot-img"
+                src="screenshots/ds_zh.png"
                 alt="Conduit Server dashboard"
                 loading="lazy"
                 decoding="async"
-                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-sm text-muted-foreground',textContent:'Screenshot pending — 01-server-dashboard.png'}))"
+                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-sm text-muted-foreground',textContent:'Screenshot pending'}))"
                 class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.005]" />
             </picture>
           </button>
@@ -710,6 +674,17 @@ xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
         root.setAttribute('lang', lang);
         langLabel.textContent = lang === 'zh-CN' ? 'EN' : '中文';
         try { localStorage.setItem(STORAGE_LANG, lang); } catch (e) {}
+
+        // Hero screenshot: 中英文版本切换。data-src 同步以让 lightbox 放大对的语言。
+        const heroBtn = document.getElementById('hero-screenshot');
+        const heroImg = document.getElementById('hero-screenshot-img');
+        if (heroBtn && heroImg) {
+          const src = lang === 'zh-CN' ? heroBtn.dataset.srcZh : heroBtn.dataset.srcEn;
+          if (src) {
+            heroImg.src = src;
+            heroBtn.dataset.src = src;
+          }
+        }
       }
 
       const savedLang = (() => {
