@@ -79,14 +79,24 @@ export function formatTime(ts: number): string {
  * - 30s ~ 60s 显示秒数(开始可疑);
  * - ≥ 60s 转为分钟; ≥ 1h 转为小时;
  * - 兜底 "—"。
+ *
+ * 由于本函数会在 sort/render 高频调用,这里直接用 i18n.global.t 同步取文案,
+ * 避免每个调用方都注入 useI18n。
  */
 export function formatIdleSec(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
   const s = Math.floor(seconds);
-  if (s <= 30) return "在线";
-  if (s < 60) return `${s}s 前`;
+  // 静态 import 会形成 i18n -> format -> i18n 的循环;改为 lazy require 风格的运行期引用
+  const i18n = (globalThis as unknown as { __conduit_i18n__?: {
+    global: { t: (key: string, named?: Record<string, unknown>) => string };
+  } }).__conduit_i18n__;
+  const t = i18n
+    ? i18n.global.t.bind(i18n.global)
+    : (key: string) => key;
+  if (s <= 30) return t("format.idleOnline");
+  if (s < 60) return t("format.idleSecAgo", { n: s });
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m} 分钟前`;
+  if (m < 60) return t("format.idleMinAgo", { n: m });
   const h = Math.floor(m / 60);
-  return `${h} 小时前`;
+  return t("format.idleHourAgo", { n: h });
 }

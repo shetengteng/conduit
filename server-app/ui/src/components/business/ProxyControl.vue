@@ -9,12 +9,14 @@
  * 引擎卡只承载流量/客户端 KPI。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import StatusBadge from '../layout/StatusBadge.vue'
 import { proxyStore } from '@/stores/proxy'
 import { trafficStore } from '@/stores/traffic'
 import { formatBpsValue, formatBpsUnit, formatUptimeShort } from '@/utils/format'
 
+const { t } = useI18n()
 const status = computed(() => proxyStore.state.status)
 const loading = computed(() => proxyStore.state.loading && !status.value)
 
@@ -55,51 +57,60 @@ const liveUptimeSec = computed(() => {
  */
 const kpis = computed(() => {
   const s = status.value
-  const t = totalBps.value
+  const tb = totalBps.value
   const activeCount = proxyStore.activePeerCount.value
   const passiveCount = proxyStore.passiveOnlyPeerCount.value
   const totalCount = proxyStore.uniquePeerCount.value
   let clientsSub: string
   if (totalCount === 0) {
-    clientsSub = '等待客户端接入'
+    clientsSub = t('dashboard.clientsSub.waiting')
   } else if (passiveCount === 0) {
-    clientsSub = `${activeCount} 个正在传输流量`
+    clientsSub = t('dashboard.clientsSub.activeOnly', { count: activeCount })
   } else if (activeCount === 0) {
-    clientsSub = `${passiveCount} 个待命中(暂无流量)`
+    clientsSub = t('dashboard.clientsSub.passiveOnly', { count: passiveCount })
   } else {
-    clientsSub = `${activeCount} 传输中 · ${passiveCount} 待命`
+    clientsSub = t('dashboard.clientsSub.mixed', {
+      active: activeCount,
+      passive: passiveCount,
+    })
   }
   return [
     {
       key: 'clients',
-      label: '已链接客户端',
+      label: t('dashboard.kpi.clients'),
       value: String(totalCount),
-      unit: '个',
+      unit: t('dashboard.kpi.clientsUnit'),
       sub: clientsSub,
       accent: 'border-l-foreground',
     },
     {
       key: 'down',
-      label: '下行',
-      value: formatBpsValue(t.in_bps),
-      unit: formatBpsUnit(t.in_bps),
-      sub: t.in_bps > 0 ? '同事 → 服务端' : '当前空闲',
+      label: t('dashboard.kpi.down'),
+      value: formatBpsValue(tb.in_bps),
+      unit: formatBpsUnit(tb.in_bps),
+      sub: tb.in_bps > 0
+        ? t('dashboard.trafficDirection.down')
+        : t('dashboard.trafficDirection.idle'),
       accent: 'border-l-emerald-500',
     },
     {
       key: 'up',
-      label: '上行',
-      value: formatBpsValue(t.out_bps),
-      unit: formatBpsUnit(t.out_bps),
-      sub: t.out_bps > 0 ? '服务端 → 同事' : '当前空闲',
+      label: t('dashboard.kpi.up'),
+      value: formatBpsValue(tb.out_bps),
+      unit: formatBpsUnit(tb.out_bps),
+      sub: tb.out_bps > 0
+        ? t('dashboard.trafficDirection.up')
+        : t('dashboard.trafficDirection.idle'),
       accent: 'border-l-amber-500',
     },
     {
       key: 'uptime',
-      label: '运行时长',
+      label: t('dashboard.kpi.uptime'),
       value: formatUptimeShort(liveUptimeSec.value),
       unit: '',
-      sub: s?.running ? '稳定运行中' : '尚未启动',
+      sub: s?.running
+        ? t('dashboard.uptimeSub.stable')
+        : t('dashboard.uptimeSub.notStarted'),
       accent: 'border-l-border',
     },
   ]
@@ -110,10 +121,10 @@ const kpis = computed(() => {
 <template>
   <Card size="sm" class="h-full">
     <CardHeader class="flex flex-row items-center justify-between">
-      <CardTitle class="text-[13px] font-semibold">代理引擎</CardTitle>
+      <CardTitle class="text-[13px] font-semibold">{{ t('dashboard.proxyEngine') }}</CardTitle>
       <StatusBadge
         :tone="status?.running ? 'running' : 'stopped'"
-        :label="status?.running ? '运行中' : '未启动'"
+        :label="status?.running ? t('status.running') : t('status.notStarted')"
         :pulse="status?.running"
       />
     </CardHeader>

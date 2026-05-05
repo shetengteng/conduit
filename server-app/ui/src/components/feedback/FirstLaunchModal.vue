@@ -4,7 +4,8 @@
  *
  * 同意后写入 localStorage["conduit:first-launch-acknowledged"]，下次启动跳过。
  */
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,8 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RiAlertLine, RiShieldKeyholeLine } from '@remixicon/vue'
 
+const { t } = useI18n()
+
 const STORAGE_KEY = 'conduit:first-launch-acknowledged'
 
 const open = ref(false)
@@ -29,11 +32,11 @@ onMounted(() => {
   if (!acked) open.value = true
 })
 
-const risks = [
-  '你的电脑由公司 IT 管理且有合规审计',
-  '你在公司公共 WiFi、客户场地等不受控网络',
-  '你不确定 LAN 上还有谁能访问到本机',
-]
+const risks = computed(() => [
+  t('firstLaunch.risk1'),
+  t('firstLaunch.risk2'),
+  t('firstLaunch.risk3'),
+])
 
 function confirm() {
   if (!acknowledged.value) return
@@ -56,17 +59,17 @@ function cancel() {
           >
             <RiAlertLine class="size-4" />
           </div>
-          <DialogTitle>首次启动确认</DialogTitle>
+          <DialogTitle>{{ t('firstLaunch.title') }}</DialogTitle>
         </div>
         <DialogDescription>
-          你即将启动一个把本机 VPN 共享给局域网的代理服务，请先确认使用场景
+          {{ t('firstLaunch.desc') }}
         </DialogDescription>
       </DialogHeader>
 
       <Alert variant="destructive">
         <RiShieldKeyholeLine />
         <AlertDescription>
-          以下场景下不要启用：
+          {{ t('firstLaunch.avoidTitle') }}
         </AlertDescription>
       </Alert>
 
@@ -82,7 +85,7 @@ function cancel() {
       </ul>
 
       <p class="text-xs text-muted-foreground">
-        推荐场景：家庭 WiFi、私人办公室、自己掌控的 LAN
+        {{ t('firstLaunch.recommend') }}
       </p>
 
       <div
@@ -90,13 +93,13 @@ function cancel() {
       >
         <Switch v-model="acknowledged" id="ack-switch" />
         <Label for="ack-switch" class="text-xs cursor-pointer">
-          我已了解上述风险并自行承担
+          {{ t('firstLaunch.ack') }}
         </Label>
       </div>
 
       <DialogFooter>
-        <Button variant="outline" @click="cancel">取消</Button>
-        <Button :disabled="!acknowledged" @click="confirm">启动代理</Button>
+        <Button variant="outline" @click="cancel">{{ t('firstLaunch.cancel') }}</Button>
+        <Button :disabled="!acknowledged" @click="confirm">{{ t('firstLaunch.start') }}</Button>
       </DialogFooter>
     </DialogContent>
   </Dialog>

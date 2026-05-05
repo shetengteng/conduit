@@ -8,6 +8,7 @@
  * 高度策略：固定 160 像素 —— 给一屏内剩下的客户端表 + ShareCard 留位。
  */
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Card,
   CardContent,
@@ -19,6 +20,8 @@ import { Badge } from '@/components/ui/badge'
 import { useTrafficSeries, type TrafficDirection } from '@/composables/useTrafficSeries'
 import { trafficStore } from '@/stores/traffic'
 import { formatBps } from '@/utils/format'
+
+const { t } = useI18n()
 
 const direction = ref<TrafficDirection>('in')
 
@@ -47,12 +50,12 @@ const lastTickIso = computed(() => {
   <Card size="sm">
     <CardHeader class="flex flex-row items-center justify-between">
       <div class="flex items-center gap-3">
-        <CardTitle class="text-[13px] font-semibold">实时流量</CardTitle>
+        <CardTitle class="text-[13px] font-semibold">{{ t('traffic.title') }}</CardTitle>
         <span class="font-mono text-[11px] text-muted-foreground">
-          窗口 {{ trafficStore.state.windowSec }}s · {{ sampleCount }} 点
+          {{ t('traffic.window', { sec: trafficStore.state.windowSec, n: sampleCount }) }}
         </span>
         <Badge variant="outline" class="font-mono text-[10px]">
-          峰值 {{ formatBps(peakBps) }}
+          {{ t('traffic.peak', { value: formatBps(peakBps) }) }}
         </Badge>
       </div>
       <Tabs v-model="direction">
@@ -61,13 +64,13 @@ const lastTickIso = computed(() => {
             value="in"
             class="px-2.5 py-1 text-[11px] font-medium data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
           >
-            下行
+            {{ t('traffic.in') }}
           </TabsTrigger>
           <TabsTrigger
             value="out"
             class="px-2.5 py-1 text-[11px] font-medium data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm"
           >
-            上行
+            {{ t('traffic.out') }}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -110,9 +113,9 @@ const lastTickIso = computed(() => {
           v-if="isEmpty"
           class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1"
         >
-          <p class="text-[13px] font-medium text-foreground">等待流量</p>
+          <p class="text-[13px] font-medium text-foreground">{{ t('traffic.waitingTitle') }}</p>
           <p class="text-[11px] text-muted-foreground">
-            客户端连入后将实时刷新上下行曲线
+            {{ t('traffic.waitingDesc') }}
           </p>
         </div>
       </div>

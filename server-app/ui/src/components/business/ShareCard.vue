@@ -7,6 +7,7 @@
  *   - 每行: 模式 badge + 端点 + 复制按钮 + 一句使用场景
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Card,
   CardContent,
@@ -19,6 +20,7 @@ import { RiFileCopy2Line, RiInformationLine, RiAlertLine } from '@remixicon/vue'
 import { proxyStore } from '@/stores/proxy'
 import { useToast } from '@/composables/useToast'
 
+const { t } = useI18n()
 const toast = useToast()
 
 const status = computed(() => proxyStore.state.status)
@@ -70,9 +72,9 @@ async function copy(text: string, label: string) {
   if (!text) return
   try {
     await navigator.clipboard.writeText(text)
-    toast.success(`${label} 已复制`, { detail: text })
+    toast.success(t('share.toastCopied', { label }), { detail: text })
   } catch (e) {
-    toast.error('复制失败', { detail: String(e) })
+    toast.error(t('share.toastCopyFail'), { detail: String(e) })
   }
 }
 </script>
@@ -80,9 +82,9 @@ async function copy(text: string, label: string) {
 <template>
   <Card size="sm" class="h-full">
     <CardHeader class="flex flex-row items-baseline justify-between">
-      <CardTitle class="text-[13px] font-semibold">接入信息</CardTitle>
+      <CardTitle class="text-[13px] font-semibold">{{ t('share.title') }}</CardTitle>
       <span class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        分享给同事
+        {{ t('share.subtitle') }}
       </span>
     </CardHeader>
 
@@ -90,15 +92,18 @@ async function copy(text: string, label: string) {
       <Alert v-if="!running" variant="default" class="py-2">
         <RiInformationLine />
         <AlertDescription class="text-[11px]">
-          代理未启动，启动后此处会显示同事可用的接入信息
+          {{ t('share.notRunning') }}
         </AlertDescription>
       </Alert>
 
       <Alert v-else-if="noReachableHost" variant="destructive" class="py-2">
         <RiAlertLine />
         <AlertDescription class="text-[11px]">
-          代理监听在 0.0.0.0 但未检测到对外可达地址，同事将无法连接。
-          请确认本机已加入有线/Wi-Fi 网络，或在启动时显式指定 <code class="font-mono">--pac-host</code>
+          <i18n-t keypath="share.noReachable" tag="span">
+            <template #flag>
+              <code class="font-mono">--pac-host</code>
+            </template>
+          </i18n-t>
         </AlertDescription>
       </Alert>
 
@@ -109,8 +114,11 @@ async function copy(text: string, label: string) {
       >
         <RiAlertLine class="text-status-warn" />
         <AlertDescription class="text-[11px]">
-          未检测到物理网卡的私有 IP。当前接入信息可用，但同事必须能直接访问
-          <code class="font-mono">{{ advertisedHost }}</code>
+          <i18n-t keypath="share.notLan" tag="span">
+            <template #host>
+              <code class="font-mono">{{ advertisedHost }}</code>
+            </template>
+          </i18n-t>
         </AlertDescription>
       </Alert>
 
@@ -121,11 +129,11 @@ async function copy(text: string, label: string) {
           <div class="flex items-baseline justify-between gap-2">
             <div class="flex items-center gap-1.5">
               <span class="rounded-sm bg-primary px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-primary-foreground">
-                推荐
+                {{ t('share.pacBadge') }}
               </span>
-              <span class="text-[11px] font-medium text-foreground">PAC 自动配置</span>
+              <span class="text-[11px] font-medium text-foreground">{{ t('share.pacTitle') }}</span>
             </div>
-            <span class="text-[10px] text-muted-foreground">智能分流,国内不绕路</span>
+            <span class="text-[10px] text-muted-foreground">{{ t('share.pacHint') }}</span>
           </div>
           <div class="flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50">
             <code
@@ -139,14 +147,14 @@ async function copy(text: string, label: string) {
               v-else
               class="flex-1 py-1.5 px-2.5 text-[11px] italic text-muted-foreground"
             >
-              启动后显示
+              {{ t('share.placeholder') }}
             </span>
             <Button
               variant="ghost"
               size="sm"
               class="h-auto rounded-none border-l border-border px-2.5"
               :disabled="!pacUrl"
-              @click="copy(pacUrl, 'PAC URL')"
+              @click="copy(pacUrl, t('share.pacLabel'))"
             >
               <RiFileCopy2Line class="size-3.5" />
             </Button>
@@ -156,8 +164,8 @@ async function copy(text: string, label: string) {
         <!-- HTTP -->
         <div class="flex flex-col gap-1">
           <div class="flex items-baseline justify-between gap-2">
-            <span class="text-[11px] font-medium text-foreground">HTTP 代理</span>
-            <span class="text-[10px] text-muted-foreground">全局走代理,国内会变慢</span>
+            <span class="text-[11px] font-medium text-foreground">{{ t('share.httpTitle') }}</span>
+            <span class="text-[10px] text-muted-foreground">{{ t('share.httpHint') }}</span>
           </div>
           <div class="flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50">
             <code
@@ -170,14 +178,14 @@ async function copy(text: string, label: string) {
               v-else
               class="flex-1 py-1.5 px-2.5 text-[11px] italic text-muted-foreground"
             >
-              启动后显示
+              {{ t('share.placeholder') }}
             </span>
             <Button
               variant="ghost"
               size="sm"
               class="h-auto rounded-none border-l border-border px-2.5"
               :disabled="!httpEndpoint"
-              @click="copy(httpEndpoint, 'HTTP 代理')"
+              @click="copy(httpEndpoint, t('share.httpLabel'))"
             >
               <RiFileCopy2Line class="size-3.5" />
             </Button>
@@ -187,8 +195,8 @@ async function copy(text: string, label: string) {
         <!-- SOCKS5 -->
         <div class="flex flex-col gap-1">
           <div class="flex items-baseline justify-between gap-2">
-            <span class="text-[11px] font-medium text-foreground">SOCKS5</span>
-            <span class="text-[10px] text-muted-foreground">curl / git / SSH 命令行</span>
+            <span class="text-[11px] font-medium text-foreground">{{ t('share.socksTitle') }}</span>
+            <span class="text-[10px] text-muted-foreground">{{ t('share.socksHint') }}</span>
           </div>
           <div class="flex items-stretch overflow-hidden rounded-md border border-border bg-muted/30 transition-colors hover:border-border hover:bg-muted/50">
             <code
@@ -201,14 +209,14 @@ async function copy(text: string, label: string) {
               v-else
               class="flex-1 py-1.5 px-2.5 text-[11px] italic text-muted-foreground"
             >
-              启动后显示
+              {{ t('share.placeholder') }}
             </span>
             <Button
               variant="ghost"
               size="sm"
               class="h-auto rounded-none border-l border-border px-2.5"
               :disabled="!socksEndpoint"
-              @click="copy(socksEndpoint, 'SOCKS5 代理')"
+              @click="copy(socksEndpoint, t('share.socksLabel'))"
             >
               <RiFileCopy2Line class="size-3.5" />
             </Button>

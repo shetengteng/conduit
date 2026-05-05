@@ -8,6 +8,7 @@
  * 高度 56px，与 Sidebar logo 区视觉对齐。
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,6 +26,7 @@ import { ServerApi } from '@/api/server'
 import { ApiError } from '@/api/client'
 import { formatUptimeShort } from '@/utils/format'
 
+const { t } = useI18n()
 const toast = useToast()
 const confirmOpen = ref(false)
 const stopping = ref(false)
@@ -35,7 +37,7 @@ async function tauriInvoke(cmd: string): Promise<unknown> {
   const w = window as any
   const fn = w.__TAURI__?.core?.invoke ?? w.__TAURI_INTERNALS__?.invoke
   if (typeof fn !== 'function') {
-    throw new Error('Tauri invoke 不可用 (可能在浏览器中预览)')
+    throw new Error(t('topbar.tauriUnavailable'))
   }
   return fn(cmd)
 }
@@ -53,27 +55,27 @@ const tone = computed<'running' | 'warning' | 'stopped' | 'error'>(() => {
 
 const label = computed(() => {
   const s = status.value
-  if (!s) return '未启动'
-  if (!s.running) return '已停止'
-  if (s.vpn && !s.vpn.available) return 'VPN 异常'
-  if (!s.ready) return '未就绪'
-  return '运行中'
+  if (!s) return t('status.notStarted')
+  if (!s.running) return t('status.stopped')
+  if (s.vpn && !s.vpn.available) return t('status.vpnError')
+  if (!s.ready) return t('status.notReady')
+  return t('status.running')
 })
 
 const subLabel = computed(() => {
   const s = status.value
-  if (!s) return '点击侧边栏的「设置」开始配置代理'
-  if (!s.running) return '代理服务已停止，等待重新启动'
-  if (s.vpn && !s.vpn.available) return 'VPN 接口未就绪，部分流量可能无法走代理'
-  if (!s.ready) return '代理正在启动中，端口尚未就绪'
+  if (!s) return t('topbar.sub.notStarted')
+  if (!s.running) return t('topbar.sub.stopped')
+  if (s.vpn && !s.vpn.available) return t('topbar.sub.vpnError')
+  if (!s.ready) return t('topbar.sub.notReady')
   // 按 peer_ip 去重(同一客户端开多个 tab 不重复计数)
   const active = proxyStore.activePeerCount.value
   const passive = proxyStore.passiveOnlyPeerCount.value
   const total = proxyStore.uniquePeerCount.value
-  if (total === 0) return '等待客户端接入'
-  if (active === 0) return `${passive} 个客户端已链接(待命中)`
-  if (passive === 0) return `${active} 个客户端正在传输流量`
-  return `共 ${total} 个客户端 · ${active} 传输 + ${passive} 待命`
+  if (total === 0) return t('topbar.sub.waiting')
+  if (active === 0) return t('topbar.sub.passiveOnly', { count: passive })
+  if (passive === 0) return t('topbar.sub.activeOnly', { count: active })
+  return t('topbar.sub.mixed', { total, active, passive })
 })
 
 const ports = computed(() => {
@@ -118,14 +120,14 @@ async function handleConfirmStop() {
   stopping.value = true
   try {
     await ServerApi.adminStop()
-    toast.success('应用即将退出', { detail: '代理引擎已停止,Conduit Server 进程正在清理资源…' })
+    toast.success(t('topbar.toastStopOk'), { detail: t('topbar.toastStopOkDetail') })
     confirmOpen.value = false
     // 不主动 quit Tauri 主进程 —— sidecar 退出后窗口仍然存在(显示"已停止"),
     // 让用户自行关闭或者最小化。如果未来想严格 lockstep,这里可以加
     // window.__TAURI_INTERNALS__.invoke('plugin:app|exit', 0)。
   } catch (e) {
     const msg = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e)
-    toast.error('停止失败', { detail: msg })
+    toast.error(t('topbar.toastStopFail'), { detail: msg })
   } finally {
     stopping.value = false
   }
@@ -135,11 +137,13 @@ async function handleRestart() {
   if (restarting.value) return
   restarting.value = true
   try {
-    toast.info('正在重启应用…', { detail: '主窗口将立即关闭并重新启动 sidecar' })
+    toast.info(t('topbar.toastRestartTip'), { detail: t('topbar.toastRestartTipDetail') })
     await tauriInvoke('restart_app')
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    toast.error('重启失败', { detail: `${msg}\n请手动退出并重新打开 Conduit Server` })
+    toast.error(t('topbar.toastRestartFail'), {
+      detail: `${msg}\n${t('topbar.toastRestartFailHint')}`,
+    })
     restarting.value = false
   }
 }
@@ -172,13 +176,13 @@ async function handleRestart() {
         </div>
       </template>
       <span v-else class="text-[11px] italic text-muted-foreground">
-        端口待分配
+        {{ t('status.portsPending') }}
       </span>
     </div>
 
     <div class="ml-auto flex items-center gap-3">
       <span class="hidden font-mono text-xs text-muted-foreground tabular-nums md:inline">
-        运行 {{ uptime }}
+        {{ t('topbar.uptime', { value: uptime }) }}
       </span>
       <Button
         v-if="status?.running"
@@ -188,7 +192,7 @@ async function handleRestart() {
         @click="openConfirm"
       >
         <RiCloseCircleLine />
-        停止代理并退出
+        {{ t('topbar.stopAndQuit') }}
       </Button>
       <Button
         v-else
@@ -196,10 +200,10 @@ async function handleRestart() {
         size="sm"
         :disabled="restarting"
         @click="handleRestart"
-        title="重新启动 sidecar 让代理回到运行中"
+        :title="t('topbar.restartTitle')"
       >
         <RiRestartLine :class="{ 'animate-spin': restarting }" />
-        {{ restarting ? '重启中…' : '重启代理' }}
+        {{ restarting ? t('topbar.restarting') : t('topbar.restart') }}
       </Button>
     </div>
   </header>
@@ -209,21 +213,24 @@ async function handleRestart() {
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2 text-base">
           <RiAlertLine class="size-4 text-destructive" />
-          确认停止 Conduit Server?
+          {{ t('topbar.confirmStopTitle') }}
         </DialogTitle>
         <DialogDescription class="pt-2 text-sm leading-relaxed text-muted-foreground">
-          停止后代理引擎(HTTP / SOCKS5 / mDNS 广播)将全部下线,正在使用本机 VPN 的客户端会立刻断开。
+          {{ t('topbar.confirmStopBody') }}
           <br>
-          v0.1 阶段不支持在窗口里"重启代理",需要重新打开 Conduit Server 应用(或在终端跑
-          <code class="font-mono text-foreground">pnpm dev:server</code>)才能再次启动。
+          <i18n-t keypath="topbar.confirmStopHint" tag="span">
+            <template #cmd>
+              <code class="font-mono text-foreground">pnpm dev:server</code>
+            </template>
+          </i18n-t>
         </DialogDescription>
       </DialogHeader>
       <DialogFooter class="gap-2 sm:gap-2">
         <Button variant="outline" size="sm" :disabled="stopping" @click="confirmOpen = false">
-          取消
+          {{ t('topbar.cancel') }}
         </Button>
         <Button variant="destructive" size="sm" :disabled="stopping" @click="handleConfirmStop">
-          {{ stopping ? '停止中…' : '确认停止' }}
+          {{ stopping ? t('topbar.confirmStopOkLoading') : t('topbar.confirmStopOk') }}
         </Button>
       </DialogFooter>
     </DialogContent>

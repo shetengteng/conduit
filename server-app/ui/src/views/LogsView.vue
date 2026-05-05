@@ -6,6 +6,7 @@
  * UI：shadcn-vue Card + Input + Switch + ScrollArea。
  */
 import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Card,
   CardContent,
@@ -20,6 +21,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { RiSearchLine, RiDeleteBinLine, RiPulseLine } from '@remixicon/vue'
 import { useEvents } from '@/composables/useEvents'
+
+const { t } = useI18n()
 
 type LogLevel = 'INFO' | 'WARN' | 'ERROR'
 interface LogLine {
@@ -42,31 +45,54 @@ function push(level: LogLevel, text: string) {
 }
 
 const { connected } = useEvents({
-  ready: (p) => push('INFO', `代理引擎就绪 (v${p.version})`),
+  ready: (p) => push('INFO', t('logs.line.ready', { version: p.version })),
   client_connected: (p) =>
     push(
       'INFO',
-      `客户端接入 ${p.peer_ip} → ${p.target} (proto=${p.proto}, session=${p.session_id.slice(0, 8)})`,
+      t('logs.line.clientConnected', {
+        peer: p.peer_ip,
+        target: p.target,
+        proto: p.proto,
+        session: p.session_id.slice(0, 8),
+      }),
     ),
   client_disconnected: (p) =>
     push(
       'INFO',
-      `客户端离开 ${p.peer_ip} sent=${p.sent_bytes}B recv=${p.recv_bytes}B duration=${p.duration_sec.toFixed(1)}s`,
+      t('logs.line.clientDisconnected', {
+        peer: p.peer_ip,
+        sent: p.sent_bytes,
+        recv: p.recv_bytes,
+        duration: p.duration_sec.toFixed(1),
+      }),
     ),
   passive_client_seen: (p) =>
-    push('INFO', `待命客户端登记 ${p.client_name} (${p.peer_ip}, v${p.version})`),
+    push(
+      'INFO',
+      t('logs.line.passiveSeen', {
+        name: p.client_name,
+        peer: p.peer_ip,
+        version: p.version,
+      }),
+    ),
   passive_client_lost: (p) =>
-    push('INFO', `待命客户端离线 ${p.client_name} (${p.peer_ip}) — 心跳超时`),
+    push(
+      'INFO',
+      t('logs.line.passiveLost', { name: p.client_name, peer: p.peer_ip }),
+    ),
   traffic_tick: () => {},
   vpn_state_changed: (p) =>
     push(
       p.available ? 'INFO' : 'WARN',
-      `VPN 状态变更 available=${p.available} iface=${p.iface ?? '(none)'}`,
+      t('logs.line.vpnState', {
+        available: p.available,
+        iface: p.iface ?? '(none)',
+      }),
     ),
 })
 
 onMounted(() => {
-  push('INFO', '[ui] 日志面板已挂载,等待 sidecar 事件流')
+  push('INFO', t('logs.panelMounted'))
 })
 
 const filtered = computed(() => {
@@ -111,9 +137,11 @@ function clearLogs() {
   <div class="mx-auto flex max-w-[1440px] flex-col gap-5 p-6">
     <header class="flex items-baseline justify-between">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground">日志</h1>
+        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
+          {{ t('logs.title') }}
+        </h1>
         <p class="mt-1 text-sm text-muted-foreground">
-          实时订阅代理引擎的事件流，按关键词过滤，便于排查接入问题
+          {{ t('logs.subtitle') }}
         </p>
       </div>
       <div class="flex items-center gap-1.5 text-xs">
@@ -122,7 +150,7 @@ function clearLogs() {
           :class="connected ? 'bg-emerald-500 animate-pulse-dot' : 'bg-muted-foreground'"
         />
         <span class="font-mono text-muted-foreground">
-          {{ connected ? 'SSE 已订阅' : 'SSE 未连接' }}
+          {{ connected ? t('status.sseConnected') : t('status.sseDisconnected') }}
         </span>
       </div>
     </header>
@@ -131,7 +159,7 @@ function clearLogs() {
       <CardHeader class="flex flex-row items-center justify-between">
         <CardTitle class="flex items-center gap-2 text-[13px] font-semibold">
           <RiPulseLine class="size-3.5 text-foreground" />
-          事件流
+          {{ t('logs.eventStream') }}
         </CardTitle>
 
         <div class="flex items-center gap-1.5">
@@ -165,13 +193,13 @@ function clearLogs() {
             />
             <Input
               v-model="search"
-              placeholder="搜索 host / IP / 关键词…"
+              :placeholder="t('logs.searchPlaceholder')"
               class="h-8 pl-8 font-mono text-xs"
             />
           </div>
           <Button variant="outline" size="sm" class="h-8" @click="clearLogs">
             <RiDeleteBinLine class="size-3.5" />
-            清空
+            {{ t('logs.clear') }}
           </Button>
         </div>
 
@@ -199,13 +227,9 @@ function clearLogs() {
               v-if="!filtered.length"
               class="flex flex-col gap-2 py-8 text-center text-muted-foreground"
             >
-              <p>{{ search ? '未匹配到任何日志' : '尚无事件流入' }}</p>
-              <p v-if="!search" class="text-[11px] leading-relaxed">
-                日志只在以下事件发生时被推送:<br />
-                · 代理引擎重启 (ready)<br />
-                · 客户端经 SOCKS5/HTTP 发起请求 (connected/disconnected)<br />
-                · 客户端心跳上报 (passive_client_seen)<br />
-                · macOS 路由表的 VPN 状态变更
+              <p>{{ search ? t('logs.emptyMatch') : t('logs.emptyAll') }}</p>
+              <p v-if="!search" class="whitespace-pre-line text-[11px] leading-relaxed">
+                {{ t('logs.emptyHint') }}
               </p>
             </div>
           </div>
@@ -214,10 +238,10 @@ function clearLogs() {
         <div class="flex items-center justify-between text-xs">
           <div class="flex items-center gap-2">
             <Switch v-model="autoScroll" id="auto-scroll" />
-            <Label for="auto-scroll" class="cursor-pointer">自动滚动到最新</Label>
+            <Label for="auto-scroll" class="cursor-pointer">{{ t('logs.autoScroll') }}</Label>
           </div>
           <span class="font-mono text-muted-foreground tabular-nums">
-            最多保留 {{ MAX }} 条
+            {{ t('logs.maxKept', { max: MAX }) }}
           </span>
         </div>
       </CardContent>

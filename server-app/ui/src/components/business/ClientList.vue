@@ -6,6 +6,7 @@
  * 排序：复用 useTableSort composable
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   Card,
   CardContent,
@@ -34,6 +35,8 @@ import { trafficStore } from '@/stores/traffic'
 import { useTableSort } from '@/composables/useTableSort'
 import { formatBps, formatBytes, formatIdleSec, formatUptimeShort } from '@/utils/format'
 import type { ClientSession } from '@/types/proxy'
+
+const { t } = useI18n()
 
 type SortKey =
   | 'peer'
@@ -105,28 +108,32 @@ interface Column {
   align: 'left' | 'right'
 }
 
-const columns: Column[] = [
-  { key: 'peer', label: '客户端', align: 'left' },
-  { key: 'proto', label: '协议', align: 'left' },
-  { key: 'target', label: '目标', align: 'left' },
-  { key: 'down', label: '下行', align: 'right' },
-  { key: 'up', label: '上行', align: 'right' },
-  { key: 'total', label: '累计', align: 'right' },
-  { key: 'since', label: '接入', align: 'right' },
-]
+const columns = computed<Column[]>(() => [
+  { key: 'peer', label: t('clientList.th.peer'), align: 'left' },
+  { key: 'proto', label: t('clientList.th.proto'), align: 'left' },
+  { key: 'target', label: t('clientList.th.target'), align: 'left' },
+  { key: 'down', label: t('clientList.th.down'), align: 'right' },
+  { key: 'up', label: t('clientList.th.up'), align: 'right' },
+  { key: 'total', label: t('clientList.th.total'), align: 'right' },
+  { key: 'since', label: t('clientList.th.since'), align: 'right' },
+])
 </script>
 
 <template>
   <Card size="sm" class="h-full">
     <CardHeader class="flex flex-row items-center justify-between">
-      <CardTitle class="text-[13px] font-semibold">在线客户端</CardTitle>
+      <CardTitle class="text-[13px] font-semibold">{{ t('clientList.title') }}</CardTitle>
       <span class="font-mono text-[11px] text-muted-foreground tabular-nums">
-        共 {{ totalCount }} 个
+        {{ t('clientList.summaryTotal', { total: totalCount }) }}
         <template v-if="totalCount > 0">
           ·
-          <span class="text-emerald-600 dark:text-emerald-400">{{ activePeerCount }} 传输中</span>
+          <span class="text-emerald-600 dark:text-emerald-400">
+            {{ t('clientList.summaryActive', { n: activePeerCount }) }}
+          </span>
           ·
-          <span class="text-blue-600 dark:text-blue-400">{{ passiveOnlyCount }} 待命</span>
+          <span class="text-blue-600 dark:text-blue-400">
+            {{ t('clientList.summaryPassive', { n: passiveOnlyCount }) }}
+          </span>
         </template>
       </span>
     </CardHeader>
@@ -205,12 +212,14 @@ const columns: Column[] = [
               </div>
               <div class="flex items-baseline gap-2">
                 <p class="text-xs font-medium">
-                  {{ passiveOnlyClients.length > 0 ? '暂无客户端在传输流量' : '还没有客户端连进来' }}
+                  {{ passiveOnlyClients.length > 0
+                    ? t('clientList.emptyTitleNoTraffic')
+                    : t('clientList.emptyTitleNoClient') }}
                 </p>
                 <p class="text-[11px] text-muted-foreground">
                   {{ passiveOnlyClients.length > 0
-                    ? '下方"待命"客户端正等着发起请求'
-                    : '把右侧 PAC URL 分享给同事即可接入' }}
+                    ? t('clientList.emptyDescNoTraffic')
+                    : t('clientList.emptyDescNoClient') }}
                 </p>
               </div>
             </div>
@@ -226,7 +235,7 @@ const columns: Column[] = [
         <div class="mb-2 flex items-center gap-2">
           <RiUserStarLine class="size-3.5 text-blue-600 dark:text-blue-400" />
           <span class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            待命客户端 · 已链接但暂无流量
+            {{ t('clientList.passiveSection') }}
           </span>
         </div>
         <div class="flex flex-col gap-1">

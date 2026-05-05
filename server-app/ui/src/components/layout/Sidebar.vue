@@ -7,8 +7,13 @@
  * 2. 选中态：左侧 3px 蓝条 + 蓝色文字 + 背景 hover token
  * 3. 折叠态用 shadcn Tooltip 显示完整 label
  * 4. 顶部品牌区固定 56px
+ *
+ * 语言切换在 SettingsView -> 通用设置 区域,而不是侧栏底部 ——
+ * 减少侧栏视觉负担,且语言切换是「极少操作」(可能整个生命周期切一次),
+ * 不值得占据全局可见的 sidebar 卡。
  */
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useMediaQuery } from '@vueuse/core'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -27,11 +32,12 @@ import {
 import { uiStore, type NavKey } from '@/stores/ui'
 
 const collapsed = useMediaQuery('(max-width: 999px)')
+const { t } = useI18n()
 
 const navItems = computed(() => [
-  { key: 'dashboard' as NavKey, icon: RiDashboardLine, label: '仪表盘' },
-  { key: 'logs' as NavKey, icon: RiFileList3Line, label: '日志' },
-  { key: 'settings' as NavKey, icon: RiSettings4Line, label: '设置' },
+  { key: 'dashboard' as NavKey, icon: RiDashboardLine, label: t('nav.dashboard') },
+  { key: 'logs' as NavKey, icon: RiFileList3Line, label: t('nav.logs') },
+  { key: 'settings' as NavKey, icon: RiSettings4Line, label: t('nav.settings') },
 ])
 
 function go(key: NavKey) {

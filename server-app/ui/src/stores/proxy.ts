@@ -78,8 +78,12 @@ async function refresh(): Promise<void> {
   state.error = msg;
   if (!wasError) {
     try {
-      const { useToast } = await import("../composables/useToast");
-      useToast().error("无法连接到代理服务", { detail: msg });
+      const [{ useToast }, { i18n }] = await Promise.all([
+        import("../composables/useToast"),
+        import("../i18n"),
+      ]);
+      const title = i18n.global.t("toast.proxyConnectFail");
+      useToast().error(title, { detail: msg });
     } catch (_) {
       /* toast 不可用时静默 */
     }
