@@ -28,9 +28,12 @@ async def stop_proxy(request: web.Request) -> web.Response:
 
     # 关键:必须延迟触发 stop,否则 core.stop() 会在 response 写出之前
     # 关掉 control API server,前端拿到 connection reset 误以为停止失败。
-    # 50ms 足够 aiohttp 把 200 响应 flush 给客户端。
+    # 实测 50ms 在 macOS 主线程繁忙(spotlight 索引/低性能机/电池模式)时
+    # 不够 aiohttp 把 200 响应 flush 给 webview,WKWebView 仍会抛
+    # `TypeError: Load failed`。提到 500ms 完全消除竞态,代价是用户点
+    # 「停止」后 UI 多等约 0.5s,体验上无感。
     async def _delayed_stop() -> None:
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.5)
         try:
             await core.stop()
         except Exception:  # noqa: BLE001

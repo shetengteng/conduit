@@ -313,6 +313,12 @@ class Discoverer:
         for sid, ds in list(self._state.online.items()):
             if name.startswith(f"Conduit on {ds.name}."):
                 gone.append(sid)
+        if not gone:
+            return
+        # 关键: 不仅从 online 删掉,还要从 history 删掉并持久化。
+        # 否则下一次 GET /api/servers 走 snapshot(),history 会把 "已离线"
+        # 那条又 merge 回去显示为"上次见过",前端必须重启 client 才能消失。
+        history_changed = False
         for sid in gone:
             ds = self._state.online.pop(sid)
             log.info("server lost: %s", sid)
@@ -320,6 +326,12 @@ class Discoverer:
                 "server_id": sid,
                 "name": ds.name,
             })
+            new_history = [it for it in self._state.history if it.server_id != sid]
+            if len(new_history) != len(self._state.history):
+                self._state.history = new_history
+                history_changed = True
+        if history_changed:
+            _save_history(self.storage_path, self._state.history)
 
     # ----- 工具 -----
 
