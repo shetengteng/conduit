@@ -1,6 +1,6 @@
 {
   "name": "conduit",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "LAN VPN proxy desktop apps (server + client)",
   "packageManager": "pnpm@9.12.3",

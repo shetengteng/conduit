@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 # !! 这行的字符串值由 scripts/bump-version.sh 自动同步,不要手动改。
-_FALLBACK = "0.1.2"
+_FALLBACK = "0.1.3"
 
 
 def _read_from_pyproject() -> str | None:

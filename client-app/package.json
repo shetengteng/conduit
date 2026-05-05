@@ -1,6 +1,6 @@
 {
   "name": "@conduit/client-app",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Conduit Client desktop app: bundles Tauri shell + Vue UI + Python core (smart local proxy)",
   "type": "module",
