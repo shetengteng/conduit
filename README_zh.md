@@ -2,7 +2,7 @@
 
 > 零配置局域网 VPN 共享 —— 让一台拥有 VPN 的 Mac 成为同一 Wi-Fi 下其它所有设备的网关。
 
-**语言：** [English](./README.md) · **中文**
+**官网：** <https://shetengteng.github.io/conduit/> · **语言：** [English](./README.md) · **中文**
 
 Conduit 由两个独立的 macOS 桌面应用组成：
 

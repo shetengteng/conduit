@@ -2,7 +2,7 @@
 
 > Zero-config LAN VPN sharing — let one Mac (with VPN) act as the gateway for every other device on the same Wi-Fi.
 
-**Languages:** **English** · [中文](./README_zh.md)
+**Landing page:** <https://shetengteng.github.io/conduit/> · **Languages:** **English** · [中文](./README_zh.md)
 
 Conduit ships as two independent macOS desktop apps:
 
