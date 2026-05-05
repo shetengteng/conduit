@@ -1,6 +1,6 @@
 [package]
 name = "conduit-server"
-version = "0.1.0"
+version = "0.1.1"
 description = "Conduit Server desktop application"
 authors = ["TerrellShe"]
 edition = "2021"

@@ -118,7 +118,7 @@ function go(key: NavKey) {
       class="flex h-10 shrink-0 items-center px-3 text-[11px] text-muted-foreground"
       :class="collapsed && 'justify-center px-0'"
     >
-      <span v-if="!collapsed">v0.1.0</span>
+      <span v-if="!collapsed">v0.1.1</span>
       <span v-else class="font-mono text-[10px]">0.1</span>
     </div>
   </aside>

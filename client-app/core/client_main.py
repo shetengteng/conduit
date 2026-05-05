@@ -419,7 +419,7 @@ class ClientRuntime:
                 self.bus,
                 host=server.host, http_port=server.port, socks_port=server.socks,
                 client_name=hostname,
-                client_version="0.1.0",
+                client_version="0.1.1",
             )
             await self.heartbeat.start()
             # M-γ:启动 traffic_meter,挂上 LocalProxyServer 的进度回调

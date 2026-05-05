@@ -329,7 +329,7 @@ export default {
     },
     about: {
       title: "关于",
-      version: "Conduit Client v0.1.0 · macOS only",
+      version: "Conduit Client v0.1.1 · macOS only",
       tagline: "智能本地代理:自动按目标域走 direct 或 server VPN",
       checkUpdate: "检查更新",
       checking: "检查中…",

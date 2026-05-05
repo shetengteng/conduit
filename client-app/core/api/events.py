@@ -29,7 +29,7 @@ log = logging.getLogger("client.api.events")
 routes = web.RouteTableDef()
 
 KEEPALIVE_SEC = 15
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 @routes.get("/api/events")

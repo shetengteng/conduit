@@ -33,7 +33,7 @@ from api.server import ApiServer  # local-relative import is fine, package is on
 
 log = logging.getLogger("core")
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 
 
 class ProxyCore:

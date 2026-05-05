@@ -47,7 +47,7 @@ import { checkForUpdate, openExternal } from '@/composables/useUpdateCheck'
 
 // 与 client-app/core/pyproject.toml 的 version 保持一致;打包时会被同步,
 // 短期不会自动从 sidecar 拿(healthz 不暴露 version)。下次升级走 release tag。
-const CLIENT_VERSION = '0.1.0'
+const CLIENT_VERSION = '0.1.1'
 
 const { t, locale } = useI18n()
 const toast = useToast()

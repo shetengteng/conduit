@@ -55,7 +55,7 @@ async function onCheckUpdate() {
   if (checkingUpdate.value) return
   checkingUpdate.value = true
   try {
-    const local = status.value?.version ?? '0.1.0'
+    const local = status.value?.version ?? '0.1.1'
     const result = await checkForUpdate(local)
     switch (result.outcome) {
       case 'up-to-date':
@@ -331,7 +331,7 @@ async function onCheckUpdate() {
           <div>
             <p class="text-sm font-semibold text-foreground">Conduit Server</p>
             <p class="font-mono text-xs text-muted-foreground">
-              v{{ status?.version ?? '0.1.0' }} · Tauri 2 + Vue 3 + Python
+              v{{ status?.version ?? '0.1.1' }} · Tauri 2 + Vue 3 + Python
             </p>
           </div>
         </div>
