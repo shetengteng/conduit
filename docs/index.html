@@ -333,33 +333,67 @@
             <span data-i18n-en>The whole proxy at a glance.</span>
           </h2>
           <p class="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-            <span data-i18n-zh>Server 主控台:运行状态、客户端、流量、接入信息一屏聚齐。</span>
-            <span data-i18n-en>Server dashboard: status, clients, traffic and share info — all in one screen.</span>
+            <span data-i18n-zh>Server 主控台与 Client 看板:运行状态、客户端、流量、接入信息一屏聚齐。</span>
+            <span data-i18n-en>Server console & Client dashboard: status, clients, traffic and share info — all in one screen.</span>
           </p>
         </div>
 
-        <div class="mx-auto mt-12 max-w-5xl">
-          <button
-            id="hero-screenshot"
-            type="button"
-            data-lightbox
-            data-src-zh="screenshots/ds_zh.png"
-            data-src-en="screenshots/ds_en.png"
-            data-src="screenshots/ds_zh.png"
-            data-caption-zh="Conduit Server · 主控台"
-            data-caption-en="Conduit Server · dashboard"
-            class="focus-ring group block w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
-            <picture>
-              <img
-                id="hero-screenshot-img"
-                src="screenshots/ds_zh.png"
-                alt="Conduit Server dashboard"
-                loading="lazy"
-                decoding="async"
-                onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-sm text-muted-foreground',textContent:'Screenshot pending'}))"
-                class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.005]" />
-            </picture>
-          </button>
+        <div class="mx-auto mt-12 grid max-w-5xl gap-6">
+          <figure>
+            <button
+              id="hero-screenshot"
+              type="button"
+              data-lightbox
+              data-src-zh="screenshots/ds_zh.png"
+              data-src-en="screenshots/ds_en.png"
+              data-src="screenshots/ds_zh.png"
+              data-caption-zh="Conduit Server · 主控台"
+              data-caption-en="Conduit Server · dashboard"
+              class="focus-ring group block w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+              <picture>
+                <img
+                  id="hero-screenshot-img"
+                  src="screenshots/ds_zh.png"
+                  alt="Conduit Server dashboard"
+                  loading="lazy"
+                  decoding="async"
+                  onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-sm text-muted-foreground',textContent:'Screenshot pending'}))"
+                  class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.005]" />
+              </picture>
+            </button>
+            <figcaption class="mt-3 text-center text-xs uppercase tracking-wide text-muted-foreground">
+              <span data-i18n-zh>Conduit Server · 主控台</span>
+              <span data-i18n-en>Conduit Server · dashboard</span>
+            </figcaption>
+          </figure>
+
+          <figure>
+            <button
+              id="client-screenshot"
+              type="button"
+              data-lightbox
+              data-src-zh="screenshots/cl-zh.png"
+              data-src-en="screenshots/cl-en.png"
+              data-src="screenshots/cl-zh.png"
+              data-caption-zh="Conduit Client · 已连接看板"
+              data-caption-en="Conduit Client · connected dashboard"
+              class="focus-ring group block w-full overflow-hidden rounded-xl border border-border bg-card text-left shadow-soft transition-all hover:border-foreground/30 hover:shadow-lg">
+              <picture>
+                <img
+                  id="client-screenshot-img"
+                  src="screenshots/cl-zh.png"
+                  alt="Conduit Client dashboard"
+                  loading="lazy"
+                  decoding="async"
+                  onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'flex aspect-[16/10] w-full items-center justify-center bg-muted/40 text-sm text-muted-foreground',textContent:'Screenshot pending'}))"
+                  class="block aspect-[16/10] w-full object-cover transition-transform group-hover:scale-[1.005]" />
+              </picture>
+            </button>
+            <figcaption class="mt-3 text-center text-xs uppercase tracking-wide text-muted-foreground">
+              <span data-i18n-zh>Conduit Client · 已连接看板</span>
+              <span data-i18n-en>Conduit Client · connected dashboard</span>
+            </figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -675,16 +709,19 @@ xattr -dr com.apple.quarantine "/Applications/Conduit Client.app"'
         langLabel.textContent = lang === 'zh-CN' ? 'EN' : '中文';
         try { localStorage.setItem(STORAGE_LANG, lang); } catch (e) {}
 
-        // Hero screenshot: 中英文版本切换。data-src 同步以让 lightbox 放大对的语言。
-        const heroBtn = document.getElementById('hero-screenshot');
-        const heroImg = document.getElementById('hero-screenshot-img');
-        if (heroBtn && heroImg) {
-          const src = lang === 'zh-CN' ? heroBtn.dataset.srcZh : heroBtn.dataset.srcEn;
+        // Screenshots: 中英文版本切换。data-src 同步以让 lightbox 放大对的语言。
+        const swapShot = (btnId, imgId) => {
+          const btn = document.getElementById(btnId);
+          const img = document.getElementById(imgId);
+          if (!btn || !img) return;
+          const src = lang === 'zh-CN' ? btn.dataset.srcZh : btn.dataset.srcEn;
           if (src) {
-            heroImg.src = src;
-            heroBtn.dataset.src = src;
+            img.src = src;
+            btn.dataset.src = src;
           }
-        }
+        };
+        swapShot('hero-screenshot', 'hero-screenshot-img');
+        swapShot('client-screenshot', 'client-screenshot-img');
       }
 
       const savedLang = (() => {
