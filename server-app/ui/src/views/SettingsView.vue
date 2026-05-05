@@ -37,6 +37,7 @@ import { proxyStore } from '@/stores/proxy'
 import { setLocale, type Locale, SUPPORTED_LOCALES } from '@/i18n'
 import { checkForUpdate, openExternal } from '@/composables/useUpdateCheck'
 import { useToast } from '@/composables/useToast'
+import { APP_VERSION } from '@/lib/appVersion'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -55,7 +56,7 @@ async function onCheckUpdate() {
   if (checkingUpdate.value) return
   checkingUpdate.value = true
   try {
-    const local = status.value?.version ?? '0.1.1'
+    const local = status.value?.version ?? APP_VERSION
     const result = await checkForUpdate(local)
     switch (result.outcome) {
       case 'up-to-date':
@@ -331,7 +332,7 @@ async function onCheckUpdate() {
           <div>
             <p class="text-sm font-semibold text-foreground">Conduit Server</p>
             <p class="font-mono text-xs text-muted-foreground">
-              v{{ status?.version ?? '0.1.1' }} · Tauri 2 + Vue 3 + Python
+              {{ status?.version ? `v${status.version}` : '--' }} · Tauri 2 + Vue 3 + Python
             </p>
           </div>
         </div>

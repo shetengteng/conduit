@@ -30,9 +30,11 @@ import {
   RiShieldKeyholeLine,
 } from '@remixicon/vue'
 import { uiStore, type NavKey } from '@/stores/ui'
+import { APP_VERSION, APP_VERSION_LABEL } from '@/lib/appVersion'
 
 const collapsed = useMediaQuery('(max-width: 999px)')
 const { t } = useI18n()
+const versionShort = computed(() => APP_VERSION.split('.').slice(0, 2).join('.'))
 
 const navItems = computed(() => [
   { key: 'dashboard' as NavKey, icon: RiDashboardLine, label: t('nav.dashboard') },
@@ -101,8 +103,8 @@ function go(key: NavKey) {
       class="flex h-10 shrink-0 items-center px-3 text-[11px] text-muted-foreground"
       :class="collapsed && 'justify-center px-0'"
     >
-      <span v-if="!collapsed">v0.1.1</span>
-      <span v-else class="font-mono text-[10px]">0.1</span>
+      <span v-if="!collapsed">{{ APP_VERSION_LABEL }}</span>
+      <span v-else class="font-mono text-[10px]">{{ versionShort }}</span>
     </div>
   </aside>
 </template>

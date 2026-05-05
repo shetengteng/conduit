@@ -44,10 +44,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { Switch } from '@/components/ui/switch'
 import { setLocale, type Locale, SUPPORTED_LOCALES } from '@/i18n'
 import { checkForUpdate, openExternal } from '@/composables/useUpdateCheck'
+import { APP_VERSION } from '@/lib/appVersion'
 
-// 与 client-app/core/pyproject.toml 的 version 保持一致;打包时会被同步,
-// 短期不会自动从 sidecar 拿(healthz 不暴露 version)。下次升级走 release tag。
-const CLIENT_VERSION = '0.1.1'
+// vite.config.ts 已经把 ui/package.json 的 version 注入成 __APP_VERSION__,
+// 这里只是给业务代码起一个语义化的别名。改版本只需要 scripts/bump-version.sh。
+const CLIENT_VERSION = APP_VERSION
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -387,7 +388,7 @@ async function handleFlushCache() {
             <RiShieldKeyholeLine class="size-4" />
           </div>
           <div class="flex flex-col gap-0.5 text-xs text-muted-foreground">
-            <p class="text-sm font-semibold text-foreground">{{ t('settings.about.version') }}</p>
+            <p class="text-sm font-semibold text-foreground">{{ t('settings.about.version', { version: APP_VERSION }) }}</p>
             <p>{{ t('settings.about.tagline') }}</p>
           </div>
         </div>

@@ -50,6 +50,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
+from _version import VERSION as CLIENT_VERSION
 from connectivity import Heartbeat, ProbeResult, probe as connectivity_probe
 from discoverer import Discoverer, DiscoveredServer
 from events_bus import EventBus
@@ -419,7 +420,7 @@ class ClientRuntime:
                 self.bus,
                 host=server.host, http_port=server.port, socks_port=server.socks,
                 client_name=hostname,
-                client_version="0.1.1",
+                client_version=CLIENT_VERSION,
             )
             await self.heartbeat.start()
             # M-γ:启动 traffic_meter,挂上 LocalProxyServer 的进度回调

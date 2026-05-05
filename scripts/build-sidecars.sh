@@ -103,11 +103,16 @@ build_one() {
       # PyInstaller 默认只跟踪 .py import,需要显式 add-data 把它带进 _internal/
       # 路径必须传绝对路径,因为 PyInstaller 相对路径是基于 specpath 的
       extra_args+=(--add-data "$(pwd)/server-app/core/proxy.pac:.")
+      # pyproject.toml 给 _version.py 在运行时读到真实版本号(不依赖
+      # importlib.metadata,后者在 PyInstaller onedir 下找不到 dist-info)。
+      extra_args+=(--add-data "$(pwd)/server-app/core/pyproject.toml:.")
       ;;
     client)
       entry="client-app/core/client_main.py"
       script_basename="conduit-client-sidecar"
       tauri_binaries_dir="client-app/src-tauri/binaries-dir"
+      # 同 server: 让 _version.py 能在打包后读到真实版本号
+      extra_args+=(--add-data "$(pwd)/client-app/core/pyproject.toml:.")
       ;;
     *)
       echo "✗ unknown app: $app" >&2

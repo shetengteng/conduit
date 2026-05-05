@@ -30,10 +30,9 @@ from pac_engine import PacRules, load_rules
 from socks5_proxy import handle_socks5
 
 from api.server import ApiServer  # local-relative import is fine, package is on sys.path
+from _version import VERSION  # 单一来源,见 _version.py 注释
 
 log = logging.getLogger("core")
-
-VERSION = "0.1.1"
 
 
 class ProxyCore:

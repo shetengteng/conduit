@@ -357,7 +357,7 @@ export default {
     },
     about: {
       title: "About",
-      version: "Conduit Client v0.1.1 · macOS only",
+      version: "Conduit Client v{version} · macOS only",
       tagline:
         "Smart local proxy: auto direct vs server VPN per destination",
       checkUpdate: "Check for update",

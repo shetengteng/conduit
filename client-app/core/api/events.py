@@ -24,12 +24,13 @@ from typing import Any
 
 from aiohttp import web
 
+from _version import VERSION  # 单一来源,见 _version.py 注释
+
 log = logging.getLogger("client.api.events")
 
 routes = web.RouteTableDef()
 
 KEEPALIVE_SEC = 15
-VERSION = "0.1.1"
 
 
 @routes.get("/api/events")
