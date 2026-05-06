@@ -46,7 +46,8 @@ htmlcov/
 .tsbuildinfo
 
 # ── Tauri 打包产物已包含在 target/ ──
-# 注意：src-tauri/Cargo.lock 应当提交（应用类项目可重现构建）
+# 注意：仓库根 Cargo.lock 应当提交（应用类项目可重现构建，workspace 模式只在根生成）
+# 子 crate 的 src-tauri/Cargo.lock 在 workspace 模式下不再使用，已 git rm
 
 # ── 交互/调试临时文件 ──
 prompts.txt

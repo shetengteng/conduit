@@ -1,0 +1,22 @@
+[package]
+name = "conduit-core"
+description = "Shared protocol, types, PAC engine, EventBus and relay primitives for Conduit (server + client)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+regex.workspace = true
+globset.workspace = true
+ipnet.workspace = true
+serde.workspace = true
+# 追加 io-util feature 给 relay 用 copy_bidirectional；workspace 默认未启用
+tokio = { workspace = true, features = ["io-util"] }
+
+[dev-dependencies]
+# 测试需要 macros (#[tokio::test]) 与 io-util 完整 helper
+tokio = { workspace = true, features = ["full"] }
+# types.rs 单测验证 serde 序列化字段名（与 Python 端 wire-format 兼容）
+serde_json.workspace = true
