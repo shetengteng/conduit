@@ -3,10 +3,7 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum ConduitError {
-    #[error("sidecar spawn failed: {0}")]
-    SidecarSpawn(String),
-
-    #[error("sidecar healthz timeout after {0}s")]
+    #[error("control api healthz timeout after {0}s")]
     HealthzTimeout(u64),
 
     #[error("port allocation failed")]
@@ -17,6 +14,7 @@ pub enum ConduitError {
     Io(#[from] std::io::Error),
 
     #[error("http error: {0}")]
+    #[allow(dead_code)]
     Http(#[from] reqwest::Error),
 
     #[error("internal: {0}")]
@@ -26,7 +24,6 @@ pub enum ConduitError {
 impl Serialize for ConduitError {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         let code = match self {
-            ConduitError::SidecarSpawn(_) => "SIDECAR_SPAWN",
             ConduitError::HealthzTimeout(_) => "HEALTHZ_TIMEOUT",
             ConduitError::PortAlloc => "PORT_ALLOC",
             ConduitError::Io(_) => "IO",
@@ -41,4 +38,5 @@ impl Serialize for ConduitError {
     }
 }
 
+#[allow(dead_code)]
 pub type ConduitResult<T> = Result<T, ConduitError>;

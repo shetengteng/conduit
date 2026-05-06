@@ -1,0 +1,304 @@
+//! `ProxyCore` —— server-app 内嵌的代理总入口（替换 Python sidecar）。
+//!
+//! W2 Sprint 2 阶段先建骨架：
+//! - `new(cfg)` —— 创建 EventBus / 端口预留 / cancel-token 等共享状态；
+//! - `start()` —— 后续 sub-task 里依次拉起 HTTP / SOCKS5 / mDNS / system-proxy
+//!   监听任务，并把所有 task 的 [`tokio::task::JoinHandle`] 收纳进来；
+//! - `stop()` —— 先发取消信号，再 join 所有任务，确保端口释放；
+//! - `status()` —— 给 IPC `get_status` 用，返回当前 [`ServerStatus`]。
+//!
+//! 当前 S2.1 阶段 `start` / `stop` 内部还是 `todo!()`：等 S2.2 ~ S2.6 把各模块
+//! 实装后再回填。这样可以让 `ProxyCore::new(cfg)` 这个 API 立刻被 Tauri shell
+//! 引用，方便 S2.7 提前接 IPC 骨架。
+
+use std::sync::Arc;
+
+use serde::Serialize;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+
+use conduit_core::{EventBus, PacRules};
+
+use super::config::ProxyConfig;
+use super::session::SessionRegistry;
+
+/// Embedded 与 server-app 同源的 PAC 模板，编译期嵌入。
+///
+/// 真正用作客户端 PAC 服务的是 `proxy/http.rs` 里的 `PAC_TEMPLATE`（同一文件，
+/// 但 http.rs 那份用于 serve 时占位符替换）。这里加载到 `PacRules` 是为了让
+/// `/check?host=...` IPC / 内部 outbound 路由都能拿到决策。
+const PAC_TEMPLATE_FOR_RULES: &str = include_str!("../../../core/proxy.pac");
+
+/// 进程内事件流单条载荷，对齐 Python `events_bus.Event`。
+#[derive(Debug, Clone, Serialize)]
+pub struct ServerEvent {
+    pub kind: String,
+    pub payload: serde_json::Value,
+    /// epoch 秒（与 Python `time.time()` 对齐）。
+    pub ts: f64,
+}
+
+/// 当前服务运行状态快照，给 `get_status` IPC 用。
+#[derive(Debug, Clone, Serialize)]
+pub struct ServerStatus {
+    pub http_port: u16,
+    pub socks_port: u16,
+    pub api_port: u16,
+    pub bind: String,
+    pub running: bool,
+    pub uptime_sec: f64,
+    pub mdns_enabled: bool,
+    pub vpn_on: bool,
+    /// 当前在线客户端数（passive heartbeat + 进行中会话合并）。
+    pub clients_online: usize,
+    /// 进行中代理会话数。
+    pub active_sessions: usize,
+}
+
+/// Server proxy 总入口。
+///
+/// 内部所有可变状态都通过 `Arc<Mutex<_>>` 管理，使 `ProxyCore` 本身可以 `Clone`
+/// 并在 Tauri command handler / 后台 task 之间自由共享。
+#[derive(Clone)]
+pub struct ProxyCore {
+    cfg: Arc<ProxyConfig>,
+    bus: EventBus<ServerEvent>,
+    cancel: CancellationToken,
+    sessions: Arc<SessionRegistry>,
+    pac_rules: Arc<Mutex<Option<Arc<PacRules>>>>,
+    inner: Arc<Mutex<CoreInner>>,
+}
+
+struct CoreInner {
+    started_at: Option<std::time::Instant>,
+    handles: Vec<JoinHandle<()>>,
+    vpn_on: bool,
+}
+
+impl ProxyCore {
+    /// 创建实例但不启动监听。EventBus 容量 256 与 Python 端一致。
+    /// PAC rules 在构造时就加载（来自 embedded `proxy.pac`），让 `/check`
+    /// / outbound policy 在 `start()` 之前就能给出决策。
+    pub fn new(cfg: ProxyConfig) -> Self {
+        let mut rules = PacRules::parse(PAC_TEMPLATE_FOR_RULES);
+        let host = if !cfg.pac_advertised_host.is_empty() {
+            cfg.pac_advertised_host.clone()
+        } else if !cfg.bind.is_empty() && cfg.bind != "0.0.0.0" {
+            cfg.bind.clone()
+        } else {
+            "127.0.0.1".to_string()
+        };
+        rules.update_proxy_target(&host, cfg.http_port);
+        Self {
+            cfg: Arc::new(cfg),
+            bus: EventBus::new(256),
+            cancel: CancellationToken::new(),
+            sessions: SessionRegistry::new(),
+            pac_rules: Arc::new(Mutex::new(Some(Arc::new(rules)))),
+            inner: Arc::new(Mutex::new(CoreInner {
+                started_at: None,
+                handles: Vec::new(),
+                vpn_on: false,
+            })),
+        }
+    }
+
+    /// 取已注册的 EventBus，让 Tauri shell 用 `bus.subscribe()` 拿
+    /// `Receiver<ServerEvent>` 后转发到 `app.emit("server-event", _)`。
+    pub fn event_bus(&self) -> EventBus<ServerEvent> {
+        self.bus.clone()
+    }
+
+    /// 当前生效的配置（不可修改）。Tauri commands 可以借此读端口给 UI 显示。
+    pub fn config(&self) -> Arc<ProxyConfig> {
+        self.cfg.clone()
+    }
+
+    /// 共享的会话注册表，HTTP / SOCKS5 handler 都向它登记会话。
+    pub fn sessions(&self) -> Arc<SessionRegistry> {
+        self.sessions.clone()
+    }
+
+    /// 取当前 PAC 规则（用于 `/check` IPC、outbound policy 派发等）。
+    pub async fn pac_rules(&self) -> Option<Arc<PacRules>> {
+        self.pac_rules.lock().await.clone()
+    }
+
+    /// 取共享的 cancel token，让额外的子任务可以挂在同一个生命周期上。
+    /// 当前 lib.rs 的 graceful shutdown 走 `stop()`；该 helper 留给单测 /
+    /// 未来 outbound 模块用。
+    #[allow(dead_code)]
+    pub fn cancel_token(&self) -> CancellationToken {
+        self.cancel.clone()
+    }
+
+    /// 拉起 HTTP / SOCKS5 / mDNS / system-proxy 等所有监听任务。
+    /// 所有任务都用同一个 `CancellationToken` 做协作式 stop。
+    pub async fn start(&self) -> Result<(), String> {
+        let mut inner = self.inner.lock().await;
+        if inner.started_at.is_some() {
+            return Err("ProxyCore already running".into());
+        }
+        inner.started_at = Some(std::time::Instant::now());
+
+        // S2.2 HTTP forward proxy
+        let core = self.clone();
+        let cancel = self.cancel.clone();
+        let sessions = self.sessions.clone();
+        let h_http = tokio::spawn(async move {
+            if let Err(e) = super::http::run(core, cancel, sessions).await {
+                log::error!("[http] accept loop terminated: {e}");
+            }
+        });
+        inner.handles.push(h_http);
+
+        // S2.3 SOCKS5
+        let core = self.clone();
+        let cancel = self.cancel.clone();
+        let sessions = self.sessions.clone();
+        let h_socks = tokio::spawn(async move {
+            if let Err(e) = super::socks5::run(core, cancel, sessions).await {
+                log::error!("[socks5] accept loop terminated: {e}");
+            }
+        });
+        inner.handles.push(h_socks);
+
+        // S2.4 mDNS advertiser
+        let core = self.clone();
+        let cancel = self.cancel.clone();
+        let h_mdns = tokio::spawn(async move {
+            super::mdns::run(core, cancel).await;
+        });
+        inner.handles.push(h_mdns);
+
+        // S2.7 Control API server（兼容 UI 现有 REST/SSE）
+        let core = self.clone();
+        let cancel = self.cancel.clone();
+        let h_ctl = tokio::spawn(async move {
+            if let Err(e) = super::control_api::run(core, cancel).await {
+                log::error!("[ctl] control api terminated: {e}");
+            }
+        });
+        inner.handles.push(h_ctl);
+
+        Ok(())
+    }
+
+    /// 触发取消并等待所有后台任务结束。
+    pub async fn stop(&self) {
+        self.cancel.cancel();
+        let mut inner = self.inner.lock().await;
+        for h in inner.handles.drain(..) {
+            let _ = h.await;
+        }
+        inner.started_at = None;
+    }
+
+    /// 返回给 UI 显示用的状态快照。
+    pub async fn status(&self) -> ServerStatus {
+        let (running, uptime, vpn_on) = {
+            let inner = self.inner.lock().await;
+            (
+                inner.started_at.is_some(),
+                inner.started_at.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0),
+                inner.vpn_on,
+            )
+        };
+        let active_sessions = self.sessions.active_count().await;
+        let passive = self.sessions.passive_count().await;
+        ServerStatus {
+            http_port: self.cfg.http_port,
+            socks_port: self.cfg.socks_port,
+            api_port: self.cfg.api_port,
+            bind: self.cfg.bind.clone(),
+            running,
+            uptime_sec: uptime,
+            mdns_enabled: self.cfg.mdns_enabled,
+            vpn_on,
+            clients_online: passive + active_sessions,
+            active_sessions,
+        }
+    }
+
+    /// 由 system-proxy / mDNS 模块更新后调用，刷新 vpn 状态并广播事件。
+    /// S2.5 outbound 接入后会被 VPN 检测协程定期调用；当前仅由单测覆盖。
+    #[allow(dead_code)]
+    pub async fn update_vpn(&self, vpn_on: bool) {
+        let mut inner = self.inner.lock().await;
+        if inner.vpn_on == vpn_on {
+            return;
+        }
+        inner.vpn_on = vpn_on;
+        drop(inner);
+        self.bus.publish(ServerEvent {
+            kind: "vpn_changed".into(),
+            payload: serde_json::json!({ "vpn_on": vpn_on }),
+            ts: epoch_secs(),
+        });
+    }
+}
+
+#[allow(dead_code)]
+fn epoch_secs() -> f64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn new_then_status_reports_not_running() {
+        let core = ProxyCore::new(ProxyConfig::with_ports(18080, 11080, 18090));
+        let s = core.status().await;
+        assert_eq!(s.http_port, 18080);
+        assert_eq!(s.socks_port, 11080);
+        assert_eq!(s.api_port, 18090);
+        assert!(!s.running);
+        assert_eq!(s.uptime_sec, 0.0);
+        assert_eq!(s.clients_online, 0);
+    }
+
+    #[tokio::test]
+    async fn start_then_status_reports_running() {
+        let core = ProxyCore::new(ProxyConfig::default());
+        core.start().await.unwrap();
+        let s = core.status().await;
+        assert!(s.running);
+    }
+
+    #[tokio::test]
+    async fn double_start_is_rejected() {
+        let core = ProxyCore::new(ProxyConfig::default());
+        core.start().await.unwrap();
+        let err = core.start().await.unwrap_err();
+        assert!(err.contains("already running"));
+    }
+
+    #[tokio::test]
+    async fn stop_clears_running_state() {
+        let core = ProxyCore::new(ProxyConfig::default());
+        core.start().await.unwrap();
+        core.stop().await;
+        assert!(!core.status().await.running);
+    }
+
+    #[tokio::test]
+    async fn update_vpn_publishes_event_only_on_change() {
+        let core = ProxyCore::new(ProxyConfig::default());
+        let mut rx = core.event_bus().subscribe();
+        core.update_vpn(true).await;
+        let evt = rx.recv().await.unwrap();
+        assert_eq!(evt.kind, "vpn_changed");
+        assert_eq!(evt.payload["vpn_on"], serde_json::Value::Bool(true));
+
+        core.update_vpn(true).await; // 不应再 publish
+        let again = tokio::time::timeout(std::time::Duration::from_millis(50), rx.recv()).await;
+        assert!(again.is_err(), "no event should be published when state unchanged");
+    }
+}
