@@ -19,6 +19,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use conduit_core::ProgressSink;
 use tokio::sync::Mutex;
 
+/// passive client (心跳-only) 的 TTL: 30 秒.
+///
+/// client 端 [`crate::proxy::connectivity::Heartbeat`] 默认 10 秒发一次,
+/// 容忍 3 次连续丢失即判定离线 (与传统 keep-alive 工业实践一致).
+/// 必须与 [`http.rs`] 心跳响应里的 `ttl_sec` 字段保持同步,
+/// 否则 client 端的预期 TTL 会与 server 实际清理时机不一致.
+pub const PASSIVE_CLIENT_TTL_SEC: f64 = 30.0;
+
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
     pub session_id: String,
@@ -162,13 +170,37 @@ impl SessionRegistry {
         }
     }
 
+    /// 返回 passive client 列表 (会先惰性清理 [`PASSIVE_CLIENT_TTL_SEC`] 之外的过期条目).
     pub async fn passive_clients(&self) -> Vec<PassiveClient> {
-        self.inner.lock().await.passive.values().cloned().collect()
+        let mut inner = self.inner.lock().await;
+        prune_expired_passive(&mut inner.passive, PASSIVE_CLIENT_TTL_SEC);
+        inner.passive.values().cloned().collect()
     }
 
+    /// 返回 passive client 数量 (会先惰性清理过期条目, 与 [`Self::passive_clients`] 行为一致).
     pub async fn passive_count(&self) -> usize {
-        self.inner.lock().await.passive.len()
+        let mut inner = self.inner.lock().await;
+        prune_expired_passive(&mut inner.passive, PASSIVE_CLIENT_TTL_SEC);
+        inner.passive.len()
     }
+
+    /// 强制清理所有过期 passive client, 返回被清掉的条目数.
+    /// 用于后台 tick / 测试 / 显式触发场景.
+    /// 当前生产路径完全靠 `passive_count` / `passive_clients` 的 lazy prune 兜底,
+    /// 此方法暂时只在测试中调用; 保留 public 接口,供后续 GC tick / SSE 推送复用.
+    #[allow(dead_code)]
+    pub async fn prune_passive(&self) -> usize {
+        let mut inner = self.inner.lock().await;
+        let before = inner.passive.len();
+        prune_expired_passive(&mut inner.passive, PASSIVE_CLIENT_TTL_SEC);
+        before - inner.passive.len()
+    }
+}
+
+/// 内部工具: 把 `passive` 表里 `last_seen + ttl < now` 的条目移除.
+fn prune_expired_passive(passive: &mut HashMap<String, PassiveClient>, ttl_sec: f64) {
+    let now = epoch_secs();
+    passive.retain(|_, c| now - c.last_seen <= ttl_sec);
 }
 
 struct SessionProgressSink {
@@ -242,6 +274,46 @@ mod tests {
         let list = reg.passive_clients().await;
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].client_name, "alice-mac");
+    }
+
+    /// 关闭 client 后 server 端 passive 列表必须能在 TTL 过期后自动清掉,
+    /// 否则 UI "待命客户端" 会永远保留已离线的条目 (Bug 回归保护).
+    #[tokio::test]
+    async fn passive_client_evicted_after_ttl() {
+        let reg = SessionRegistry::new();
+        assert!(reg.touch_passive("10.0.0.9", "ghost-mac", "0.2.0").await);
+        assert_eq!(reg.passive_count().await, 1);
+
+        // 把这条 passive 的 last_seen 手动回拨到 TTL+10s 之前 (模拟 client 静默 40s).
+        {
+            let mut inner = reg.inner.lock().await;
+            let c = inner.passive.get_mut("10.0.0.9").unwrap();
+            c.last_seen = epoch_secs() - PASSIVE_CLIENT_TTL_SEC - 10.0;
+        }
+
+        let pruned = reg.prune_passive().await;
+        assert_eq!(pruned, 1, "should evict the stale passive client");
+        assert_eq!(reg.passive_count().await, 0);
+        assert!(reg.passive_clients().await.is_empty());
+    }
+
+    /// passive_clients() / passive_count() 必须在返回前自动清理过期条目,
+    /// 这样 control_api `/api/clients` 不需要额外触发 prune.
+    #[tokio::test]
+    async fn passive_count_lazy_prunes_expired_entries() {
+        let reg = SessionRegistry::new();
+        assert!(reg.touch_passive("10.0.0.10", "fresh", "0.2.0").await);
+        assert!(reg.touch_passive("10.0.0.11", "stale", "0.2.0").await);
+        {
+            let mut inner = reg.inner.lock().await;
+            inner.passive.get_mut("10.0.0.11").unwrap().last_seen =
+                epoch_secs() - PASSIVE_CLIENT_TTL_SEC - 5.0;
+        }
+        let count = reg.passive_count().await;
+        assert_eq!(count, 1, "stale entry must be pruned by passive_count");
+        let list = reg.passive_clients().await;
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].client_name, "fresh");
     }
 
     #[tokio::test]

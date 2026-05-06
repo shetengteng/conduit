@@ -239,6 +239,13 @@ impl ProxyCore {
         }
     }
 
+    /// 当前 VPN 状态快照 (vpn_on, vpn_iface)，供 [`super::mdns`] 启动期同步读取
+    /// 真实初始状态使用，避免 mDNS 首次 advertise 用 false 默认值与实际不符。
+    pub async fn vpn_snapshot(&self) -> (bool, Option<String>) {
+        let inner = self.inner.lock().await;
+        (inner.vpn_on, inner.vpn_iface.clone())
+    }
+
     /// 由 [`super::vpn_detect`] 周期检测协程调用，刷新 vpn 状态并广播事件。
     ///
     /// 内部对 (vpn_on, vpn_iface) 二元组做去重：只有任一字段变化才会 publish
@@ -310,6 +317,16 @@ mod tests {
         core.start().await.unwrap();
         core.stop().await;
         assert!(!core.status().await.running);
+    }
+
+    #[tokio::test]
+    async fn vpn_snapshot_reflects_latest_update() {
+        let core = ProxyCore::new(ProxyConfig::default());
+        assert_eq!(core.vpn_snapshot().await, (false, None));
+        core.update_vpn(true, Some("utun5".into())).await;
+        assert_eq!(core.vpn_snapshot().await, (true, Some("utun5".into())));
+        core.update_vpn(false, None).await;
+        assert_eq!(core.vpn_snapshot().await, (false, None));
     }
 
     #[tokio::test]

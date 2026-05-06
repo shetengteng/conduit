@@ -74,14 +74,19 @@ impl Discoverer {
         removed
     }
 
-    /// 清空内存与历史。返回删除的条目数。
+    /// 清空"历史"类条目（用户曾连接过但当前不在线广播的）。
+    /// 在线 mDNS server (`source = Mdns`) 与手动添加 (`source = Manual`) 不受影响,
+    /// 与 UI 文案 "在线 server 不受影响" 严格对齐。
+    /// 返回真正删除的条目数(供 toast 显示)。
     pub async fn forget_all(&self) -> usize {
         let mut state = self.state.lock().await;
-        let n = state.servers.len();
-        state.servers.clear();
+        let before = state.servers.len();
+        state.servers.retain(|_, srv| srv.source != ServerSource::History);
+        let after = state.servers.len();
+        let snapshot: Vec<DiscoveredServer> = state.servers.values().cloned().collect();
         drop(state);
-        save_history(&self.storage_path, &[]);
-        n
+        save_history(&self.storage_path, &snapshot);
+        before - after
     }
 
     /// 启动 mDNS 浏览。失败时返回 Err（调用方决定是否阻断启动）。
@@ -364,5 +369,46 @@ mod tests {
     fn default_storage_path_returns_some_path() {
         let p = default_storage_path();
         assert!(p.to_string_lossy().contains("known-servers.json"));
+    }
+
+    /// `forget_all` 必须只清 source=History 的条目, 在线 mDNS / Manual server 不受影响,
+    /// 与 UI 文案 "在线 server 不受影响" 严格对齐 (Bug A 回归保护)。
+    #[tokio::test]
+    async fn forget_all_keeps_online_mdns_and_manual_servers() {
+        let bus: EventBus<ClientEvent> = EventBus::new(8);
+        let d = Discoverer::new(bus);
+        let mk = |name: &str, src: ServerSource| DiscoveredServer {
+            server_id: format!("{name}@10.0.0.1:8080"),
+            name: name.into(),
+            host: "10.0.0.1".into(),
+            port: 8080,
+            socks: 1080,
+            api: 8090,
+            vpn: false,
+            version: "0.2.0".into(),
+            pac: "/proxy.pac".into(),
+            source: src,
+            last_seen_at: 1_780_000_000.0,
+            healthy: true,
+        };
+        {
+            let mut state = d.state.lock().await;
+            for srv in [
+                mk("live-mdns", ServerSource::Mdns),
+                mk("manual-add", ServerSource::Manual),
+                mk("hist-1", ServerSource::History),
+                mk("hist-2", ServerSource::History),
+            ] {
+                state.servers.insert(srv.server_id.clone(), srv);
+            }
+        }
+        let removed = d.forget_all().await;
+        assert_eq!(removed, 2, "should remove only the 2 history entries");
+        let snap = d.snapshot().await;
+        let names: Vec<&str> = snap.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names.len(), 2);
+        assert!(names.contains(&"live-mdns"));
+        assert!(names.contains(&"manual-add"));
+        assert!(!names.iter().any(|n| n.starts_with("hist-")));
     }
 }

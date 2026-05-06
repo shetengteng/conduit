@@ -84,7 +84,18 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) {
         }
     };
 
-    let mut current_vpn = false;
+    // 关键顺序: 必须先 subscribe 再 register, 否则 vpn_detect 与 mdns 启动竞争时
+    // 会错过 vpn_state_changed event, 导致 TXT 永远停留在初始 false。
+    let mut bus_rx = core.event_bus().subscribe();
+
+    // 短暂等 vpn_detect 把首次状态推到 ProxyCore (POLL_INTERVAL=5s, detect 本身 <10ms,
+    // 200ms 已足够覆盖正常路径)。即使没等到, 后续 EventBus 仍会兜底重新 register。
+    tokio::select! {
+        _ = cancel.cancelled() => return,
+        _ = tokio::time::sleep(Duration::from_millis(200)) => {}
+    }
+    let (mut current_vpn, _iface) = core.vpn_snapshot().await;
+
     let info = build_service_info(&instance_name, &host_ip, &cfg, current_vpn);
     if let Err(e) = daemon.register(info.clone()) {
         warn!("[mdns] initial register failed: {e}; advertise disabled");
@@ -99,9 +110,6 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) {
         cfg.http_port,
         if current_vpn { "on" } else { "off" }
     );
-
-    // 订阅 VPN 状态变更，刷新 TXT
-    let mut bus_rx = core.event_bus().subscribe();
 
     loop {
         tokio::select! {

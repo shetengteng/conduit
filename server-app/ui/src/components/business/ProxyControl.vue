@@ -1,6 +1,10 @@
 <script setup lang="ts">
 /**
- * 仪表盘核心 KPI 卡片 —— 已链接客户端数 / 下行 / 上行 / 运行时长。
+ * 仪表盘核心 KPI 卡片 —— 活跃客户端数 / 下行 / 上行 / 运行时长。
+ *
+ * 注意 KPI value 仅显示 active 数(有 SOCKS5/HTTP 流量的会话),
+ * passive(只有心跳的待命客户端)放在 sub 文案里区分,
+ * 避免出现 "已链接 1 但实际上没人在用" 的歧义。
  *
  * 数据全部读自 proxyStore + trafficStore,本组件只做展示。
  * 布局: 2x2 KPI 网格(紧凑模式)。
@@ -78,7 +82,7 @@ const kpis = computed(() => {
     {
       key: 'clients',
       label: t('dashboard.kpi.clients'),
-      value: String(totalCount),
+      value: String(activeCount),
       unit: t('dashboard.kpi.clientsUnit'),
       sub: clientsSub,
       accent: 'border-l-foreground',

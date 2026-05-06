@@ -475,7 +475,16 @@ impl ClientCore {
             .set_server_endpoint(Some(endpoint))
             .await;
         if self.inner.config.enable_system_proxy {
-            self.enable_system_proxy().await;
+            if let Err(e) = self.try_enable_system_proxy().await {
+                let detail = format!("system_proxy enable failed: {e}");
+                self.publish_progress(
+                    3,
+                    ConnectStepStatus::Failed,
+                    &server.server_id,
+                    &detail,
+                );
+                return Err(detail);
+            }
         }
         self.publish_progress(
             3,
@@ -507,8 +516,18 @@ impl ClientCore {
         Ok(())
     }
 
+    /// 任一 step 失败的统一收尾: 回滚部分已建立的状态 (heartbeat / system_proxy /
+    /// local_proxy.endpoint) -> 把 ConnectionState 翻 Failed -> publish 事件.
+    /// 不回滚的话 partial state 会卡住, 下一次 connect 出现奇怪状态.
     async fn fail_connect(&self, server_id: &str, error: &str) {
         warn!("[client_core] connect_to {server_id} failed: {error}");
+
+        if let Some(hb) = self.inner.heartbeat.lock().await.take() {
+            hb.stop().await;
+        }
+        self.rollback_system_proxy().await;
+        self.inner.local_proxy.set_server_endpoint(None).await;
+
         {
             let mut rec = self.inner.connection.lock().await;
             rec.state = ConnectionState::Failed;
@@ -588,22 +607,22 @@ impl ClientCore {
             .publish(ClientEvent::new("connect_done", payload));
     }
 
-    async fn enable_system_proxy(&self) {
+    /// 尝试设置系统代理. 失败时返回 Err 而不是 swallow,
+    /// 这样 step_switch_endpoint 才能让整个 connect 流程明确失败,
+    /// 避免出现 "UI 显示已连接但实际系统代理未生效" 的歧义.
+    async fn try_enable_system_proxy(&self) -> Result<(), String> {
         let actual_port = self.inner.local_proxy.actual_port().await;
-        match self
-            .inner
+        self.inner
             .system_proxy
             .enable(&self.inner.config.bind_host, actual_port)
-        {
-            Ok(()) => {
-                *self.inner.system_proxy_active.lock().await = true;
+            .map(|()| {
                 info!(
                     "[client_core] system proxy → {}:{actual_port}",
                     self.inner.config.bind_host
                 );
-            }
-            Err(e) => warn!("[client_core] system_proxy enable failed: {e}"),
-        }
+            })?;
+        *self.inner.system_proxy_active.lock().await = true;
+        Ok(())
     }
 
     async fn rollback_system_proxy(&self) {

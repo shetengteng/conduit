@@ -134,6 +134,10 @@ export default {
       "Remove “{name}” from history?\nIt will reappear when the server broadcasts again.",
     confirmForgetAll:
       "Clear all {count} historical servers?\n(Online servers are not affected.)",
+    confirmForgetTitle: "Remove this server from history?",
+    confirmForgetAllTitle: "Clear all historical servers?",
+    confirmOk: "Confirm",
+    confirmCancel: "Cancel",
     toastRemoved: "Removed",
     toastNotFound: "Server not found",
     toastNotFoundDetail: "It may have been cleaned up already",

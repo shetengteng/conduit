@@ -70,7 +70,7 @@ export default {
   dashboard: {
     proxyEngine: "Proxy engine",
     kpi: {
-      clients: "Connected clients",
+      clients: "Active clients",
       clientsUnit: "",
       down: "Downstream",
       up: "Upstream",

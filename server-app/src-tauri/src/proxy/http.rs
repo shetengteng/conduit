@@ -395,7 +395,7 @@ async fn serve_heartbeat(
     let body = serde_json::json!({
         "ok": true,
         "created": created,
-        "ttl_sec": 60,
+        "ttl_sec": super::session::PASSIVE_CLIENT_TTL_SEC as u64,
     });
     let body_bytes = serde_json::to_vec(&body).unwrap_or_else(|_| b"{}".to_vec());
     info!("[http] heartbeat from {peer_ip} name={name} version={version} (new={created})");

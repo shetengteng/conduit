@@ -73,7 +73,7 @@ export default {
   dashboard: {
     proxyEngine: "代理引擎",
     kpi: {
-      clients: "已链接客户端",
+      clients: "活跃客户端",
       clientsUnit: "个",
       down: "下行",
       up: "上行",
