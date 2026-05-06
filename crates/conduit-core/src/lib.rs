@@ -25,3 +25,10 @@ pub use relay::{bidirectional_relay, ProgressSink, CHUNK};
 pub use types::{
     ConnectionInfo, DiscoveredServer, HealthCheckResult, HealthSummary, ProbeResult, ServerSource,
 };
+
+/// 项目唯一 PAC 模板（embed 自 `crates/conduit-core/assets/proxy.pac`）。
+///
+/// `__PROXY_HOST__` / `__PROXY_PORT__` 占位符由 server-app HTTP 处理器在
+/// 响应 `GET /proxy.pac` / `GET /wpad.dat` 时替换为本机 LAN IP + HTTP 监听端口。
+/// PAC 解析（`PacRules::parse`）允许带占位符直接编译，因为占位符不出现在正则可达分支。
+pub const PAC_TEMPLATE: &str = include_str!("../assets/proxy.pac");

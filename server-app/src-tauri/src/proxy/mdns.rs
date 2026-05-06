@@ -128,7 +128,7 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) {
         }
     }
 
-    if let Err(e) = daemon.unregister(&info.get_fullname()) {
+    if let Err(e) = daemon.unregister(info.get_fullname()) {
         warn!("[mdns] unregister failed: {e}");
     }
     // 给 unregister goodbye 包一点发送时间

@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
 # release.sh —— 打 Conduit Server / Client 的发布包(.dmg / .msi / .deb / .AppImage)。
 #
+# v0.2.0 起 server-app 已纯 Rust，仅 client-app 还需要 Python sidecar
+# （W3 Sprint 3 完成后会一并 Rust 化，本脚本届时不再需要 build-sidecars 步骤）。
+#
 # 流程:
-#   1. 跑 build-sidecars.sh 把 Python 打成单二进制 → src-tauri/binaries/
+#   1. 若涉及 client-app，跑 build-sidecars.sh 打 client sidecar
 #   2. 跑 pnpm install (确保前端依赖就绪)
 #   3. 跑 pnpm tauri build 在每个 app 目录里
 #   4. 输出归集到 dist/<app>/<bundle-files>
 #
 # 跑法:
 #   ./scripts/release.sh           # 打两个 app
-#   ./scripts/release.sh server    # 只打 server
-#   ./scripts/release.sh client    # 只打 client
+#   ./scripts/release.sh server    # 只打 server（无需 sidecar）
+#   ./scripts/release.sh client    # 只打 client（需 sidecar）
 #
 # 注:
 #   - 需要先在本机配好 rust + tauri toolchain。
@@ -36,14 +39,23 @@ need() {
 }
 need pnpm
 need cargo
-need python3
 
-# ---------- step 1: sidecar ----------
-echo "═══ step 1/4: build sidecars ═══"
-if [[ $# -gt 0 ]]; then
-  ./scripts/build-sidecars.sh "$@"
+# ---------- step 1: sidecar (only when client is in scope) ----------
+needs_sidecar=0
+if [[ $# -eq 0 ]]; then
+  needs_sidecar=1
 else
-  ./scripts/build-sidecars.sh
+  for app in "$@"; do
+    [[ "$app" == "client" ]] && needs_sidecar=1
+  done
+fi
+
+if [[ "$needs_sidecar" -eq 1 ]]; then
+  need python3
+  echo "═══ step 1/4: build client sidecar ═══"
+  ./scripts/build-sidecars.sh client
+else
+  echo "═══ step 1/4: skip sidecars (server is pure Rust since v0.2.0) ═══"
 fi
 
 # ---------- step 2: pnpm install ----------

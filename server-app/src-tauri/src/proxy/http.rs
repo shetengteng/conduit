@@ -1,9 +1,9 @@
 //! HTTP forward proxy（hyper-free）—— 平移自 Python `server-app/core/http_proxy.py`。
 //!
 //! S2.2 第一轮覆盖：
-//! - **PAC serving**：`GET /proxy.pac` / `GET /wpad.dat` 返回 embedded
-//!   `include_str!("../../../core/proxy.pac")`，并替换 `__PROXY_HOST__` /
-//!   `__PROXY_PORT__` 占位符。
+//! - **PAC serving**：`GET /proxy.pac` / `GET /wpad.dat` 返回
+//!   [`conduit_core::PAC_TEMPLATE`]（来自 `crates/conduit-core/assets/proxy.pac`），
+//!   并替换 `__PROXY_HOST__` / `__PROXY_PORT__` 占位符。
 //! - **CONNECT 隧道**：解析 host:port → 校验端口白名单 → 上游 TcpStream → 回
 //!   `200 Connection Established` → 用 [`conduit_core::bidirectional_relay`]
 //!   做透传，并把会话登记 / 字节计数交给 [`super::session::SessionRegistry`]。
@@ -22,7 +22,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use conduit_core::{bidirectional_relay, PacRules, ProgressSink};
+use conduit_core::{bidirectional_relay, PacRules, ProgressSink, PAC_TEMPLATE};
 use log::{debug, info, warn};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
@@ -30,12 +30,6 @@ use tokio_util::sync::CancellationToken;
 
 use super::core::ProxyCore;
 use super::session::SessionRegistry;
-
-/// Embedded PAC 模板（占位符 `__PROXY_HOST__` / `__PROXY_PORT__` 在 serve 时替换）。
-///
-/// 与 Python 端 `server-app/core/proxy.pac` 是同一份文件，通过 `include_str!`
-/// 编译期嵌入；DMG 不再依赖运行时文件系统读取。
-const PAC_TEMPLATE: &str = include_str!("../../../core/proxy.pac");
 
 /// 单条 request line 上限（与 Python `MAX_REQUEST_LINE` 一致）。
 const MAX_REQUEST_LINE: usize = 8192;
@@ -392,16 +386,8 @@ async fn serve_heartbeat(
             None => continue,
         };
         match k {
-            "name" => {
-                if !v.is_empty() {
-                    name = url_decode(v);
-                }
-            }
-            "version" => {
-                if !v.is_empty() {
-                    version = url_decode(v);
-                }
-            }
+            "name" if !v.is_empty() => name = url_decode(v),
+            "version" if !v.is_empty() => version = url_decode(v),
             _ => {}
         }
     }
@@ -589,7 +575,7 @@ mod tests {
     // ----- integration tests: start ProxyCore on a real ephemeral port -----
     use crate::proxy::{ProxyConfig, ProxyCore};
     use std::time::Duration as StdDuration;
-    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use tokio::io::AsyncReadExt as _;
     use tokio::net::{TcpListener as TL, TcpStream as TS};
 
     /// 启动一个临时 ProxyCore，返回 (core, http_port)。

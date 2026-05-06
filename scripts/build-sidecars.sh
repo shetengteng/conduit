@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# build-sidecars.sh —— 把 server / client 两个 Python sidecar 打成
-# PyInstaller --onedir 目录树。
+# build-sidecars.sh —— 把 client Python sidecar 打成 PyInstaller --onedir 目录树。
+#
+# v0.2.0 起 server-app 已迁移为纯 Rust（in-process ProxyCore），不再有 Python
+# sidecar。本脚本仅负责 client-app 的 sidecar，等 W3 Sprint 3 把 client-app
+# 也迁移到纯 Rust 后，本脚本会被整体删除（参见 TODO S3.10）。
 #
 # 为什么用 onedir 而不是 onefile：
 #   onefile 在 macOS 上每次启动要把 24MB 二进制解压到 /tmp/_MEIxxx/，
@@ -9,11 +12,9 @@
 #   参考: https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html
 #
 # 输出:
-#   server-app/src-tauri/binaries-dir/conduit-server-sidecar/
-#       ├── conduit-server-sidecar          (主二进制 launcher)
-#       └── _internal/                      (libpython, deps, .so 等)
 #   client-app/src-tauri/binaries-dir/conduit-client-sidecar/
-#       └── 同上结构
+#       ├── conduit-client-sidecar          (主二进制 launcher)
+#       └── _internal/                      (libpython, deps, .so 等)
 #
 # 这些目录会通过 tauri.conf.json 的 bundle.resources 一并打入 .app/.dmg。
 # Rust 端 sidecar.rs 通过 app.path().resource_dir() 解析定位目录。
@@ -24,9 +25,9 @@
 #     跑 pip install --user --upgrade pyinstaller)
 #
 # 跑法:
-#   ./scripts/build-sidecars.sh           # 打当前平台 server + client
-#   ./scripts/build-sidecars.sh server    # 只打 server
-#   ./scripts/build-sidecars.sh client    # 只打 client
+#   ./scripts/build-sidecars.sh           # 打 client（默认）
+#   ./scripts/build-sidecars.sh client    # 同上（显式）
+#   ./scripts/build-sidecars.sh server    # noop + 警告（v0.2.0 起 server 已纯 Rust）
 #
 # 注:
 #   - 跨平台编译不支持。要打 Windows / Linux 就在那台机器上跑。
@@ -96,22 +97,14 @@ build_one() {
 
   case "$app" in
     server)
-      entry="server-app/core/proxy_server.py"
-      script_basename="conduit-server-sidecar"
-      tauri_binaries_dir="server-app/src-tauri/binaries-dir"
-      # proxy.pac 是 http_proxy._serve_pac 在运行时按 __file__ 同目录读取的资源,
-      # PyInstaller 默认只跟踪 .py import,需要显式 add-data 把它带进 _internal/
-      # 路径必须传绝对路径,因为 PyInstaller 相对路径是基于 specpath 的
-      extra_args+=(--add-data "$(pwd)/server-app/core/proxy.pac:.")
-      # pyproject.toml 给 _version.py 在运行时读到真实版本号(不依赖
-      # importlib.metadata,后者在 PyInstaller onedir 下找不到 dist-info)。
-      extra_args+=(--add-data "$(pwd)/server-app/core/pyproject.toml:.")
+      echo "ℹ skipping 'server': v0.2.0 起 server-app 已纯 Rust，无需 sidecar"
+      return 0
       ;;
     client)
       entry="client-app/core/client_main.py"
       script_basename="conduit-client-sidecar"
       tauri_binaries_dir="client-app/src-tauri/binaries-dir"
-      # 同 server: 让 _version.py 能在打包后读到真实版本号
+      # 让 _version.py 能在打包后读到真实版本号
       extra_args+=(--add-data "$(pwd)/client-app/core/pyproject.toml:.")
       ;;
     *)
@@ -176,7 +169,6 @@ build_one() {
 ensure_pyinstaller
 
 if [[ $# -eq 0 ]]; then
-  build_one server
   build_one client
 else
   for app in "$@"; do

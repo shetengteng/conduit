@@ -249,7 +249,6 @@ mod tests {
     use super::*;
     use crate::proxy::{ProxyConfig, ProxyCore};
     use std::time::Duration as StdDuration;
-    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
     use tokio::net::{TcpListener as TL, TcpStream as TS};
 
     /// 启动 ProxyCore + 等 SOCKS5 listener 就绪。返回 (core, http_port, socks_port)。

@@ -18,17 +18,10 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use conduit_core::{EventBus, PacRules};
+use conduit_core::{EventBus, PacRules, PAC_TEMPLATE};
 
 use super::config::ProxyConfig;
 use super::session::SessionRegistry;
-
-/// Embedded 与 server-app 同源的 PAC 模板，编译期嵌入。
-///
-/// 真正用作客户端 PAC 服务的是 `proxy/http.rs` 里的 `PAC_TEMPLATE`（同一文件，
-/// 但 http.rs 那份用于 serve 时占位符替换）。这里加载到 `PacRules` 是为了让
-/// `/check?host=...` IPC / 内部 outbound 路由都能拿到决策。
-const PAC_TEMPLATE_FOR_RULES: &str = include_str!("../../../core/proxy.pac");
 
 /// 进程内事件流单条载荷，对齐 Python `events_bus.Event`。
 #[derive(Debug, Clone, Serialize)]
@@ -81,7 +74,7 @@ impl ProxyCore {
     /// PAC rules 在构造时就加载（来自 embedded `proxy.pac`），让 `/check`
     /// / outbound policy 在 `start()` 之前就能给出决策。
     pub fn new(cfg: ProxyConfig) -> Self {
-        let mut rules = PacRules::parse(PAC_TEMPLATE_FOR_RULES);
+        let mut rules = PacRules::parse(PAC_TEMPLATE);
         let host = if !cfg.pac_advertised_host.is_empty() {
             cfg.pac_advertised_host.clone()
         } else if !cfg.bind.is_empty() && cfg.bind != "0.0.0.0" {

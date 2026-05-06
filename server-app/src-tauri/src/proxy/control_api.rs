@@ -463,7 +463,7 @@ mod tests {
     use super::*;
     use crate::proxy::{ProxyConfig, ProxyCore};
     use std::time::Duration as StdDuration;
-    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+    use tokio::io::AsyncReadExt as _;
     use tokio::net::TcpStream as TS;
 
     async fn start_test_core_with_ctl() -> (ProxyCore, u16) {

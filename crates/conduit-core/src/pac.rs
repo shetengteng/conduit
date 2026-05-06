@@ -241,7 +241,7 @@ impl PacRules {
     /// 从已读入内存的 PAC 文本解析 5 段规则。
     ///
     /// 与 Python `load_rules` 不同的是：本方法不做文件 IO，调用方负责读文件。
-    /// 这样允许 `include_str!("../../proxy.pac")` 在编译期嵌入资源，避免
+    /// 这样允许 `include_str!("../assets/proxy.pac")` 在编译期嵌入资源，避免
     /// runtime 路径查找。
     ///
     /// 任何 glob 编译失败会被记录但不阻断（与 Python `fnmatch` 容错语义一致 —
@@ -648,7 +648,7 @@ mod tests {
     //
     // 嵌入项目的真实 PAC 文件做一轮决策对齐，避免合成测试遗漏真实场景。
 
-    const REAL_PAC: &str = include_str!("../../../server-app/core/proxy.pac");
+    const REAL_PAC: &str = include_str!("../assets/proxy.pac");
 
     fn real_rules() -> PacRules {
         let mut r = PacRules::parse(REAL_PAC);
