@@ -63,3 +63,6 @@ known-servers.json
 
 # ── 图标生成临时输出 ──
 scripts/build/
+
+# ── Cursor 本地记忆数据（不提交） ──
+.cursor/skills/memory-data/
