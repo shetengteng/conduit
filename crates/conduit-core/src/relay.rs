@@ -1,6 +1,6 @@
-//! 双向字节流转发，平移自 Python `relay.py`（server 与 client 完全相同）。
+//! 双向字节流转发（server 与 client 共用，HTTP CONNECT / SOCKS5 都靠这个 relay）。
 //!
-//! - 单向 64 KiB chunk 拷贝，与 Python `CHUNK = 65536` 对齐。
+//! - 单向 64 KiB chunk 拷贝。
 //! - 任一方向断开时尽量发送 EOF（half-close）让对端感知。
 //! - 可选 [`ProgressSink`]：上行/下行各自累计字节数，一并交给注册表算速率。
 //!
@@ -8,14 +8,13 @@
 //! - 不抛 `io::Error`：转发结束的常态就是对端 close，调用方关心的是总字节数；
 //!   如果两个方向都立刻失败也只会得到 `(0, 0)`，调用方据此清理 socket 即可。
 //! - 同步 `ProgressSink`（通过 `Arc<dyn ProgressSink>` 在两个 half-pipe 之间共享），
-//!   避免 Python 那种"每 chunk 触发一次 async 回调"导致的可重入复杂度；
 //!   注册表内部用 `Mutex<u64>` 或 `AtomicU64` 自己累加即可。
 
 use std::sync::Arc;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-/// 单方向 chunk 大小，与 Python 端保持一致。
+/// 单方向 chunk 大小。
 pub const CHUNK: usize = 65536;
 
 /// 上行/下行字节增量回调。`sent_delta` 是 a→b 方向，`recv_delta` 是 b→a 方向。
@@ -64,7 +63,7 @@ where
 /// 返回 `(bytes_a_to_b, bytes_b_to_a)`。
 ///
 /// `sink` 可选：传入 `Some(Arc::new(MySink))` 时每个 chunk 写入成功后会同步通知，
-/// 上行（a→b）报 `(n, 0)`，下行（b→a）报 `(0, n)`，与 Python 端语义一致。
+/// 上行（a→b）报 `(n, 0)`，下行（b→a）报 `(0, n)`。
 pub async fn bidirectional_relay<A, B>(
     a: A,
     b: B,

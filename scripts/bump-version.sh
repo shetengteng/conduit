@@ -2,22 +2,18 @@
 #
 # bump-version.sh — 一键同步整个 monorepo 的版本号到指定版本。
 #
-# v0.2.0 起 server-app 已纯 Rust，server pyproject 不再存在；
-# client-app 仍保留 pyproject（W3 完成后一并删除）。
+# 仓库纯 Rust + TypeScript，没有 pyproject.toml / _version.py 需要同步。
 #
 # 触发的所有"产权方":
 #   - 5 个 package.json (root + 2 个 app + 2 个 ui)
 #   - workspace Cargo.toml（仓库根，version.workspace 自动同步两个 src-tauri Cargo.toml）
 #   - 2 个 tauri.conf.json
-#   - 1 个 pyproject.toml（仅 client-app/core/）
 #
 # 触发后,以下"消费者"会自动跟上(不需要手改):
 #   - server-app/ui + client-app/ui 通过 vite.config.ts define 注入 __APP_VERSION__,
 #     所有 UI 代码用 @/lib/appVersion 拿 APP_VERSION
-#   - client-app/core 通过 _version.py 的 importlib.metadata 拿
-#     pyproject 里的 version (打包阶段会嵌入)
-#   - server-app/src-tauri 通过 conduit-server crate 直接读 CARGO_PKG_VERSION，
-#     而 CARGO_PKG_VERSION 来自 workspace.package.version
+#   - server-app/src-tauri / client-app/src-tauri 通过 CARGO_PKG_VERSION 直接读
+#     workspace.package.version
 #   - docs/index.html 在浏览器里 fetch GitHub /releases/latest 拿 tag,跟代码无关
 #
 # Usage:
@@ -64,7 +60,6 @@ FILES=(
   "client-app/ui/package.json|^(  \"version\": \")[^\"]+(\".*)$"
   "server-app/src-tauri/tauri.conf.json|^(  \"version\": \")[^\"]+(\".*)$"
   "client-app/src-tauri/tauri.conf.json|^(  \"version\": \")[^\"]+(\".*)$"
-  "client-app/core/pyproject.toml|^(version = \")[^\"]+(\".*)$"
 )
 
 # ---------- check ----------
@@ -155,16 +150,6 @@ for entry in "${FILES[@]}"; do
 done
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  echo
-  echo "Syncing _version.py fallback strings (client only)..."
-  for vfile in client-app/core/_version.py; do
-    if [[ -f "$vfile" ]]; then
-      sed -i.bak -E "s|^_FALLBACK = \"[^\"]+\"|_FALLBACK = \"${NEW}\"|" "$vfile"
-      rm -f "${vfile}.bak"
-      printf '  %-50s _FALLBACK -> %s\n' "$vfile" "$NEW"
-    fi
-  done
-
   echo
   echo "Syncing Cargo workspace lockfile..."
   ( cd "$ROOT" && cargo update -p conduit-core -p conduit-server -p conduit-client 2>&1 | tail -3 )

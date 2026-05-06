@@ -1,4 +1,4 @@
-//! 进程内事件总线，平移自 Python `events_bus.py`。
+//! 进程内事件总线（基于 `tokio::sync::broadcast`，多订阅 fan-out）。
 //!
 //! 基于 [`tokio::sync::broadcast`] 的多订阅 channel：单一 publisher（持有
 //! `EventBus` 本身），多个 subscriber（通过 [`EventBus::subscribe`] 拿到
@@ -39,7 +39,7 @@ impl<T: Clone + Send + 'static> EventBus<T> {
         Self { tx }
     }
 
-    /// 发布一个事件。**当前没有订阅者时不报错**（与 Python `EventBus.publish` 语义一致）。
+    /// 发布一个事件。**当前没有订阅者时不报错**（fan-out 0 路被视为正常 no-op）。
     pub fn publish(&self, event: T) {
         // broadcast::Sender::send 在零订阅者时返回 SendError，对我们是 OK 的；忽略即可。
         let _ = self.tx.send(event);

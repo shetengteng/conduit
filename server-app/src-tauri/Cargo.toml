@@ -19,13 +19,12 @@ serde_json.workspace = true
 tauri.workspace = true
 tauri-plugin-opener.workspace = true
 tokio.workspace = true
-reqwest.workspace = true
 thiserror.workspace = true
 log.workspace = true
 env_logger.workspace = true
 portpicker.workspace = true
 once_cell.workspace = true
-# W2 Sprint 2: 内嵌 ProxyCore（替换 Python sidecar）
+# 内嵌 ProxyCore（HTTP / SOCKS5 / mDNS / 控制 API 全部进程内）
 conduit-core.workspace = true
 tokio-util.workspace = true
 ipnet.workspace = true

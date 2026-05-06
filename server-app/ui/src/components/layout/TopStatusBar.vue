@@ -122,17 +122,11 @@ async function handleConfirmStop() {
     await ServerApi.adminStop()
     toast.success(t('topbar.toastStopOk'), { detail: t('topbar.toastStopOkDetail') })
     confirmOpen.value = false
-    // 第一次 200 OK 之后立刻退出 Tauri 主进程,理由:
-    //   1. 文案 "应用即将退出" 与之前 "窗口保留显示已停止" 的设计相互矛盾,
-    //      用户实测里第一次点击成功后顶部按钮仍可再点 → 在 sidecar
-    //      0.5s 优雅退出窗口期内第二次 fetch 必然 connection refused
-    //      / "TypeError: Load failed",toast 误报 "停止失败"。
-    //   2. SidecarHandle 的 spawn 用 .kill_on_drop(true),Tauri 主进程
-    //      退出时 tokio Child drop 会 SIGKILL sidecar,即便 Python 层
-    //      还没走完 graceful 也无僵尸残留。
-    //   3. sidecar 自身有 --watchdog-ppid 监父进程 PID 自杀作为兜底,
-    //      双保险。
-    // 故在 stop 成功后停顿一小会儿(让 toast 渲染出来),再 quit。
+    // adminStop 200 OK 之后立刻退出 Tauri 主进程:
+    //   - 顶部按钮在窗口保留期可被重复点击,第二次 fetch 必然
+    //     connection refused / "TypeError: Load failed",toast 误报"停止失败";
+    //   - ProxyCore 已停,留 webview 也无意义;
+    //   - 停顿一小会让 toast 渲染出来再 quit。
     setTimeout(() => {
       tauriInvoke('quit_app').catch(() => {
         // ignore: dev / 浏览器场景下没有 Tauri runtime,留给用户手动关
@@ -145,6 +139,19 @@ async function handleConfirmStop() {
   }
 }
 
+// Tauri command 抛出的 ConduitError 经 serde 序列化为 `{ code, message }` 普通对象，
+// 不是 Error 实例，直接 String(e) 会得到 "[object Object]"。这里集中抽 message + code。
+function extractTauriError(e: unknown): { code: string; message: string } {
+  if (e && typeof e === 'object') {
+    const o = e as Record<string, unknown>
+    const code = typeof o.code === 'string' ? o.code : 'UNKNOWN'
+    const message = typeof o.message === 'string' ? o.message : ''
+    if (message) return { code, message }
+  }
+  if (e instanceof Error) return { code: 'UNKNOWN', message: e.message }
+  return { code: 'UNKNOWN', message: String(e) }
+}
+
 async function handleRestart() {
   if (restarting.value) return
   restarting.value = true
@@ -152,10 +159,17 @@ async function handleRestart() {
     toast.info(t('topbar.toastRestartTip'), { detail: t('topbar.toastRestartTipDetail') })
     await tauriInvoke('restart_app')
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    toast.error(t('topbar.toastRestartFail'), {
-      detail: `${msg}\n${t('topbar.toastRestartFailHint')}`,
-    })
+    const { code, message } = extractTauriError(e)
+    if (code === 'DEV_RESTART_UNSUPPORTED') {
+      // dev mode 已知拦截，走友好的 info toast，不当成报错
+      toast.info(t('topbar.toastRestartDevTitle'), {
+        detail: t('topbar.toastRestartDevDetail'),
+      })
+    } else {
+      toast.error(t('topbar.toastRestartFail'), {
+        detail: `${message}\n${t('topbar.toastRestartFailHint')}`,
+      })
+    }
     restarting.value = false
   }
 }

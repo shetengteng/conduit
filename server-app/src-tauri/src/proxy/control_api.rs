@@ -4,7 +4,7 @@
 //! `apiGet("/api/...")` / SSE 调用在 sidecar 删除之后**继续工作**，
 //! 不强迫前端立刻切到 Tauri `invoke`。等 W3 / W4 有空闲时再做 IPC 平移。
 //!
-//! 仅在 `127.0.0.1:cfg.api_port` 监听（loopback only），与 Python 端一致。
+//! 仅在 `127.0.0.1:cfg.api_port` 监听（loopback only），UI / 内网监控脚本访问。
 //!
 //! 覆盖 endpoint（最小集合，与 `server-app/ui/src/api/server.ts` 完全对齐）：
 //! - `GET /healthz` → [`HealthzResponse`]（5 项 named check 占位）
@@ -87,6 +87,15 @@ async fn handle_request(
 
     let path_only = target.split('?').next().unwrap_or("").to_string();
 
+    // CORS preflight：webview 从 vite dev origin (http://localhost:1420) fetch
+    // 跨源到 127.0.0.1:api_port 时,某些 fetch (带自定义 headers / 非 simple method)
+    // 会先发 OPTIONS。直接 204 返回放行所有 method/header,loopback only 不存在
+    // 安全风险。simple GET 也需要响应里带 Allow-Origin,所以 send_json_status 总是带。
+    if method == "OPTIONS" {
+        send_cors_preflight(&mut write_half).await?;
+        return Ok(());
+    }
+
     match (method.as_str(), path_only.as_str()) {
         ("GET", "/healthz") => serve_healthz(&mut write_half, &core).await?,
         ("GET", "/api/status") => serve_status(&mut write_half, &core).await?,
@@ -100,6 +109,18 @@ async fn handle_request(
         }
     }
     Ok(())
+}
+
+/// 响应 CORS preflight (OPTIONS)。loopback only API,放行所有 origin/method/header。
+async fn send_cors_preflight<W: AsyncWriteExt + Unpin>(out: &mut W) -> std::io::Result<()> {
+    let head = "HTTP/1.1 204 No Content\r\n\
+        Access-Control-Allow-Origin: *\r\n\
+        Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\n\
+        Access-Control-Allow-Headers: Content-Type, Accept\r\n\
+        Access-Control-Max-Age: 3600\r\n\
+        Connection: close\r\n\r\n";
+    out.write_all(head.as_bytes()).await?;
+    out.flush().await
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,7 +194,10 @@ async fn serve_status<W: AsyncWriteExt + Unpin>(
         },
         vpn: VpnStatus {
             available: inner.vpn_on,
-            iface: None,
+            iface: inner.vpn_iface.clone(),
+            // 是否真正走默认路由需要 `route -n get default` 解析。当前阶段
+            // 用 vpn_on 近似——有 VPN 接口就视为可用，UI 仅用 available 字段
+            // 切徽标，不依赖 default_route_via_vpn 做硬决策。
             default_route_via_vpn: inner.vpn_on,
         },
         lan: LanStatus {
@@ -229,8 +253,8 @@ async fn serve_clients<W: AsyncWriteExt + Unpin>(
     send_json_status(out, 200, "OK", &body, false).await
 }
 
-/// 历史 traffic 窗口当前未实现（采样器是 Python 端独立模块，DIRECT-first 路由
-/// 一并延后）。先回 200 + 空 series 让 UI 不崩；实时数据通过 `traffic_tick`
+/// 历史 traffic 时间窗口聚合当前未实装（设计上排在 DIRECT-first 路由特性之后）。
+/// 先返回 200 + 空 series 让 UI 不崩；实时数据通过 `traffic_tick`
 /// SSE event 流推。
 async fn serve_traffic<W: AsyncWriteExt + Unpin>(out: &mut W) -> std::io::Result<()> {
     let resp = TrafficResponse {
@@ -256,13 +280,27 @@ async fn serve_admin_stop<W: AsyncWriteExt + Unpin>(
     Ok(())
 }
 
-/// SSE forwarder：把 [`EventBus<ServerEvent>`] 的事件翻译成 UI 期望的 envelope。
+/// SSE forwarder：把 [`EventBus<ServerEvent>`] 的事件翻译成 UI 期望的格式。
+///
+/// 输出格式（named SSE event，与 client-app `stream_events` 一致）：
+/// ```text
+/// event: vpn_state_changed
+/// data: {"available":true,"iface":"utun5"}
+///
+/// ```
+///
+/// 前端 `useEvents` 用 `addEventListener("vpn_state_changed", ...)` 监听
+/// named event，data 直接是 payload JSON（不再包 `{type, payload}` 外层）。
 async fn serve_events(
     mut out: tokio::net::tcp::OwnedWriteHalf,
     core: &ProxyCore,
     cancel: &CancellationToken,
 ) -> std::io::Result<()> {
-    let head = b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n";
+    let head = b"HTTP/1.1 200 OK\r\n\
+        Content-Type: text/event-stream\r\n\
+        Cache-Control: no-cache\r\n\
+        Connection: keep-alive\r\n\
+        Access-Control-Allow-Origin: *\r\n\r\n";
     out.write_all(head).await?;
     out.write_all(b": connected\n\n").await?;
     out.flush().await?;
@@ -276,11 +314,8 @@ async fn serve_events(
             _ = cancel.cancelled() => break,
             res = rx.recv() => match res {
                 Ok(evt) => {
-                    let envelope = serde_json::json!({
-                        "type": evt.kind,
-                        "payload": evt.payload,
-                    });
-                    let line = format!("data: {}\n\n", envelope);
+                    // serde_json::Value Display 是 compact JSON，可直接放进 SSE 帧
+                    let line = format!("event: {}\ndata: {}\n\n", evt.kind, evt.payload);
                     if out.write_all(line.as_bytes()).await.is_err() {
                         break;
                     }
@@ -292,7 +327,7 @@ async fn serve_events(
                 Err(RecvError::Closed) => break,
             },
             _ = tick.tick() => {
-                // SSE keepalive comment（不会被 EventSource 当做 message）
+                // SSE keepalive comment（不会被 EventSource 当作 message）
                 if out.write_all(b": keepalive\n\n").await.is_err() { break; }
                 if out.flush().await.is_err() { break; }
             }
@@ -395,7 +430,7 @@ struct TrafficResponse {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HTTP byte-level helpers
+// HTTP 字节级 helper —— 不引 hyper/axum，手写报文够用
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn drain_headers(
@@ -432,8 +467,15 @@ async fn send_json_status<W: AsyncWriteExt + Unpin>(
     keep_alive: bool,
 ) -> std::io::Result<()> {
     let conn = if keep_alive { "keep-alive" } else { "close" };
+    // 始终带 CORS Allow-Origin: *,因为 loopback only,任何 origin 都安全。
+    // 没有它 webview (vite dev: http://localhost:1420) 跨源 fetch 会被同源策略拦。
     let head = format!(
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nConnection: {conn}\r\nCache-Control: no-store\r\n\r\n",
+        "HTTP/1.1 {status} {reason}\r\n\
+         Content-Type: application/json; charset=utf-8\r\n\
+         Content-Length: {}\r\n\
+         Connection: {conn}\r\n\
+         Cache-Control: no-store\r\n\
+         Access-Control-Allow-Origin: *\r\n\r\n",
         body.len()
     );
     out.write_all(head.as_bytes()).await?;

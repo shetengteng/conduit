@@ -1,4 +1,4 @@
-//! `ProxyCore` —— server-app 内嵌的代理总入口（替换 Python sidecar）。
+//! `ProxyCore` —— server-app 内嵌的代理总入口（HTTP / SOCKS5 / mDNS / 控制 API）。
 //!
 //! W2 Sprint 2 阶段先建骨架：
 //! - `new(cfg)` —— 创建 EventBus / 端口预留 / cancel-token 等共享状态；
@@ -23,12 +23,12 @@ use conduit_core::{EventBus, PacRules, PAC_TEMPLATE};
 use super::config::ProxyConfig;
 use super::session::SessionRegistry;
 
-/// 进程内事件流单条载荷，对齐 Python `events_bus.Event`。
+/// 进程内事件流单条载荷，转发给 control API SSE / Tauri webview event listener。
 #[derive(Debug, Clone, Serialize)]
 pub struct ServerEvent {
     pub kind: String,
     pub payload: serde_json::Value,
-    /// epoch 秒（与 Python `time.time()` 对齐）。
+    /// epoch 秒（UTC，与 UI 端 `Date.now()/1000` 对齐）。
     pub ts: f64,
 }
 
@@ -43,6 +43,8 @@ pub struct ServerStatus {
     pub uptime_sec: f64,
     pub mdns_enabled: bool,
     pub vpn_on: bool,
+    /// 当前激活的 VPN 接口名（如 `utun5`）；未检测到 VPN 时为 `None`。
+    pub vpn_iface: Option<String>,
     /// 当前在线客户端数（passive heartbeat + 进行中会话合并）。
     pub clients_online: usize,
     /// 进行中代理会话数。
@@ -67,10 +69,13 @@ struct CoreInner {
     started_at: Option<std::time::Instant>,
     handles: Vec<JoinHandle<()>>,
     vpn_on: bool,
+    /// 当前激活的 VPN 接口名（如 `utun5`），由 [`super::vpn_detect`] 周期更新。
+    /// `None` 表示未检测到 VPN。
+    vpn_iface: Option<String>,
 }
 
 impl ProxyCore {
-    /// 创建实例但不启动监听。EventBus 容量 256 与 Python 端一致。
+    /// 创建实例但不启动监听。EventBus 容量 256（够 UI/SSE 同时订阅）。
     /// PAC rules 在构造时就加载（来自 embedded `proxy.pac`），让 `/check`
     /// / outbound policy 在 `start()` 之前就能给出决策。
     pub fn new(cfg: ProxyConfig) -> Self {
@@ -93,6 +98,7 @@ impl ProxyCore {
                 started_at: None,
                 handles: Vec::new(),
                 vpn_on: false,
+                vpn_iface: None,
             })),
         }
     }
@@ -175,27 +181,45 @@ impl ProxyCore {
         });
         inner.handles.push(h_ctl);
 
+        // VPN 接口检测协程：周期 list_afinet_netifas，看是否有 utun*/ppp*/tun*
+        // 拿到 IPv4。状态翻转才推 SSE event_state_changed，UI 由此切换徽标。
+        let core = self.clone();
+        let cancel = self.cancel.clone();
+        let h_vpn = tokio::spawn(async move {
+            super::vpn_detect::run(core, cancel).await;
+        });
+        inner.handles.push(h_vpn);
+
         Ok(())
     }
 
     /// 触发取消并等待所有后台任务结束。
+    ///
+    /// 实现策略：先 cancel，再**短暂持锁**把 handles 拿出来，立刻释放锁，
+    /// 然后才 join 各个 task。这样 task 内即使持续调用 `inner.lock()`
+    /// （如 [`super::vpn_detect`] 周期 update_vpn）也不会与 stop 死锁。
     pub async fn stop(&self) {
         self.cancel.cancel();
-        let mut inner = self.inner.lock().await;
-        for h in inner.handles.drain(..) {
+        let handles: Vec<JoinHandle<()>> = {
+            let mut inner = self.inner.lock().await;
+            inner.handles.drain(..).collect()
+        };
+        for h in handles {
             let _ = h.await;
         }
+        let mut inner = self.inner.lock().await;
         inner.started_at = None;
     }
 
     /// 返回给 UI 显示用的状态快照。
     pub async fn status(&self) -> ServerStatus {
-        let (running, uptime, vpn_on) = {
+        let (running, uptime, vpn_on, vpn_iface) = {
             let inner = self.inner.lock().await;
             (
                 inner.started_at.is_some(),
                 inner.started_at.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0),
                 inner.vpn_on,
+                inner.vpn_iface.clone(),
             )
         };
         let active_sessions = self.sessions.active_count().await;
@@ -209,24 +233,31 @@ impl ProxyCore {
             uptime_sec: uptime,
             mdns_enabled: self.cfg.mdns_enabled,
             vpn_on,
+            vpn_iface,
             clients_online: passive + active_sessions,
             active_sessions,
         }
     }
 
-    /// 由 system-proxy / mDNS 模块更新后调用，刷新 vpn 状态并广播事件。
-    /// S2.5 outbound 接入后会被 VPN 检测协程定期调用；当前仅由单测覆盖。
-    #[allow(dead_code)]
-    pub async fn update_vpn(&self, vpn_on: bool) {
+    /// 由 [`super::vpn_detect`] 周期检测协程调用，刷新 vpn 状态并广播事件。
+    ///
+    /// 内部对 (vpn_on, vpn_iface) 二元组做去重：只有任一字段变化才会 publish
+    /// `vpn_state_changed` event，避免每 5s 都发抖动事件。Event 名与 payload
+    /// 字段（`available` / `iface`）严格对齐前端 `VpnStateChangedPayload`。
+    pub async fn update_vpn(&self, vpn_on: bool, vpn_iface: Option<String>) {
         let mut inner = self.inner.lock().await;
-        if inner.vpn_on == vpn_on {
+        if inner.vpn_on == vpn_on && inner.vpn_iface == vpn_iface {
             return;
         }
         inner.vpn_on = vpn_on;
+        inner.vpn_iface = vpn_iface.clone();
         drop(inner);
         self.bus.publish(ServerEvent {
-            kind: "vpn_changed".into(),
-            payload: serde_json::json!({ "vpn_on": vpn_on }),
+            kind: "vpn_state_changed".into(),
+            payload: serde_json::json!({
+                "available": vpn_on,
+                "iface": vpn_iface,
+            }),
             ts: epoch_secs(),
         });
     }
@@ -285,13 +316,20 @@ mod tests {
     async fn update_vpn_publishes_event_only_on_change() {
         let core = ProxyCore::new(ProxyConfig::default());
         let mut rx = core.event_bus().subscribe();
-        core.update_vpn(true).await;
+        core.update_vpn(true, Some("utun5".into())).await;
         let evt = rx.recv().await.unwrap();
-        assert_eq!(evt.kind, "vpn_changed");
-        assert_eq!(evt.payload["vpn_on"], serde_json::Value::Bool(true));
+        assert_eq!(evt.kind, "vpn_state_changed");
+        assert_eq!(evt.payload["available"], serde_json::Value::Bool(true));
+        assert_eq!(evt.payload["iface"], serde_json::Value::String("utun5".into()));
 
-        core.update_vpn(true).await; // 不应再 publish
+        // 同 (on, iface) 二元组，不应重复 publish
+        core.update_vpn(true, Some("utun5".into())).await;
         let again = tokio::time::timeout(std::time::Duration::from_millis(50), rx.recv()).await;
-        assert!(again.is_err(), "no event should be published when state unchanged");
+        assert!(again.is_err(), "状态未变时不应再次 publish");
+
+        // iface 变化也算变更
+        core.update_vpn(true, Some("ppp0".into())).await;
+        let evt = rx.recv().await.unwrap();
+        assert_eq!(evt.payload["iface"], serde_json::Value::String("ppp0".into()));
     }
 }

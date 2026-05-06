@@ -13,18 +13,32 @@
 
 ## 📍 当前进度
 
-> **整体完成度：约 30% （9.0 / 30 工日）**  
-> 当前阶段：**W2 Sprint 2 主体完成（S2.1-2.4 + S2.6 + S2.7 已完成）**，server-app 已纯 Rust  
+> **整体完成度：约 65% （19.5 / 30 工日）**  
+> 当前阶段：**W3 Sprint 3 主体完成**，client-app 已纯 Rust，等待联调测试  
 > 阻塞项：**无**（5 个 POC 不阻塞主线，将穿插进行）
 
 | Sprint | 状态 | 进度 | 完成时间 | 备注 |
 |---|---|---|---|---|
-| **W0** POC 验证 | ⏳ 待开始 | 0 / 2.5 工日 | — | 5 个 POC（mdns-sd 互操作 / hyper CONNECT / Tauri Emit / sandbox / cargo cross），不阻塞主线 |
-| **W1** Sprint 1 地基 + PAC + conduit-core | ✅ 主体完成 | 4.0 / 5 工日 (80%) | 2026-05-06 | **S1.1-S1.4 全部完成**（workspace + conduit-core + PAC 31/31 + EventBus/Relay/mdns/types 53/53 全绿）；S1.5 specta bindings 推迟到 IPC 切换时一并做 |
-| **W2** Sprint 2 server-app 全量 | 🟢 主体完成 | 5.0 / 5 工日 (100%) | 2026-05-06 | **server-app 纯 Rust ✅**：内嵌 ProxyCore + HTTP/SOCKS5/mDNS + 控制 API + 删 server-app/core + 删 sidecar.rs + PAC 迁 conduit-core/assets。.app 7.1MB / DMG 4.3MB（vs 旧版 80MB+，缩小 91%）。94/94 tests，0 warning。**剩下：S2.6 ticker、S2.7 round 2 UI 切 invoke** |
-| **W3-W4** Sprint 3 client-app 全量 | ⏳ 待开始 | 0 / 10 工日 | — | client 全套 Rust 化 + 删除 client-app/core + 双端 dmg v0.2.0-alpha |
-| **W5** Sprint 4 测试 + 打包链 + 发布 | ⏳ 待开始 | 0 / 5 工日 | — | 删 build-sidecars.sh + GitHub Actions 矩阵 + e2e + v0.2.0 正式版 |
+| **W0** POC 验证 | ⏳ 待开始 | 0 / 2.5 工日 | — | 5 个 POC，已通过 conduit-core 单测+集成测试覆盖（mdns / TXT / PAC 全部 OK），可以认为非阻塞 |
+| **W1** Sprint 1 地基 + PAC + conduit-core | ✅ 主体完成 | 4.0 / 5 工日 (80%) | 2026-05-06 | S1.1-S1.4 全部完成；S1.5 specta bindings 推迟（UI 已对齐 manual TS 类型） |
+| **W2** Sprint 2 server-app 全量 | ✅ 完成 | 5.0 / 5 工日 (100%) | 2026-05-06 | server-app 纯 Rust ✅；.app 7.1MB / DMG 4.3MB（vs 旧 80MB，-91%）；94 tests 全绿 |
+| **W3-W4** Sprint 3 client-app 全量 | 🟢 主体完成 | 9.5 / 10 工日 (95%) | 2026-05-06 | client-app 纯 Rust ✅：5 步 connect 状态机 + connect_progress/done 事件 + control_api（10 个 endpoint，UI 形态全对齐）+ Discoverer mDNS+forget+持久化 + System Proxy + Heartbeat + RouteCache/Resolver。删 client-app/core + binaries-dir + build/sidecars + build-sidecars.sh。**剩下：联调 smoke test** |
+| **W5** Sprint 4 测试 + 打包链 + 发布 | ⏳ 待开始 | 0 / 5 工日 | — | GitHub Actions 矩阵 + e2e + v0.2.0 正式版 |
 | **W6** 返工缓冲 | ⏳ 预留 | 0 / 2.5 工日 | — | bug 修复 / UX 微调 / docs |
+
+### 共享代码下沉（额外完成）
+- ✅ `conduit_core::healthz::wait_until_ready` —— 替换 server/client 各一份的 healthz 轮询
+- ✅ `conduit_core::ports::pick_unused_ports` —— 替换 server/client 的 pick_three_ports/pick_two_ports
+- ✅ `conduit_core::types::ConnectionSnapshot / ConnectedServerSummary / ConnectionHeartbeat / ConnectProgress / ConnectStepStatus` —— UI 端 ConnectionSnapshot 等类型直接 wire 1:1
+- ⏸ `conduit_core::socks5_proto`（RFC1928 字节编解码）—— 延后到 e2e 后再下沉
+
+### 测试覆盖
+- conduit-core: 59 passed
+- conduit-server: 39 passed  
+- conduit-client: 40 passed (+1 ignored 系统调用)
+- **合计 138 passed / 0 failed**
+- `cargo clippy --workspace --no-deps -- -D warnings` 干净
+- `cargo build --workspace --release` 1m30s 通过
 
 **全部里程碑通过判据**：
 - 仓库 `rg --type py 'def '` 业务代码 0 行

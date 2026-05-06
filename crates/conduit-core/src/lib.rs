@@ -3,7 +3,7 @@
 //! ## 模块路线图
 //!
 //! - [`error`] —— 通用错误模型 [`ConduitError`] / [`ConduitResult`]（已实装）
-//! - [`pac`] —— PAC 引擎（regex 平移 Python 端 `pac_engine.py`，已实装）
+//! - [`pac`] —— PAC 引擎（regex 解析 5 段 numbered section，已实装）
 //! - [`events`] —— 基于 `tokio::sync::broadcast` 的 EventBus（已实装）
 //! - [`relay`] —— 双向流量转发（已实装）
 //! - [`mdns`] —— mDNS service-type / TXT 字段约定（已实装）
@@ -13,17 +13,24 @@
 
 pub mod error;
 pub mod events;
+pub mod healthz;
 pub mod mdns;
 pub mod pac;
+pub mod ports;
 pub mod relay;
 pub mod types;
 
 pub use error::{ConduitError, ConduitResult};
 pub use events::EventBus;
+pub use healthz::{wait_until_ready, HealthzError};
 pub use pac::{PacDecision, PacRules};
+pub use ports::pick_unused_ports;
 pub use relay::{bidirectional_relay, ProgressSink, CHUNK};
 pub use types::{
-    ConnectionInfo, DiscoveredServer, HealthCheckResult, HealthSummary, ProbeResult, ServerSource,
+    ConnectStepStatus, ConnectProgress, ConnectedServerSummary, ConnectionHeartbeat,
+    ConnectionInfo, ConnectionSnapshot, ConnectionState, DiscoveredServer, HealthCheckResult,
+    HealthSummary, HeartbeatState, HeartbeatTone, ProbeResult, RouteDirection, RouteEntry,
+    ServerSource,
 };
 
 /// 项目唯一 PAC 模板（embed 自 `crates/conduit-core/assets/proxy.pac`）。

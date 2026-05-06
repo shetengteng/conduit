@@ -17,7 +17,8 @@ import Sidebar from '@/components/layout/Sidebar.vue'
 import TopStatusBar from '@/components/layout/TopStatusBar.vue'
 import BootScreen from '@/components/layout/BootScreen.vue'
 import BootFailedScreen from '@/components/layout/BootFailedScreen.vue'
-import ToastHost from '@/components/feedback/ToastHost.vue'
+import { Toaster } from 'vue-sonner'
+import 'vue-sonner/style.css'
 import SystemProxyWarningBanner from '@/components/feedback/SystemProxyWarningBanner.vue'
 import DiscoveryView from '@/views/DiscoveryView.vue'
 import ConnectedView from '@/views/ConnectedView.vue'
@@ -158,9 +159,16 @@ function handleRetry() {
         </main>
       </div>
     </div>
-
-    <ToastHost />
   </template>
 
   <BootScreen v-else />
+
+  <!-- shadcn-vue 推荐的 toast 实现，独立于 boot phase 始终挂载，
+       这样 BootScreen / BootFailedScreen 阶段也能弹 toast。 -->
+  <Toaster
+    position="bottom-right"
+    :rich-colors="true"
+    :close-button="true"
+    theme="system"
+  />
 </template>

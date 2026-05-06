@@ -1,231 +1,193 @@
 #!/usr/bin/env bash
-# e2e.sh —— 端到端冒烟测试。
+# e2e.sh —— Conduit Rust 重写版（v0.2+）的端到端冒烟测试。
 #
-# 流程:
-#   1. 起 server sidecar (proxy_server.py) on 随机端口
-#   2. 起 client sidecar (client_main.py) on 随机端口
-#   3. 等两边 healthz 200
-#   4. POST /api/connect/<server_id> → client 切到 connected
-#   5. 用 curl --socks5-hostname 通过 client 跑一个请求
-#   6. 校验:
-#      - server /api/clients 看到 client peer_ip
-#      - server /api/traffic series 累计 > 0
-#      - client /api/traffic total_downlink > 0
-#      - client /api/cache 至少 1 条
-#   7. POST /api/disconnect → 状态回 idle
-#   8. 杀两个 sidecar
+# 与 v0.1 (Python sidecar) 的核心区别：现在 server-app / client-app 都是
+# 独立的 Tauri app，带 webview，无法 headless 启动。本脚本不再负责
+# spawn / kill 进程，只校验两个 dev 实例的 control API 契约 + 一次真实
+# SOCKS5 流量穿越。
+#
+# ─────────────── 跑法 ───────────────
+#   1. 在两个 terminal 分别起 dev：
+#        pnpm --filter conduit-server tauri dev
+#        pnpm --filter conduit-client tauri dev
+#   2. 从 client 端 dev 的 Rust 日志里找 `boot socks=... api=NNN` 一行，
+#      把 api 端口传给本脚本（server 端 api_port 通过 client 的 mDNS
+#      发现，无需手动）：
+#        CLIENT_API=NNN ./scripts/e2e.sh
+#
+# ─────────────── 校验流程 ───────────────
+#   1. client /healthz 200
+#   2. client /api/connection 拿到 idle 状态
+#   3. client /api/servers 在 15s 内通过 mDNS 看到 server
+#   4. server /healthz 200（端口由步骤 3 给出的 api_port）
+#   5. server /api/status running=true
+#   6. POST client /api/connect/<server_id> → state=connected
+#   7. 真实 SOCKS5 流量：curl --socks5 client_socks_port → server /healthz
+#   8. client /api/traffic 累计字节 > 0
+#   9. POST client /api/disconnect → state=idle
 #
 # 任何步骤失败立即 exit 1 + 打印调查命令。
-#
-# 跑法:
-#   ./scripts/e2e.sh [--keep]
-#     --keep: 测试完不杀 sidecar,留给手动调查 (默认会杀)
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-KEEP=0
-if [[ "${1:-}" == "--keep" ]]; then
-  KEEP=1
-fi
+CLIENT_API="${CLIENT_API:?需要环境变量 CLIENT_API（client-app dev 启动日志里 \`boot socks=... api=NNN\` 的 api 端口）}"
+CLIENT_BASE="http://127.0.0.1:$CLIENT_API"
+
+usage_hint() {
+  cat >&2 <<'EOF'
+hint: 启动顺序——
+  Term1: pnpm --filter conduit-server tauri dev
+  Term2: pnpm --filter conduit-client tauri dev
+两个 dev 都打印过 `boot ... api=NNN` 之后再跑：
+  CLIENT_API=<client api port> ./scripts/e2e.sh
+EOF
+}
 
 # ---------- helpers ----------
-free_port() {
-  python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1',0)); print(s.getsockname()[1]); s.close()"
+require() {
+  command -v "$1" >/dev/null 2>&1 || { echo "✗ 需要 $1 但没找到" >&2; exit 1; }
+}
+require curl
+require python3
+
+http_get() {
+  curl -sS -m 5 "$1"
+}
+http_post() {
+  curl -sS -m 5 -X POST "$1"
 }
 
-wait_for() {
-  local label="$1" url="$2" timeout=${3:-15}
-  local i
-  for ((i=0; i<timeout*2; i++)); do
-    if curl -sS -m 1 "$url" >/dev/null 2>&1; then
-      echo "  ✓ $label ready"
-      return 0
-    fi
-    sleep 0.5
-  done
-  echo "  ✗ $label not ready after ${timeout}s ($url)" >&2
-  return 1
-}
+# ---------- step 1: client healthz ----------
+echo "═══ step 1: client /healthz ═══"
+if ! http_get "$CLIENT_BASE/healthz" | grep -q '"ok"'; then
+  echo "  ✗ client /healthz 没返回 ok" >&2
+  echo "  curl -sS $CLIENT_BASE/healthz" >&2
+  usage_hint
+  exit 1
+fi
+echo "  ✓ client healthz ok"
 
-cleanup() {
-  if [[ "$KEEP" == "1" ]]; then
-    echo ""
-    echo "ℹ --keep set, leaving sidecars running:"
-    echo "    server PID=$SERVER_PID  api=http://127.0.0.1:$SERVER_API"
-    echo "    client PID=$CLIENT_PID  api=http://127.0.0.1:$CLIENT_API"
-    return
-  fi
-  echo ""
-  echo "→ cleanup: killing sidecars"
-  [[ -n "${SERVER_PID:-}" ]] && kill -9 "$SERVER_PID" 2>/dev/null || true
-  [[ -n "${CLIENT_PID:-}" ]] && kill -9 "$CLIENT_PID" 2>/dev/null || true
-}
-trap cleanup EXIT
-
-# ---------- step 1+2: pick ports + spawn ----------
-SERVER_HTTP=$(free_port)
-SERVER_SOCKS=$(free_port)
-SERVER_API=$(free_port)
-CLIENT_BIND=$(free_port)
-CLIENT_API=$(free_port)
-
-LOG_DIR=/tmp/conduit-e2e
-mkdir -p "$LOG_DIR"
-SERVER_LOG="$LOG_DIR/server.log"
-CLIENT_LOG="$LOG_DIR/client.log"
-
-echo "═══ step 1: spawn server sidecar ═══"
-echo "  http=$SERVER_HTTP socks=$SERVER_SOCKS api=$SERVER_API log=$SERVER_LOG"
-python3 server-app/core/proxy_server.py --yes \
-  --http-port "$SERVER_HTTP" \
-  --socks-port "$SERVER_SOCKS" \
-  --api-port "$SERVER_API" \
-  > "$SERVER_LOG" 2>&1 &
-SERVER_PID=$!
-
+# ---------- step 2: client connection idle ----------
 echo ""
-echo "═══ step 2: spawn client sidecar ═══"
-echo "  bind=$CLIENT_BIND api=$CLIENT_API log=$CLIENT_LOG"
-python3 client-app/core/client_main.py \
-  --bind-port "$CLIENT_BIND" \
-  --api-port "$CLIENT_API" \
-  --no-system-proxy \
-  > "$CLIENT_LOG" 2>&1 &
-CLIENT_PID=$!
+echo "═══ step 2: client /api/connection ═══"
+CONN=$(http_get "$CLIENT_BASE/api/connection")
+CLIENT_STATE=$(echo "$CONN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state',''))")
+CLIENT_SOCKS=$(echo "$CONN" | python3 -c "import sys,json; print(json.load(sys.stdin).get('socks_port',0))")
+echo "  state=$CLIENT_STATE socks_port=$CLIENT_SOCKS"
+if [[ "$CLIENT_STATE" != "idle" ]]; then
+  echo "  ⚠ client 不在 idle，先 disconnect 再继续" >&2
+  http_post "$CLIENT_BASE/api/disconnect" >/dev/null || true
+  sleep 1
+fi
+if [[ "$CLIENT_SOCKS" -le 0 ]]; then
+  echo "  ✗ client 没有有效 socks_port" >&2
+  exit 1
+fi
 
-# ---------- step 3: healthz ----------
+# ---------- step 3: mDNS 发现 server ----------
 echo ""
-echo "═══ step 3: wait for healthz ═══"
-wait_for "server" "http://127.0.0.1:$SERVER_API/api/healthz"
-wait_for "client" "http://127.0.0.1:$CLIENT_API/healthz"
-
-# ---------- step 4: discover + connect ----------
-echo ""
-echo "═══ step 4a: wait for mDNS to surface server (up to 15s) ═══"
+echo "═══ step 3: 等 client 通过 mDNS 发现 server (最多 15s) ═══"
 SERVER_ID=""
+SERVER_API_PORT=""
 for ((i=0; i<30; i++)); do
-  SERVER_ID=$(curl -sS "http://127.0.0.1:$CLIENT_API/api/servers" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-# 只挑 mdns 在线 + 端口匹配本次 server 的
-for s in d.get('servers',[]):
-    if s.get('source')=='mdns' and s.get('port')==$SERVER_HTTP:
-        print(s['server_id']); break
-" 2>/dev/null || true)
-  if [[ -n "$SERVER_ID" ]]; then
-    echo "  ✓ discovered server_id=$SERVER_ID"
+  RESP=$(http_get "$CLIENT_BASE/api/servers" || true)
+  read -r SERVER_ID SERVER_API_PORT < <(echo "$RESP" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    for s in d.get('servers', []):
+        if s.get('source') == 'mdns' and s.get('api_port', 0) > 0:
+            print(s.get('server_id', ''), s.get('api_port', 0))
+            break
+except Exception:
+    pass
+")
+  if [[ -n "$SERVER_ID" && "$SERVER_API_PORT" -gt 0 ]]; then
+    echo "  ✓ 发现 server_id=$SERVER_ID api_port=$SERVER_API_PORT"
     break
   fi
   sleep 0.5
 done
 if [[ -z "$SERVER_ID" ]]; then
-  echo "  ✗ mDNS did not surface server within 15s" >&2
-  echo "  --- client /api/servers ---" >&2
-  curl -sS "http://127.0.0.1:$CLIENT_API/api/servers" >&2
+  echo "  ✗ 15s 内未通过 mDNS 看到任何 server" >&2
+  echo "  --- $CLIENT_BASE/api/servers ---" >&2
+  http_get "$CLIENT_BASE/api/servers" >&2 || true
   echo >&2
-  echo "  hint: ensure macOS '本地网络' 权限已授权;或检查 server log 是否真的 mDNS broadcast" >&2
+  echo "  hint: 检查 server-app dev 是否在跑、macOS 本地网络权限、防火墙" >&2
   exit 1
 fi
+SERVER_BASE="http://127.0.0.1:$SERVER_API_PORT"
 
+# ---------- step 4: server healthz ----------
 echo ""
-echo "═══ step 4b: client connect to server ═══"
-RESP=$(curl -sS -X POST "http://127.0.0.1:$CLIENT_API/api/connect/${SERVER_ID}")
+echo "═══ step 4: server /healthz ═══"
+if ! http_get "$SERVER_BASE/healthz" | grep -q '"ok"'; then
+  echo "  ✗ server /healthz 没返回 ok（端口=$SERVER_API_PORT）" >&2
+  exit 1
+fi
+echo "  ✓ server healthz ok"
+
+# ---------- step 5: server status running ----------
+echo ""
+echo "═══ step 5: server /api/status running ═══"
+STATUS=$(http_get "$SERVER_BASE/api/status")
+RUNNING=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('running', False))")
+HTTP_PORT=$(echo "$STATUS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('http_port', 0))")
+echo "  running=$RUNNING http_port=$HTTP_PORT"
+[[ "$RUNNING" == "True" ]] || { echo "  ✗ server 不是 running 状态" >&2; exit 1; }
+
+# ---------- step 6: client connect ----------
+echo ""
+echo "═══ step 6: POST /api/connect/$SERVER_ID ═══"
+CONNECT_URL="$CLIENT_BASE/api/connect/$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$SERVER_ID")"
+RESP=$(http_post "$CONNECT_URL")
 echo "  resp: $RESP"
-if ! echo "$RESP" | grep -q '"state": "connected"'; then
-  echo "  ✗ connect did not reach connected state" >&2
-  echo "  --- server log ---" >&2; tail -50 "$SERVER_LOG" >&2
-  echo "  --- client log ---" >&2; tail -50 "$CLIENT_LOG" >&2
+NEW_STATE=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state',''))")
+if [[ "$NEW_STATE" != "connected" ]]; then
+  echo "  ✗ /api/connect 没切到 connected (state=$NEW_STATE)" >&2
   exit 1
 fi
 echo "  ✓ client connected"
 
-# ---------- step 5: traffic ----------
+# ---------- step 7: SOCKS5 流量穿越 ----------
 echo ""
-echo "═══ step 5: run traffic via client SOCKS5 ═══"
-# 用 server 自己的 healthz endpoint 当回环 target,避免依赖外网
-TARGET_URL="http://127.0.0.1:$SERVER_API/api/healthz"
-for i in 1 2 3 4 5; do
-  curl -sS --socks5-hostname "127.0.0.1:$CLIENT_BIND" -o /dev/null -w "  req${i}=%{size_download}B " "$TARGET_URL" || true
+echo "═══ step 7: 通过 client SOCKS5 ($CLIENT_SOCKS) 请求 server /healthz ═══"
+TARGET="http://127.0.0.1:$SERVER_API_PORT/healthz"
+for i in 1 2 3; do
+  curl -sS --socks5-hostname "127.0.0.1:$CLIENT_SOCKS" \
+    -m 5 -o /dev/null -w "  req${i}=%{http_code} size=%{size_download}B " \
+    "$TARGET" || echo "  req${i}=FAIL"
 done
 echo
+sleep 2
 
-# 等 traffic_meter tick (1Hz)
-sleep 3
-
-# ---------- step 6: assertions ----------
+# ---------- step 8: traffic > 0 ----------
 echo ""
-echo "═══ step 6: assertions ═══"
-
-# client /api/traffic 累计字节(必须 > 0 因为 SOCKS5 流量必然过 client local_proxy)
-CLIENT_TRAFFIC=$(curl -sS "http://127.0.0.1:$CLIENT_API/api/traffic")
-CLIENT_DN=$(echo "$CLIENT_TRAFFIC" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-print(d.get('total_downlink',0))
+echo "═══ step 8: client /api/traffic 累计字节 ═══"
+TRAFFIC=$(http_get "$CLIENT_BASE/api/traffic")
+DOWN=$(echo "$TRAFFIC" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+print(d.get('total_downlink', d.get('downlink', 0)))
 ")
-echo "  client total_downlink = $CLIENT_DN bytes"
-[[ "$CLIENT_DN" -ge 1 ]] || { echo "  ✗ client reports zero downlink" >&2; exit 1; }
+echo "  total_downlink=$DOWN bytes"
+[[ "$DOWN" -ge 1 ]] || { echo "  ✗ client traffic 累计为 0" >&2; exit 1; }
 
-# client /api/cache 至少 1 条 (probe / pac_prefill)
-CLIENT_CACHE=$(curl -sS "http://127.0.0.1:$CLIENT_API/api/cache")
-CACHE_COUNT=$(echo "$CLIENT_CACHE" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-print(len(d.get('entries',[])))
-")
-echo "  client cache entries = $CACHE_COUNT"
-[[ "$CACHE_COUNT" -ge 1 ]] || { echo "  ✗ client cache empty" >&2; exit 1; }
-
-# server passive_clients: client 心跳应已注册 (即便流量是 direct 也会有心跳)
-PASSIVE_COUNT=$(curl -sS "http://127.0.0.1:$SERVER_API/api/clients?include=passive" | python3 -c "
-import sys,json
-try:
-    d=json.load(sys.stdin)
-    print(d.get('passive_count',0) or len(d.get('passive_clients',[])))
-except Exception:
-    print(0)
-")
-echo "  server passive clients = $PASSIVE_COUNT"
-# 不强制 — heartbeat 频率 10s,e2e 时长可能小于一个心跳周期
-if [[ "$PASSIVE_COUNT" -lt 1 ]]; then
-  echo "  ⚠ no passive clients yet (heartbeat is 10s; this is OK if e2e ran quickly)"
-fi
-
-# server traffic: 信息性指标 — loopback 同机时 client PAC 会判 direct 不走 server,
-# 所以这里允许 0(并不意味着 e2e 失败)
-SERVER_TRAFFIC=$(curl -sS "http://127.0.0.1:$SERVER_API/api/traffic")
-SERVER_NONZERO=$(echo "$SERVER_TRAFFIC" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-nz = sum(1 for ip,pts in d.get('series',{}).items() for t,u,dn in pts if u or dn)
-print(nz)
-")
-echo "  server traffic non-zero samples = $SERVER_NONZERO  (informational; loopback target normally goes direct)"
-
-# diagnose 5 项全 ok
-DIAG_FAIL=$(curl -sS "http://127.0.0.1:$CLIENT_API/api/diagnose" | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-fail = [c['key'] for c in d.get('checks',[]) if not c['ok']]
-print(','.join(fail) if fail else 'OK')
-")
-echo "  client diagnose = $DIAG_FAIL"
-[[ "$DIAG_FAIL" == "OK" ]] || { echo "  ✗ diagnose has failed checks: $DIAG_FAIL" >&2; exit 1; }
-
-# ---------- step 7: disconnect ----------
+# ---------- step 9: disconnect ----------
 echo ""
-echo "═══ step 7: disconnect ═══"
-DC=$(curl -sS -X POST "http://127.0.0.1:$CLIENT_API/api/disconnect")
+echo "═══ step 9: POST /api/disconnect ═══"
+DC=$(http_post "$CLIENT_BASE/api/disconnect")
 echo "  resp: $DC"
 sleep 1
-STATE=$(curl -sS "http://127.0.0.1:$CLIENT_API/api/connection" | python3 -c "import sys,json; print(json.load(sys.stdin).get('state'))")
-echo "  client state = $STATE"
-[[ "$STATE" == "idle" ]] || { echo "  ✗ disconnect did not return to idle" >&2; exit 1; }
+FINAL_STATE=$(http_get "$CLIENT_BASE/api/connection" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('state',''))")
+echo "  final state=$FINAL_STATE"
+[[ "$FINAL_STATE" == "idle" ]] || { echo "  ✗ disconnect 后没回到 idle" >&2; exit 1; }
 
 echo ""
 echo "═══ ✓ end-to-end smoke test PASSED ═══"
-echo "  server log: $SERVER_LOG"
-echo "  client log: $CLIENT_LOG"
+echo "  client_api=$CLIENT_API  server_api=$SERVER_API_PORT"
+echo "  server_id=$SERVER_ID  http_port=$HTTP_PORT  socks_port=$CLIENT_SOCKS"

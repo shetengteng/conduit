@@ -133,8 +133,8 @@ function isOnline(srv: DiscoveredServer): boolean {
   return srv.source === 'mdns'
 }
 
-// 与 backend client-app/core/discoverer.py:_persist_merged_history 的容量上限保持一致。
-// 改这里前请同步检查后端常量。
+// 仅用于 i18n 文案的展示数。Rust v0.2 起后端 (`client-app/src-tauri/src/proxy/discoverer.rs`)
+// 不再对 `known-servers.json` 做容量截断；前端只是把这个数字展示给用户。
 const HISTORY_MAX = 32
 
 const headerSubtitle = computed(() => {

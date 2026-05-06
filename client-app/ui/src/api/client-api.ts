@@ -6,7 +6,7 @@
  * M-β.2:  connect / disconnect / connection
  * 后续 M-γ/δ 增量补 route / cache / diagnose。
  *
- * 路径与 client-app/core/api/*.py 严格对齐。
+ * 路径与 client-app/src-tauri/src/proxy/control_api.rs 严格对齐。
  */
 import type {
   ConnectionSnapshot,

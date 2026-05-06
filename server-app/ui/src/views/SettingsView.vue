@@ -332,7 +332,7 @@ async function onCheckUpdate() {
           <div>
             <p class="text-sm font-semibold text-foreground">Conduit Server</p>
             <p class="font-mono text-xs text-muted-foreground">
-              {{ status?.version ? `v${status.version}` : '--' }} · Tauri 2 + Vue 3 + Python
+              {{ status?.version ? `v${status.version}` : '--' }} · Tauri 2 + Vue 3 + Rust
             </p>
           </div>
         </div>

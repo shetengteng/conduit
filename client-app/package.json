@@ -2,7 +2,7 @@
   "name": "@conduit/client-app",
   "version": "0.2.0",
   "private": true,
-  "description": "Conduit Client desktop app: bundles Tauri shell + Vue UI + Python core (smart local proxy)",
+  "description": "Conduit Client desktop app: pure-Rust Tauri shell + Vue UI (smart local proxy)",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",

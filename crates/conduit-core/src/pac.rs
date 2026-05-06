@@ -1,4 +1,4 @@
-//! PAC 引擎 —— 平移自 Python `server-app/core/pac_engine.py`，行为 100% 对齐。
+//! PAC 引擎 —— 解析 server 自带的 `proxy.pac` 并输出 DIRECT/PROXY 决策。
 //!
 //! 解析项目自定义的 PAC 窄语法（5 段 numbered section + `shExpMatch` /
 //! `dnsDomainIs` / `isInNet` 三个 helper），输出结构化决策。
@@ -77,7 +77,7 @@ impl NetRule {
     }
 }
 
-/// 单次决策结果，与 Python `Decision` 字段一一对应（snake_case 接口对齐）。
+/// 单次决策结果（含命中段、命中模式、最终决策方向）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PacDecision {
     /// `"DIRECT"` 或 `"PROXY host:port"` 字面字符串，可直接喂给 PAC 调用方。
@@ -106,7 +106,7 @@ impl PacDecision {
     }
 }
 
-/// 解析后的 PAC 规则集合，与 Python `PacRules` 字段一一对应。
+/// 解析后的 PAC 规则集合（5 段 numbered section 各自展开成 glob/net 规则）。
 #[derive(Debug, Clone)]
 pub struct PacRules {
     pub local_globs: Vec<GlobRule>,
@@ -142,7 +142,7 @@ impl Default for PacRules {
     }
 }
 
-// ---------- 正则表达式（与 Python 对齐） ----------
+// ---------- PAC 段解析正则 ----------
 
 fn section_re() -> &'static Regex {
     static R: OnceLock<Regex> = OnceLock::new();
@@ -175,7 +175,7 @@ fn isinnet_re() -> &'static Regex {
     })
 }
 
-// ---------- 内部 helper（与 Python `_xxx` 对齐，pub(crate) 暴露给单测） ----------
+// ---------- 内部 helper（pub(crate) 暴露给同模块单测） ----------
 
 pub(crate) fn split_sections(text: &str) -> Vec<(u32, &str)> {
     let matches: Vec<_> = section_re().captures_iter(text).collect();
@@ -205,8 +205,8 @@ pub(crate) fn looks_like_ipv4(host: &str) -> bool {
     host.parse::<Ipv4Addr>().is_ok()
 }
 
-/// 与 Python `_ip_in_net` 行为一致；main 代码使用 [`NetRule::contains`] 直接判定，
-/// 这个 helper 仅保留给单测对齐 Python helper 级用例。
+/// 解析单条 CIDR 并判断 IP 是否落入；main 代码使用 [`NetRule::contains`] 直接判定，
+/// 这个 helper 仅保留给单测做 helper 级覆盖。
 #[cfg(test)]
 pub(crate) fn ip_in_net(ip_str: &str, net_ip: &str, net_mask: &str) -> bool {
     let Ok(addr) = ip_str.parse::<Ipv4Addr>() else {
@@ -240,13 +240,11 @@ pub(crate) fn domain_any<'a>(host: &str, domains: &'a [String]) -> Option<&'a st
 impl PacRules {
     /// 从已读入内存的 PAC 文本解析 5 段规则。
     ///
-    /// 与 Python `load_rules` 不同的是：本方法不做文件 IO，调用方负责读文件。
+    /// 本方法不做文件 IO，调用方负责读文件 / 嵌入资源后再传入。
     /// 这样允许 `include_str!("../assets/proxy.pac")` 在编译期嵌入资源，避免
     /// runtime 路径查找。
     ///
-    /// 任何 glob 编译失败会被记录但不阻断（与 Python `fnmatch` 容错语义一致 —
-    /// Python 端 fnmatch 不会预编译，只在 match 时才报错）。这里我们
-    /// 静默丢弃非法 glob，保证 runtime 不崩。
+    /// 任何 glob 编译失败会被记录但不阻断：静默丢弃非法 glob，保证 runtime 不崩。
     pub fn parse(text: &str) -> Self {
         let mut rules = Self::default();
         let sections = split_sections(text);
@@ -287,7 +285,6 @@ impl PacRules {
     }
 
     /// 决策一个 host 应该走 DIRECT 还是 PROXY，输出含命中段与命中模式。
-    /// 行为与 Python `find_proxy(host, rules)` 100% 对齐。
     pub fn find_proxy(&self, host: &str) -> PacDecision {
         let host = host.trim().to_lowercase();
         if host.is_empty() {

@@ -32,6 +32,14 @@ pub fn quit_app(app: AppHandle) {
 }
 
 #[tauri::command]
-pub fn restart_app(app: AppHandle) {
+pub fn restart_app(app: AppHandle) -> Result<(), ConduitError> {
+    // dev 模式下 `app.restart()` 会杀掉 binary 但 vite dev server (由父 `pnpm tauri dev`
+    // 管理) 不会跟着重生，新 binary 加载 devUrl 时拿到空响应就只剩白屏。
+    // production 是 frontendDist 静态文件，没这个问题，所以正常 restart。
+    if cfg!(debug_assertions) {
+        return Err(ConduitError::DevRestartUnsupported(
+            "dev mode: please ctrl+c the terminal and rerun `pnpm tauri dev`".to_string(),
+        ));
+    }
     app.restart();
 }

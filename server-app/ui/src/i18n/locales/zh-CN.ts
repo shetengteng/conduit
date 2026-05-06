@@ -64,6 +64,9 @@ export default {
     toastRestartTipDetail: "主窗口将立即关闭并重新启动 sidecar",
     toastRestartFail: "重启失败",
     toastRestartFailHint: "请手动退出并重新打开 Conduit Server",
+    toastRestartDevTitle: "开发模式不支持重启",
+    toastRestartDevDetail:
+      "在 dev 模式下重启会让 vite 与 binary 解耦，请回到终端 ctrl+c 后重跑 `pnpm tauri dev`。Release 包没有这个限制。",
     tauriUnavailable: "Tauri invoke 不可用 (可能在浏览器中预览)",
   },
 

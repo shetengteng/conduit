@@ -1,4 +1,4 @@
-//! HTTP forward proxy（hyper-free）—— 平移自 Python `server-app/core/http_proxy.py`。
+//! HTTP forward proxy（hyper-free，纯 tokio + 手写 HTTP/1.1 解析）。
 //!
 //! S2.2 第一轮覆盖：
 //! - **PAC serving**：`GET /proxy.pac` / `GET /wpad.dat` 返回
@@ -7,8 +7,8 @@
 //! - **CONNECT 隧道**：解析 host:port → 校验端口白名单 → 上游 TcpStream → 回
 //!   `200 Connection Established` → 用 [`conduit_core::bidirectional_relay`]
 //!   做透传，并把会话登记 / 字节计数交给 [`super::session::SessionRegistry`]。
-//! - **`GET /api/clients/heartbeat`**：returning `{ok, created, ttl_sec}` JSON
-//!   让 LAN 端 client-app 注册"已链接但暂无流量"状态。
+//! - **`GET /api/clients/heartbeat`**：返回 `{ok, created, ttl_sec}` JSON，
+//!   让 LAN 端 client-app 把自己注册为"已联通但暂无流量"的被动 peer。
 //! - **`GET /status`**：返回当前 [`super::core::ServerStatus`] JSON。
 //! - **`GET /check?host=...`**：返回 PAC 决策 JSON。
 //! - **CIDR 校验**：peer IP 不在 `allowed_cidrs` 任一条目内 → 403。
@@ -31,10 +31,10 @@ use tokio_util::sync::CancellationToken;
 use super::core::ProxyCore;
 use super::session::SessionRegistry;
 
-/// 单条 request line 上限（与 Python `MAX_REQUEST_LINE` 一致）。
+/// 单条 request line 上限（防御 DoS / 错误请求）。
 const MAX_REQUEST_LINE: usize = 8192;
 
-/// 全部 headers（含 request line）的累计上限（与 Python `MAX_HEADERS` 一致）。
+/// 全部 headers（含 request line）的累计上限。
 const MAX_HEADERS_BYTES: usize = 64 * 1024;
 
 /// 初次 accept 后等待客户端发完 request line 的最大时长。

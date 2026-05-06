@@ -11,20 +11,11 @@ target/
 **/src-tauri/binaries-dir/
 **/src-tauri/gen/
 
-# ── Python ──
+# ── Python（历史 sidecar 残留保护，v0.2.0 后已无 Python 代码）──
 __pycache__/
 *.py[cod]
-*$py.class
 .venv/
 venv/
-.eggs/
-*.egg-info/
-build/
-*.spec
-
-# ── PyInstaller / Nuitka 输出 ──
-*.dist/
-*.build/
 
 # ── Editor / OS ──
 .vscode/

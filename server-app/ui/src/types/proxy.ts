@@ -1,11 +1,11 @@
 /**
  * Conduit 共享数据类型
  *
- * 与后端 Python `dataclass` 和 aiohttp JSON 响应严格 1:1 对齐（snake_case）。
- * 一旦后端契约变化，此文件必须同步更新。
+ * 与 Rust 后端的 serde 字段一一对齐（全部 snake_case），后端入口在
+ * `server-app/src-tauri/src/proxy/control_api.rs`，类型定义在
+ * `crates/conduit-core/src/types.rs`。
  *
- * 详见 `design/2026-04-30-2-...md` §3.5.7 前后端 API 契约
- *      `server-app/core/api/*` 实际响应。
+ * 后端契约变化时此文件必须同步更新（控制 API 没有自动 codegen）。
  */
 
 export type Proto = "http" | "socks5";

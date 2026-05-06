@@ -1,17 +1,16 @@
 /**
- * 全局 Toast 通知系统。
+ * 全局 Toast 通知系统 —— vue-sonner thin wrapper（shadcn-vue 官方推荐 toast 实现）。
  *
- * 用法：
+ * 用法（与之前自实现的版本完全兼容，调用点零改动）：
  *   import { useToast } from "@/composables/useToast";
  *   const toast = useToast();
  *   toast.success("已复制到剪贴板");
  *   toast.error("启动失败", { detail: "address already in use" });
  *
- * - reactive 数组挂在模块单例上，所有调用方共享
- * - 默认 duration 3000ms，error 默认 5000ms
- * - 由 <ToastHost /> 单一组件渲染（挂在 App.vue 根）
+ * 渲染由挂在 App.vue 根的 <Toaster /> from "vue-sonner" 接管，
+ * 我们的 detail 字段映射到 sonner 的 description。
  */
-import { reactive } from "vue";
+import { toast as sonner } from "vue-sonner";
 
 export type ToastTone = "success" | "error" | "warn" | "info";
 
@@ -20,51 +19,46 @@ export interface ToastOptions {
   detail?: string;
 }
 
-export interface ToastItem {
-  id: number;
-  tone: ToastTone;
-  title: string;
-  detail?: string;
-  duration: number;
-  createdAt: number;
+type SonnerId = string | number;
+
+function defaultDuration(tone: ToastTone): number {
+  return tone === "error" ? 5000 : 3000;
 }
 
-const items = reactive<ToastItem[]>([]);
-let nextId = 1;
-
-function push(tone: ToastTone, title: string, opts?: ToastOptions): number {
-  const defaultDur = tone === "error" ? 5000 : 3000;
-  const item: ToastItem = {
-    id: nextId++,
-    tone,
-    title,
-    detail: opts?.detail,
-    duration: opts?.duration ?? defaultDur,
-    createdAt: Date.now(),
+function show(tone: ToastTone, title: string, opts?: ToastOptions): SonnerId {
+  const duration = opts?.duration ?? defaultDuration(tone);
+  const sonnerOpts = {
+    description: opts?.detail,
+    duration,
   };
-  items.push(item);
-  if (item.duration > 0) {
-    window.setTimeout(() => dismiss(item.id), item.duration);
+  switch (tone) {
+    case "success":
+      return sonner.success(title, sonnerOpts);
+    case "error":
+      return sonner.error(title, sonnerOpts);
+    case "warn":
+      return sonner.warning(title, sonnerOpts);
+    case "info":
+    default:
+      return sonner.info(title, sonnerOpts);
   }
-  return item.id;
 }
 
-function dismiss(id: number): void {
-  const idx = items.findIndex((x) => x.id === id);
-  if (idx >= 0) items.splice(idx, 1);
+function dismiss(id?: SonnerId): void {
+  if (id === undefined) sonner.dismiss();
+  else sonner.dismiss(id);
 }
 
 function clear(): void {
-  items.splice(0, items.length);
+  sonner.dismiss();
 }
 
 export function useToast() {
   return {
-    items,
-    success: (title: string, opts?: ToastOptions) => push("success", title, opts),
-    error: (title: string, opts?: ToastOptions) => push("error", title, opts),
-    warn: (title: string, opts?: ToastOptions) => push("warn", title, opts),
-    info: (title: string, opts?: ToastOptions) => push("info", title, opts),
+    success: (title: string, opts?: ToastOptions) => show("success", title, opts),
+    error: (title: string, opts?: ToastOptions) => show("error", title, opts),
+    warn: (title: string, opts?: ToastOptions) => show("warn", title, opts),
+    info: (title: string, opts?: ToastOptions) => show("info", title, opts),
     dismiss,
     clear,
   };

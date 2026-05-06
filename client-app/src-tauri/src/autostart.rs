@@ -11,7 +11,7 @@
 //!     此时退出 app 后 launchd 会启动新进程导致冲突;为避免误伤开发,
 //!     `enable()` 在不存在 .app bundle 时直接报错。
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::{ConduitError, ConduitResult};
@@ -50,7 +50,7 @@ fn current_app_bundle() -> ConduitResult<PathBuf> {
     ))
 }
 
-fn render_plist(app_bundle: &PathBuf) -> String {
+fn render_plist(app_bundle: &Path) -> String {
     // open -a 启动 .app,确保走 macOS 标准启动路径(权限 / Sandbox / Dock)。
     let bundle = app_bundle.to_string_lossy();
     format!(

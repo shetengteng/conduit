@@ -19,12 +19,26 @@ serde_json.workspace = true
 tauri = { workspace = true, features = ["image-png"] }
 tauri-plugin-opener.workspace = true
 tokio.workspace = true
-reqwest.workspace = true
 thiserror.workspace = true
 log.workspace = true
 env_logger.workspace = true
 portpicker.workspace = true
 once_cell.workspace = true
+# 内嵌 ClientCore（SOCKS5 入口 / 路由决策 / mDNS 发现 / 控制 API 全部进程内）
+conduit-core.workspace = true
+tokio-util.workspace = true
+mdns-sd.workspace = true
+local-ip-address.workspace = true
+ipnet.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dashmap = "6"
+dirs = "5"
+# step_fetch_pac 拉 PAC 需要的轻量 HTTP client（runtime 依赖）
+reqwest = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["full"] }

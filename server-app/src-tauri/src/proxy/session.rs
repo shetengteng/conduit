@@ -1,4 +1,4 @@
-//! 进程内会话注册表 —— 平移自 Python `server-app/core/active_connections.py`。
+//! 进程内会话注册表 —— 跟踪当前所有活跃 HTTP/SOCKS5 代理会话（UI 活跃连接面板用）。
 //!
 //! 两类会话：
 //! - **Active session**（[`ConnectionInfo`]）：HTTP CONNECT / SOCKS5 实际产生

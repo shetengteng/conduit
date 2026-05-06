@@ -1,8 +1,8 @@
 //! mDNS / Bonjour 服务广播契约 —— Server 端广播 / Client 端发现共享。
 //!
-//! 所有字段名严格对齐 Python 端：
-//! - `server-app/core/mdns_advertiser.py` 的 `_to_txt(...)` 写出的 TXT 字段
-//! - `client-app/core/discoverer.py` 的 `_service_info_to_server(...)` 读出的字段
+//! 所有字段名是双端契约，server 写、client 读，调整时必须双端同步：
+//! - server-app `proxy::mdns` 调 [`build_txt`] 写 TXT 字段
+//! - client-app `proxy::discoverer` 调 [`parse_txt`] 读 TXT 字段
 //!
 //! 任何 TXT 字段调整必须同时修改 [`build_txt`] 与 [`parse_txt`]，并跑双端兼容回归测试。
 //!
@@ -12,10 +12,10 @@
 
 use std::collections::HashMap;
 
-/// mDNS service type，与 Python 端 `SERVICE_TYPE = "_conduit._tcp.local."` 一致。
+/// mDNS service type。
 pub const SERVICE_TYPE: &str = "_conduit._tcp.local.";
 
-/// PAC URL 默认相对路径，与 Python 端 `pac` TXT 字段缺省值保持一致。
+/// PAC URL 默认相对路径，TXT 中 `pac` 字段缺失时的回退值。
 pub const DEFAULT_PAC_PATH: &str = "/proxy.pac";
 
 /// TXT 记录字段名常量，集中定义避免 typo。
@@ -43,13 +43,12 @@ pub struct MdnsServiceInfo {
 }
 
 impl MdnsServiceInfo {
-    /// 渲染 mDNS instance 名（含 `Conduit on ` 前缀），与 Python 端
-    /// `f"Conduit on {self.name}.{SERVICE_TYPE}"` 完全一致。
+    /// 渲染 mDNS instance 名：`Conduit on {name}._conduit._tcp.local.`。
     pub fn instance_fqdn(&self) -> String {
         format!("Conduit on {}.{}", self.name, SERVICE_TYPE)
     }
 
-    /// 用作 SRV `server` 字段的主机名，与 Python `f"{self.name}.local."` 对齐。
+    /// 用作 SRV `server` 字段的主机名：`{name}.local.`。
     pub fn server_fqdn(&self) -> String {
         format!("{}.local.", self.name)
     }
@@ -57,7 +56,7 @@ impl MdnsServiceInfo {
 
 /// 把 [`MdnsServiceInfo`] 序列化为 TXT 字典（key/value 都是 String）。
 ///
-/// `vpn` 字段与 Python 一致：开 → `"on"`，关 → `"off"`。
+/// `vpn` 字段：开 → `"on"`，关 → `"off"`（client 端按字符串解析）。
 pub fn build_txt(info: &MdnsServiceInfo) -> HashMap<String, String> {
     let mut out = HashMap::with_capacity(7);
     out.insert(txt::NAME.into(), info.name.clone());
@@ -85,8 +84,7 @@ pub enum MdnsParseError {
     },
 }
 
-/// 从 TXT 字典反序列化。`fallback_http_port` 用作 `port` 字段缺失时的回退
-/// （Python 端在 `_service_info_to_server` 里也是 `_txt("port", str(info.port or 0))`）。
+/// 从 TXT 字典反序列化。`fallback_http_port` 用作 `port` 字段缺失时的回退。
 pub fn parse_txt(
     txt: &HashMap<String, String>,
     fallback_http_port: u16,
@@ -192,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn instance_fqdn_matches_python_format() {
+    fn instance_fqdn_uses_conduit_on_prefix() {
         let info = sample();
         assert_eq!(info.instance_fqdn(), "Conduit on host01._conduit._tcp.local.");
         assert_eq!(info.server_fqdn(), "host01.local.");

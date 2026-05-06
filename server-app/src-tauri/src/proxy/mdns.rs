@@ -1,4 +1,4 @@
-//! mDNS / Bonjour service advertiser —— 平移自 Python `server-app/core/mdns_advertiser.py`。
+//! mDNS / Bonjour 服务广播 —— 让局域网内的 client-app 能发现本机 server。
 //!
 //! 用 [`mdns_sd::ServiceDaemon`] 注册 `_conduit._tcp.local.` 服务，让同 LAN 的
 //! Conduit Client 能自动发现 server。
@@ -6,12 +6,11 @@
 //! TXT 字段构造完全交给 [`conduit_core::mdns::build_txt`]，与 client-app 端的
 //! [`conduit_core::mdns::parse_txt`] 形成单点契约——任何字段调整只需改 conduit-core。
 //!
-//! 行为差异 vs Python：
+//! 行为说明：
 //! - 检测 LAN IP 优先用 `local-ip-address::local_ip()`（macOS 上对应默认路由
-//!   的网卡），失败时 fallback 到 `127.0.0.1`，与 Python `socket.gethostbyname`
-//!   的语义对齐。
-//! - 重名时 mdns-sd 不像 Python `zeroconf` 自动追加 `#2`，但同名重新注册会
-//!   覆盖旧条目（见 `ServiceDaemon::register` 文档）。该行为对我们够用。
+//!   的网卡），失败时 fallback 到 `127.0.0.1`（让本机 client 至少能连）。
+//! - 重名时 mdns-sd 不会自动追加 `#2`，但同名重新注册会覆盖旧条目
+//!   （见 `ServiceDaemon::register` 文档）。该行为对我们够用。
 
 use std::time::Duration;
 
@@ -37,7 +36,7 @@ fn detect_lan_ip() -> String {
 }
 
 fn detect_hostname() -> String {
-    // hostname crate 没引入；用 std env 的 fallback，与 Python `gethostname` 类似
+    // 不依赖 hostname crate；先读 $HOSTNAME 环境变量再 fallback 到 "host"
     if let Ok(h) = std::env::var("HOSTNAME") {
         if !h.is_empty() {
             return h.split('.').next().unwrap_or(&h).to_string();
@@ -109,20 +108,20 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) {
             _ = cancel.cancelled() => break,
             evt = bus_rx.recv() => {
                 let Ok(evt) = evt else { continue };
-                if evt.kind != "vpn_changed" {
+                if evt.kind != "vpn_state_changed" {
                     continue;
                 }
                 let new_vpn = evt.payload
-                    .get("vpn_on").and_then(|v| v.as_bool()).unwrap_or(false);
+                    .get("available").and_then(|v| v.as_bool()).unwrap_or(false);
                 if new_vpn == current_vpn {
                     continue;
                 }
                 current_vpn = new_vpn;
                 let updated = build_service_info(&instance_name, &host_ip, &cfg, new_vpn);
                 if let Err(e) = daemon.register(updated.clone()) {
-                    warn!("[mdns] re-register on vpn change failed: {e}");
+                    warn!("[mdns] 因 VPN 变更重新注册失败: {e}");
                 } else {
-                    info!("[mdns] TXT updated: vpn={}", if new_vpn { "on" } else { "off" });
+                    info!("[mdns] TXT 已更新: vpn={}", if new_vpn { "on" } else { "off" });
                 }
             }
         }

@@ -1,14 +1,10 @@
 //! 双端共享 wire types —— UI <→ Tauri <→ conduit-core 三方都用同一份 schema。
 //!
-//! 字段名严格对齐 Python 端的 dataclass / dict payload（snake_case），具体来源：
-//! - `client-app/core/discoverer.py::DiscoveredServer`
-//! - `server-app/core/active_connections.py::ConnectionInfo`
-//! - `server-app/core/healthcheck.py::CheckResult` + `to_dict()` 输出
-//! - `client-app/core/connectivity.py::ProbeResult`
+//! 字段全部 snake_case 序列化，UI（TypeScript）端可直接以同名字段反序列化。
 //!
-//! S1.5 会接入 [`specta`] 自动生成 TS 端 binding；当前先用 `serde` 保证 wire-format。
-//!
-//! 字段顺序、可选性、默认值任何变化都需要双向同步 Python 端。
+//! 修改任何字段（重命名 / 改类型 / 改可选性 / 改默认值）都需要：
+//! 1. 同步更新 `server-app/ui/src/types/*` 与 `client-app/ui/src/types/*` 中的 TS 类型；
+//! 2. 跑 `cargo test -p conduit-core` 验证 serde round-trip。
 
 use serde::{Deserialize, Serialize};
 
@@ -25,8 +21,6 @@ pub enum ServerSource {
 }
 
 /// 单个 Conduit Server 记录。来源可能是 mDNS、历史文件或手动添加。
-///
-/// 字段顺序与 Python `DiscoveredServer` 完全一致，UI 直接用同名结构反序列化。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiscoveredServer {
     /// `name@host:port` 形式的稳定标识（同一服务跨 session 保持一致）。
@@ -41,24 +35,24 @@ pub struct DiscoveredServer {
     /// PAC URL 相对路径（默认 `/proxy.pac`）。
     pub pac: String,
     pub source: ServerSource,
-    /// epoch seconds（与 Python `time.time()` 对齐）。
+    /// epoch seconds（UTC，UI 端 `Date.now()/1000` 同口径）。
     pub last_seen_at: f64,
     pub healthy: bool,
 }
 
 impl DiscoveredServer {
-    /// 拼接完整 PAC URL：`http://{host}:{port}{pac}`，与 Python 端 property 等价。
+    /// 拼接完整 PAC URL：`http://{host}:{port}{pac}`。
     pub fn pac_url(&self) -> String {
         format!("http://{}:{}{}", self.host, self.port, self.pac)
     }
 
-    /// 生成 `name@host:port` 形式的 server_id（与 Python `_make_server_id` 等价）。
+    /// 生成 `name@host:port` 形式的 server_id（跨 session 稳定）。
     pub fn make_server_id(name: &str, host: &str, port: u16) -> String {
         format!("{name}@{host}:{port}")
     }
 }
 
-/// 单个进行中的代理会话 —— Server 端 `active_connections.ConnectionInfo` 的镜像。
+/// 单个进行中的代理会话 —— Server 端活跃连接面板用。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConnectionInfo {
     /// 形如 `s17` 的单调递增 id。
@@ -77,8 +71,6 @@ pub struct ConnectionInfo {
 }
 
 /// 单条健康检查项（端口监听 / LAN IP / VPN tunnel）。
-///
-/// 对齐 Python `healthcheck.CheckResult`。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HealthCheckResult {
     pub name: String,
@@ -87,7 +79,7 @@ pub struct HealthCheckResult {
     pub detail: String,
 }
 
-/// 聚合健康检查响应（Python `HealthCheck.to_dict()` 的 schema）。
+/// 聚合健康检查响应（`/api/healthz` 与 UI Network 面板共用）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HealthSummary {
     pub ready: bool,
@@ -99,7 +91,7 @@ pub struct HealthSummary {
     pub uptime_sec: f64,
 }
 
-/// 客户端一次性可达性 probe 的结果，对齐 Python `connectivity.ProbeResult`。
+/// 客户端一次性可达性 probe 的结果（连接前的可达性检查 + 心跳的单次结果）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProbeResult {
     pub ok: bool,
@@ -112,6 +104,150 @@ pub struct ProbeResult {
     pub latency_ms: f64,
     #[serde(default)]
     pub server_vpn: bool,
+}
+
+/// 路由方向：`direct` 直连，`proxy` 走上游 server。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RouteDirection {
+    Direct,
+    Proxy,
+}
+
+/// 路由缓存条目（`RouteCache` 内部存储与 `/api/route_cache` 列表项）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RouteEntry {
+    pub host: String,
+    pub direction: RouteDirection,
+    /// epoch seconds 过期时间。
+    pub expires_at: f64,
+    /// `"pac"` / `"probe"` / `"manual"` 等。
+    pub source: String,
+    #[serde(default)]
+    pub hit_count: u64,
+}
+
+/// 心跳健康度颜色（绿/黄/红），用于顶栏徽标和 UI 状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HeartbeatTone {
+    Green,
+    Yellow,
+    Red,
+}
+
+/// 心跳状态快照（一次心跳轮询的结果 + 连续失败计数）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct HeartbeatState {
+    pub tone: HeartbeatTone,
+    pub consecutive_failures: u32,
+    #[serde(default)]
+    pub last_check_at: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+}
+
+/// 客户端连接生命周期状态（5 步连接状态机的对外表达）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectionState {
+    Idle,
+    Connecting,
+    Connected,
+    Failed,
+    Disconnecting,
+}
+
+impl ConnectionState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ConnectionState::Idle => "idle",
+            ConnectionState::Connecting => "connecting",
+            ConnectionState::Connected => "connected",
+            ConnectionState::Failed => "failed",
+            ConnectionState::Disconnecting => "disconnecting",
+        }
+    }
+}
+
+/// `ConnectionSnapshot.server` 的精简字段集，对齐 UI `ConnectedServerSummary`。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectedServerSummary {
+    pub server_id: String,
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub socks: u16,
+    pub api: u16,
+    pub vpn: bool,
+    pub version: String,
+}
+
+impl From<&DiscoveredServer> for ConnectedServerSummary {
+    fn from(s: &DiscoveredServer) -> Self {
+        Self {
+            server_id: s.server_id.clone(),
+            name: s.name.clone(),
+            host: s.host.clone(),
+            port: s.port,
+            socks: s.socks,
+            api: s.api,
+            vpn: s.vpn,
+            version: s.version.clone(),
+        }
+    }
+}
+
+/// `ConnectionSnapshot.heartbeat`（精简版心跳，UI `ConnectionSnapshot.heartbeat` 形态）。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectionHeartbeat {
+    pub tone: HeartbeatTone,
+    pub consecutive_failures: u32,
+    pub last_check_at: f64,
+    pub last_error: Option<String>,
+}
+
+impl From<&HeartbeatState> for ConnectionHeartbeat {
+    fn from(s: &HeartbeatState) -> Self {
+        Self {
+            tone: s.tone,
+            consecutive_failures: s.consecutive_failures,
+            last_check_at: s.last_check_at,
+            last_error: s.last_error.clone(),
+        }
+    }
+}
+
+/// 客户端 `/api/connection` 响应；对齐 UI `ConnectionSnapshot`。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectionSnapshot {
+    pub ok: bool,
+    pub state: ConnectionState,
+    pub server: Option<ConnectedServerSummary>,
+    pub connected_since: Option<f64>,
+    pub system_proxy_active: bool,
+    pub heartbeat: Option<ConnectionHeartbeat>,
+    pub last_error: Option<String>,
+}
+
+/// 5 步连接进度事件 payload。对齐 UI `ConnectProgressPayload`。
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConnectProgress {
+    pub step: u8,
+    pub total: u8,
+    pub key: &'static str,
+    pub label: &'static str,
+    pub status: ConnectStepStatus,
+    pub detail: String,
+    pub server_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ConnectStepStatus {
+    Running,
+    Ok,
+    Failed,
 }
 
 #[cfg(test)]
@@ -136,10 +272,9 @@ mod tests {
     }
 
     #[test]
-    fn discovered_server_serde_roundtrip_matches_python_payload() {
+    fn discovered_server_serde_roundtrip_keeps_snake_case_fields() {
         let ds = sample_discovered();
         let json = serde_json::to_string(&ds).unwrap();
-        // 关键字段必须在 JSON 中以 Python 端预期的 snake_case 出现
         assert!(json.contains("\"server_id\""));
         assert!(json.contains("\"last_seen_at\""));
         assert!(json.contains("\"source\":\"mdns\""));
@@ -148,7 +283,7 @@ mod tests {
     }
 
     #[test]
-    fn pac_url_helper_matches_python_property() {
+    fn pac_url_helper_concatenates_host_port_path() {
         assert_eq!(
             sample_discovered().pac_url(),
             "http://192.168.1.10:8080/proxy.pac"
@@ -156,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn make_server_id_matches_python_format() {
+    fn make_server_id_uses_name_at_host_colon_port_format() {
         assert_eq!(
             DiscoveredServer::make_server_id("host01", "192.168.1.10", 8080),
             "host01@192.168.1.10:8080"

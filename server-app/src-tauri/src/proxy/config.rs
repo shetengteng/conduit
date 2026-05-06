@@ -1,8 +1,6 @@
-//! Server proxy 配置 —— W2 Sprint 2 平移自 Python `server-app/core/config.py`。
+//! Server proxy 配置 —— 端口、CIDR 白名单、CONNECT 端口白名单等启动参数集合。
 //!
-//! 字段名与默认值严格对齐 Python 版本，便于 UI 端 invoke 调用直接复用现有 schema。
-//! 未来通过 `clap` 派生 CLI 参数；当前 S2.1 阶段先保证结构与 Python 等价，
-//! 后续 sub-task 接入命令行 / Tauri IPC 时再补 derive。
+//! UI 端通过 Tauri invoke 取这份配置作为初值；CLI 启动时也用同一份默认值。
 
 use std::collections::HashSet;
 use std::net::IpAddr;
@@ -10,7 +8,7 @@ use std::str::FromStr;
 
 use ipnet::IpNet;
 
-/// 默认允许的客户端来源 CIDR 列表（与 Python `Config.allowed_cidrs` 对齐）。
+/// 默认允许的客户端来源 CIDR 列表（loopback + 全部 RFC1918 私网 + 链路本地）。
 pub const DEFAULT_ALLOWED_CIDRS: &[&str] = &[
     "192.168.0.0/16",
     "10.0.0.0/8",
@@ -18,7 +16,7 @@ pub const DEFAULT_ALLOWED_CIDRS: &[&str] = &[
     "127.0.0.0/8",
 ];
 
-/// 默认允许 CONNECT 的目标端口集合（与 Python `Config.allowed_connect_ports` 对齐）。
+/// 默认允许 CONNECT 的目标端口集合（HTTPS / quic / dev http 常用端口）。
 pub const DEFAULT_ALLOWED_CONNECT_PORTS: &[u16] =
     &[80, 443, 22, 8080, 8443, 8118, 8888, 9000, 9443];
 
@@ -29,8 +27,7 @@ pub const PAC_ENDPOINTS: &[&str] = &["/proxy.pac", "/wpad.dat"];
 
 /// Server-side 运行时配置。
 ///
-/// 跟 Python `Config` 字段一一对应；UI 切 invoke 后传入的 JSON 会反序列化到这里
-/// （S2.7 阶段会加 `serde::Deserialize` 派生）。
+/// 启动配置；UI 端通过 Tauri invoke 取出 JSON 形式做表单初始值。
 ///
 /// 部分字段（`api_bind_loopback_only` / `pac_file_path` / `log_level` /
 /// `redact_query` / `direct_first` / `direct_first_timeout_s` /
@@ -109,7 +106,7 @@ impl ProxyConfig {
     }
 
     /// 校验 peer IP 是否落在 `allowed_cidrs` 任一网段内。
-    /// CIDR 解析失败的条目被忽略，与 Python 端 `is_client_allowed` 行为一致。
+    /// CIDR 解析失败的条目被忽略（容错而非崩溃）。
     pub fn is_client_allowed(&self, peer_ip: &str) -> bool {
         let Ok(addr) = IpAddr::from_str(peer_ip) else {
             return false;
@@ -136,7 +133,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_match_python_layout() {
+    fn defaults_use_known_ports_and_full_cidr_list() {
         let cfg = ProxyConfig::default();
         assert_eq!(cfg.http_port, 8080);
         assert_eq!(cfg.socks_port, 1080);

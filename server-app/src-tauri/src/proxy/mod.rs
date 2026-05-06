@@ -10,6 +10,7 @@
 //!   （已实装 S2.2）
 //! - [`socks5`] —— RFC1928 手写 SOCKS5 server（已实装 S2.3）
 //! - [`mdns`] —— `mdns-sd` 服务广播（已实装 S2.4）
+//! - [`vpn_detect`] —— utun/ppp/tun 接口周期检测，驱动 UI VPN 徽标
 //! - `outbound` —— DIRECT-first 路由 + system-proxy 控制（待 S2.5 实装）
 //!
 //! 设计参考：`design/2026-05-06-2-Conduit-Rust-重写设计文档.md` §5.1 ~ §5.6。
@@ -21,6 +22,7 @@ pub mod http;
 pub mod mdns;
 pub mod session;
 pub mod socks5;
+pub mod vpn_detect;
 
 pub use config::ProxyConfig;
 pub use core::ProxyCore;

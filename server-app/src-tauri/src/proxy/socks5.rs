@@ -1,6 +1,6 @@
-//! SOCKS5 server —— 平移自 Python `server-app/core/socks5_proxy.py`。
+//! SOCKS5 server —— 接受客户端 SOCKS5 CONNECT 并 relay 到目标。
 //!
-//! 实现范围（与 Python 等价）：
+//! 实现范围：
 //! - RFC 1928 method 协商（仅支持 NO-AUTH）
 //! - CMD = CONNECT，其它命令回 `0x07 Command not supported`
 //! - 地址类型：IPv4 / IPv6 / DOMAIN
@@ -9,7 +9,7 @@
 //!   / `0x06 TTL expired`（超时）
 //! - bind reply 用 upstream 实际 local addr（不可解析时回 0.0.0.0:0）
 //!
-//! 不实现 BIND / UDP ASSOCIATE，与 Python 端一致。
+//! 不实现 BIND / UDP ASSOCIATE（Conduit 用例只需 CONNECT）。
 
 use std::net::IpAddr;
 use std::sync::Arc;

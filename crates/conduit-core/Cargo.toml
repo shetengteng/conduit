@@ -14,9 +14,15 @@ ipnet.workspace = true
 serde.workspace = true
 # 追加 io-util feature 给 relay 用 copy_bidirectional；workspace 默认未启用
 tokio = { workspace = true, features = ["io-util"] }
+# healthz 模块需要 HTTP client；workspace 已配 rustls-tls，不引入 OpenSSL
+reqwest.workspace = true
+# ports 模块（pick_unused_ports）依赖
+portpicker.workspace = true
+# healthz / 多模块复用 log 宏
+log.workspace = true
 
 [dev-dependencies]
 # 测试需要 macros (#[tokio::test]) 与 io-util 完整 helper
 tokio = { workspace = true, features = ["full"] }
-# types.rs 单测验证 serde 序列化字段名（与 Python 端 wire-format 兼容）
+# types.rs 单测验证 serde 序列化字段名（snake_case 是 UI 端 JSON 契约）
 serde_json.workspace = true

@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # release.sh —— 打 Conduit Server / Client 的发布包(.dmg / .msi / .deb / .AppImage)。
 #
-# v0.2.0 起 server-app 已纯 Rust，仅 client-app 还需要 Python sidecar
-# （W3 Sprint 3 完成后会一并 Rust 化，本脚本届时不再需要 build-sidecars 步骤）。
+# server-app + client-app 是纯 Rust + TypeScript（in-process ProxyCore /
+# ClientCore），打包流程只跑 pnpm install + pnpm tauri build。
 #
 # 流程:
-#   1. 若涉及 client-app，跑 build-sidecars.sh 打 client sidecar
-#   2. 跑 pnpm install (确保前端依赖就绪)
-#   3. 跑 pnpm tauri build 在每个 app 目录里
-#   4. 输出归集到 dist/<app>/<bundle-files>
+#   1. pnpm install (确保前端依赖就绪)
+#   2. pnpm tauri build 在每个 app 目录里
+#   3. 输出归集到 dist/<app>/<bundle-files>
 #
 # 跑法:
 #   ./scripts/release.sh           # 打两个 app
-#   ./scripts/release.sh server    # 只打 server（无需 sidecar）
-#   ./scripts/release.sh client    # 只打 client（需 sidecar）
+#   ./scripts/release.sh server    # 只打 server
+#   ./scripts/release.sh client    # 只打 client
 #
 # 注:
 #   - 需要先在本机配好 rust + tauri toolchain。
@@ -40,32 +39,13 @@ need() {
 need pnpm
 need cargo
 
-# ---------- step 1: sidecar (only when client is in scope) ----------
-needs_sidecar=0
-if [[ $# -eq 0 ]]; then
-  needs_sidecar=1
-else
-  for app in "$@"; do
-    [[ "$app" == "client" ]] && needs_sidecar=1
-  done
-fi
-
-if [[ "$needs_sidecar" -eq 1 ]]; then
-  need python3
-  echo "═══ step 1/4: build client sidecar ═══"
-  ./scripts/build-sidecars.sh client
-else
-  echo "═══ step 1/4: skip sidecars (server is pure Rust since v0.2.0) ═══"
-fi
-
-# ---------- step 2: pnpm install ----------
-echo ""
-echo "═══ step 2/4: pnpm install ═══"
+# ---------- step 1: pnpm install ----------
+echo "═══ step 1/3: pnpm install ═══"
 if [[ ! -d node_modules ]]; then
   pnpm install
 fi
 
-# ---------- step 3: tauri build per app ----------
+# ---------- step 2: tauri build per app ----------
 build_app() {
   local app="$1"
   local dir="${app}-app"
@@ -82,9 +62,7 @@ build_app() {
   fi
 
   echo ""
-  echo "═══ step 3/4: tauri build $product ═══"
-  # sidecar 通过 bundle.resources 走 onedir 目录树（见 build-sidecars.sh
-  # 顶部注释），不再使用 externalBin 单二进制约定。
+  echo "═══ step 2/3: tauri build $product ═══"
   (cd "$dir" && pnpm tauri build)
 
   # 归集产物
@@ -120,7 +98,7 @@ else
 fi
 
 echo ""
-echo "═══ step 4/4: notarization (optional) ═══"
+echo "═══ step 3/3: notarization (optional) ═══"
 if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "${APPLE_ID:-}" ]]; then
   echo "→ APPLE_ID set, attempting notarization (TODO: implement via xcrun notarytool submit ...)"
   # TODO: 等 Apple Developer 账号到位后填实

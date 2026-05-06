@@ -8,6 +8,11 @@
  *   4. 硬编码 8091
  *
  * 与 server-app 的 runtime.ts 唯一差异：fallback port 8091（避免与 server 8090 冲突）。
+ *
+ * 缓存策略（2026-05-06 调整）：
+ *   不再缓存 cachedBase。dev 模式下 cargo watcher 热重启 binary 后 api_port 会变，
+ *   旧缓存会让所有 fetch 指向已不存在的端口。每次 apiBase() 重新 invoke get_runtime
+ *   —— 同进程 IPC 开销可忽略，release 模式下也是一次便宜的 mutex read。
  */
 import { invoke } from "@tauri-apps/api/core";
 import type { AppRuntime } from "../types/client";
@@ -30,19 +35,14 @@ function _resolveDevFallback(): string {
 
 const FALLBACK_BASE = _resolveDevFallback();
 
-let cached: AppRuntime | null = null;
-let cachedBase: string | null = null;
-
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 export async function getRuntime(): Promise<AppRuntime | null> {
-  if (cached) return cached;
   if (!isTauri()) return null;
   try {
-    cached = await invoke<AppRuntime>("get_runtime");
-    return cached;
+    return await invoke<AppRuntime>("get_runtime");
   } catch (e) {
     console.warn("[runtime] get_runtime failed, fallback to mock", e);
     return null;
@@ -50,19 +50,15 @@ export async function getRuntime(): Promise<AppRuntime | null> {
 }
 
 export async function apiBase(): Promise<string> {
-  // ?api_port=xxx 永远优先,不缓存 —— 浏览器 dev 时换端口立即生效
   if (typeof window !== "undefined") {
     const sp = new URLSearchParams(window.location.search);
     const p = sp.get("api_port");
     if (p && /^\d{2,5}$/.test(p)) return `http://127.0.0.1:${p}`;
   }
-  if (cachedBase) return cachedBase;
   const rt = await getRuntime();
-  cachedBase = rt ? `http://127.0.0.1:${rt.api_port}` : FALLBACK_BASE;
-  return cachedBase;
+  return rt ? `http://127.0.0.1:${rt.api_port}` : FALLBACK_BASE;
 }
 
 export function clearRuntimeCache(): void {
-  cached = null;
-  cachedBase = null;
+  // 兼容旧调用方（已无内部缓存，留空作为 no-op，下个 apiBase() 自然就重新 invoke 了）。
 }

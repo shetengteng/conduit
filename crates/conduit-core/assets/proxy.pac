@@ -1,27 +1,25 @@
-// proxy.pac — LAN VPN sharing smart routing
-// Hosted at http://<machine-A-LAN-IP>:8080/proxy.pac
+// proxy.pac —— 局域网 VPN 共享的智能路由配置
+// 由 server-app 通过 http://<server-LAN-IP>:8080/proxy.pac 对外暴露。
 //
-// Behavior:
-//   1. Local / private / link-local hosts        → DIRECT
-//   2. Internal-only hosts (Zoom corp/dev)       → PROXY (no fallback)
-//   3. Hosts that may need VPN to reach          → PROXY (no fallback)
-//      [historic: was "PROXY first, DIRECT on failure" — but browsers
-//       trigger that fallback whenever proxy is briefly unreachable
-//       (e.g. during A's restart) and then cache the DIRECT decision
-//       for 5–30 minutes. For GFW-blocked hosts that means the user
-//       silently waits 30s+ on DIRECT timeouts. We disable fallback so
-//       proxy outages surface as immediate errors instead of slow hangs.]
-//   4. Large CN traffic                          → DIRECT (use local ISP)
-//   5. Everything else                           → DIRECT
+// 路由规则:
+//   1. 本地 / 私网 / 链路本地地址                 → DIRECT
+//   2. Zoom 内网域名（必须走 VPN 才能访问）       → PROXY（无 fallback）
+//   3. 可能被 GFW 阻断、走 VPN 更稳的境外域名     → PROXY（无 fallback）
+//      [背景说明：原方案是 "PROXY first, DIRECT on failure"，但浏览器
+//       一旦在 A 重启等短暂窗口内 fallback 到 DIRECT，就会缓存这个决策
+//       5–30 分钟；对被 GFW 阻断的目标这意味着用户要等 30s+ DIRECT 超时。
+//       关掉 fallback，让代理故障立即暴露为快速失败，而不是慢挂。]
+//   4. 国内大流量域名                             → DIRECT（直连本地 ISP）
+//   5. 其他所有                                   → DIRECT
 //
-// shExpMatch  — glob pattern, exact host match (e.g. "git.zoom.us")
-// dnsDomainIs — covers the bare domain AND every subdomain
-//               (e.g. dnsDomainIs(host, "google.com") matches "google.com"
-//                AND "www.google.com" AND "ai.google.com")
+// 匹配函数:
+//   shExpMatch  —— glob 风格精确匹配，例如 "git.zoom.us"
+//   dnsDomainIs —— 同时覆盖裸域名和所有子域名
+//                  例如 dnsDomainIs(host, "google.com") 同时匹配
+//                  "google.com" / "www.google.com" / "ai.google.com"
 //
-// To add a host: drop a `dnsDomainIs(host, "newdomain.com")` line into the
-// matching section. Server's /check?host=xxx tells you which section a host
-// would land in.
+// 新增域名: 直接在对应分组里加一行 `dnsDomainIs(host, "newdomain.com")`。
+// server 端 /check?host=xxx 接口可以用来确认某个 host 会落到哪个分组。
 
 function FindProxyForURL(url, host) {
     var PROXY = "PROXY __PROXY_HOST__:__PROXY_PORT__";
@@ -29,7 +27,7 @@ function FindProxyForURL(url, host) {
 
     host = host.toLowerCase();
 
-    // ---------- 1. Local / private / link-local ----------
+    // ---------- 1. 本地 / 私网 / 链路本地地址 ----------
     if (isPlainHostName(host)
         || shExpMatch(host, "localhost")
         || dnsDomainIs(host, "local")
@@ -43,7 +41,7 @@ function FindProxyForURL(url, host) {
         return DIRECT;
     }
 
-    // ---------- 2. Zoom internal — must go via VPN ----------
+    // ---------- 2. Zoom 内网域名 —— 必须走 VPN ----------
     if (dnsDomainIs(host, "zoom.us")
         || dnsDomainIs(host, "zoomdev.us")
         || dnsDomainIs(host, "corp.zoom.us")
@@ -54,7 +52,7 @@ function FindProxyForURL(url, host) {
         return PROXY;
     }
 
-    // ---------- 3. May require VPN — try proxy then DIRECT ----------
+    // ---------- 3. 可能需要走 VPN 的境外域名 ----------
     if (dnsDomainIs(host, "google.com")
         || dnsDomainIs(host, "googleapis.com")
         || dnsDomainIs(host, "googleusercontent.com")
@@ -77,7 +75,7 @@ function FindProxyForURL(url, host) {
         return PROXY;
     }
 
-    // ---------- 4. Large CN traffic — direct via local ISP ----------
+    // ---------- 4. 国内大流量域名 —— 直连本地 ISP ----------
     if (dnsDomainIs(host, "baidu.com")
         || dnsDomainIs(host, "taobao.com")
         || dnsDomainIs(host, "tmall.com")
@@ -95,6 +93,6 @@ function FindProxyForURL(url, host) {
         return DIRECT;
     }
 
-    // ---------- 5. Default ----------
+    // ---------- 5. 兜底默认 ----------
     return DIRECT;
 }

@@ -1,10 +1,10 @@
 mod commands;
 mod error;
-mod healthz;
 mod proxy;
 mod state;
 mod tray;
 
+use conduit_core::{pick_unused_ports, wait_until_ready};
 use log::{error, info, warn};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
@@ -19,9 +19,9 @@ pub fn run() {
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .try_init();
 
-    let (http_port, socks5_port, api_port) = match pick_three_ports() {
-        Some(t) => t,
-        None => {
+    let (http_port, socks5_port, api_port) = match pick_unused_ports(3) {
+        Some(v) if v.len() == 3 => (v[0], v[1], v[2]),
+        _ => {
             eprintln!("FATAL: could not allocate three free TCP ports");
             std::process::exit(2);
         }
@@ -33,7 +33,7 @@ pub fn run() {
         http_port, socks5_port, api_port
     );
 
-    // W2 Sprint 2: ProxyCore 替换 Python sidecar，进程内承载 HTTP/SOCKS5/mDNS/控制 API。
+    // ProxyCore 进程内承载 HTTP / SOCKS5 / mDNS / 控制 API（无外部 sidecar 进程）。
     let proxy_cfg = ProxyConfig::with_ports(http_port, socks5_port, api_port);
     let proxy = ProxyCore::new(proxy_cfg);
 
@@ -105,10 +105,10 @@ async fn boot_sequence(handle: AppHandle, proxy: ProxyCore) -> Result<(), Condui
         let _ = handle.emit("boot:error", e.clone());
         return Err(ConduitError::Internal(e));
     }
-    info!("ProxyCore started in-process (no Python sidecar)");
+    info!("ProxyCore started in-process");
     state.set_sidecar_pid(Some(std::process::id()));
 
-    match healthz::wait_until_ready(proxy.config().api_port, HEALTHZ_TIMEOUT_SEC).await {
+    match wait_until_ready(proxy.config().api_port, HEALTHZ_TIMEOUT_SEC).await {
         Ok(_) => {
             state.set_phase(LifecyclePhase::Ready, None);
             let _ = handle.emit("boot:phase", "ready");
@@ -119,11 +119,12 @@ async fn boot_sequence(handle: AppHandle, proxy: ProxyCore) -> Result<(), Condui
             Ok(())
         }
         Err(e) => {
-            warn!("healthz timeout: {e}");
-            state.set_phase(LifecyclePhase::Failed, Some(e.to_string()));
+            let msg = e.to_string();
+            warn!("healthz timeout: {msg}");
+            state.set_phase(LifecyclePhase::Failed, Some(msg.clone()));
             let _ = handle.emit("boot:phase", "failed");
-            let _ = handle.emit("boot:error", e.to_string());
-            Err(e)
+            let _ = handle.emit("boot:error", msg);
+            Err(ConduitError::HealthzTimeout(HEALTHZ_TIMEOUT_SEC))
         }
     }
 }
@@ -134,20 +135,4 @@ async fn request_graceful_shutdown(handle: &AppHandle, proxy: &ProxyCore) {
     }
     proxy.stop().await;
     info!("ProxyCore stopped");
-}
-
-fn pick_three_ports() -> Option<(u16, u16, u16)> {
-    let mut taken = vec![];
-    let mut next = || {
-        for _ in 0..32 {
-            if let Some(p) = portpicker::pick_unused_port() {
-                if !taken.contains(&p) {
-                    taken.push(p);
-                    return Some(p);
-                }
-            }
-        }
-        None
-    };
-    Some((next()?, next()?, next()?))
 }
