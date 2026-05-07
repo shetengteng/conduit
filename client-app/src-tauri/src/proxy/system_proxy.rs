@@ -1,37 +1,40 @@
-//! `MacSystemProxy` —— macOS `networksetup` 系统 SOCKS 代理 wrapper。
+//! `MacSystemProxy` —— macOS 系统 SOCKS 代理切换入口。
 //!
-//! 调用 4 个 networksetup 命令：
-//! - `-listallnetworkservices`            列出网络服务（只读）
-//! - `-getsocksfirewallproxy <svc>`       读当前 SOCKS 配置（只读）
-//! - `-setsocksfirewallproxy <svc> ...`   设置 SOCKS 服务器（**需要 admin**）
-//! - `-setsocksfirewallproxystate <svc>`  开/关（**需要 admin**）
+//! ## 写路径走 SystemConfiguration framework(2026-05-07 W7 升级到方案 B)
 //!
-//! ## 提权策略（2026-05-07 W6 backlog #7,W6 backlog #11 收敛）
+//! 历史:
+//! - V1:`networksetup -setsocksfirewallproxy*` CLI。macOS 13+ 普通用户
+//!   常 exit 14("Operation not permitted")。
+//! - V2:V1 失败时 fallback `osascript ... with administrator privileges`。
+//!   osascript token 不跨进程缓存 → **每次 connect 都弹密码框**,严重退化。
+//! - V3(P 方案):去掉 V2 fallback,失败仅 UI warning,与 Python 对齐。
+//!   **0 弹框**但浏览器要用户手动配 SOCKS5,体验不够"自动"。
+//! - V4(B 方案,当前):走 [`super::system_proxy_sc`] 直接调用
+//!   `SCPreferencesCreateWithAuthorization` + 进程级 AuthorizationRef
+//!   缓存。**首次弹 1 次原生密码框,之后整个进程内复用 token,不再弹框**。
 //!
-//! Tauri sandbox + macOS 13+ 下普通用户跑 `networksetup -setsocksfirewallproxy*`
-//! 经常 exit 14（"Operation not permitted"）。最早的策略是任意 service 失败 → 整批
-//! 走 `osascript ... with administrator privileges`,但 osascript 提权 token 不跨进程
-//! 缓存,导致 **每次 connect 都会弹密码框**,用户体验严重退化。
+//! ## 当前流程
 //!
-//! 现在采用 **两层降级 + 已设短路** 策略,与 Python 版本(`client-app/core/system_proxy.py`)
-//! 行为对齐:
+//! 1. **list / read 走 networksetup**(`list_services` / `read_socks_state`)
+//!    —— 这两个是只读命令,不需要 admin,且 networksetup 输出格式稳定易解析,
+//!    比 SC API 走 SCPreferencesCreate(无授权版)简单。
 //!
-//! 1. **目标 service 过滤**(`pick_target_services`):
-//!    优先 Wi-Fi / Ethernet 类常用网卡,黑名单排除 Thunderbolt Bridge / iPhone USB /
-//!    Bluetooth PAN / Bluetooth DUN —— 这些虚拟 service 上 `setsocksfirewallproxy`
-//!    通常会失败,且用户不会用它们上网,纯粹拖累成功率。
+//! 2. **目标 service 过滤**(`pick_target_services`):
+//!    黑名单排除 Thunderbolt Bridge / iPhone USB / Bluetooth PAN/DUN。
 //!
-//! 2. **已设短路**(enable 入口):
-//!    如果**全部目标 service 都已经指向 `host:port` + enabled**,直接 noop 返回。
-//!    "断开 → 重新 connect 同一个 server"的场景下不会再触发任何写操作 → 永不弹密码。
+//! 3. **已设短路**:全部目标 service 都已指向 `host:port + enabled` → noop。
+//!    避免无谓重写,也避免在已经设好的情况下还触发 SC commit。
 //!
-//! 3. **无提权批量 set + enable**:对剩余目标 service 跑 networksetup,任何一项失败 →
-//! 4. **fallback 到 osascript admin 一次性提权**(原有兜底),用户会看到 macOS 原生密码框。
+//! 4. **写走 SC framework**:`enable_via_sc` / `disable_via_sc`,首次弹 1 次密码。
 //!
-//! 这样:
-//! - **绝大多数循环 connect/disconnect 不弹密码**(短路命中)
-//! - 首次或换 server 时仍要弹一次,但目标 service 已经被精简,无提权阶段成功率更高
-//! - 极端 sandbox 限制下仍能 fallback 提权,功能不会"默默失效"
+//! 5. **失败 → 返 Err**,上层 `core.rs::step_switch_endpoint` 发
+//!    `system_proxy_warning` event + UI banner 提示手动配置,**不阻断连接**。
+//!
+//! ## 局限
+//!
+//! - **每次进程重启会再弹一次密码**:AuthorizationRef 不能跨进程持久化(macOS
+//!   安全约束)。彻底消除需要 SMJobBless privileged helper + Apple Developer
+//!   ID 签名,目前 ad-hoc 签名做不到。
 //!
 //! 注:Linux/Windows 平台没有这个能力,`enable` / `disable` 直接 noop。
 
@@ -39,8 +42,6 @@
 use std::process::Command;
 
 const NETWORKSETUP: &str = "/usr/sbin/networksetup";
-#[cfg(target_os = "macos")]
-const OSASCRIPT: &str = "/usr/bin/osascript";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SocksProxyState {
@@ -85,9 +86,9 @@ impl MacSystemProxy {
     ///
     /// 流程(详见模块 doc):
     /// 1. `pick_target_services()` 过滤掉 Thunderbolt Bridge / iPhone USB 等虚拟 service
-    /// 2. 全部目标 service 都已经指向 `host:port + enabled` → noop(避免循环 connect 弹密码)
-    /// 3. 无提权批量 `set` + `enable`,任何一项失败 →
-    /// 4. fallback 到 `osascript ... with administrator privileges` 一次性提权
+    /// 2. 全部目标 service 都已经指向 `host:port + enabled` → noop(避免重复写)
+    /// 3. 走 SC framework `enable_via_sc`(首次弹 1 次密码,之后进程内 0 次)
+    /// 4. 失败 → 返 Err,**不再 fallback osascript**
     #[cfg(target_os = "macos")]
     pub fn enable(&self, host: &str, port: u16) -> Result<(), String> {
         let all = list_services()?;
@@ -101,7 +102,7 @@ impl MacSystemProxy {
             ));
         }
 
-        // 已设短路:全部目标 service 都已指向我们 → 跳过整个写流程,免提权弹框。
+        // 已设短路:全部目标 service 都已指向我们 → 跳过 SC commit + AuthorizationCreate。
         // get 是只读命令,不需要 admin。失败的 service 当作"未设"处理(保守)。
         if svcs.iter().all(|svc| {
             read_socks_state(svc)
@@ -115,34 +116,16 @@ impl MacSystemProxy {
             return Ok(());
         }
 
-        let mut needs_elevation = false;
-        let mut ok_count = 0usize;
-        for svc in &svcs {
-            match try_set_and_enable_unprivileged(svc, host, port) {
-                Ok(()) => ok_count += 1,
-                Err(e) => {
-                    log::warn!("[system_proxy] unprivileged set/enable on '{svc}' failed: {e}");
-                    needs_elevation = true;
-                    break; // 一旦有 service 失败就整批走 osascript 提权,避免提权后再单独补
-                }
-            }
+        let updated = super::system_proxy_sc::enable_via_sc(&svcs, host, port).map_err(|e| {
+            format!("system_proxy_sc::enable_via_sc failed (no fallback by design): {e}")
+        })?;
+        if updated == 0 {
+            return Err(format!(
+                "system_proxy_sc updated 0 services (target list = {svcs:?})"
+            ));
         }
-
-        if needs_elevation {
-            log::info!(
-                "[system_proxy] falling back to osascript admin elevation for {} services",
-                svcs.len()
-            );
-            run_setup_with_admin(&svcs, host, port)?;
-            log::info!(
-                "[system_proxy] enabled SOCKS on {} services via admin elevation → {host}:{port}",
-                svcs.len()
-            );
-            return Ok(());
-        }
-
         log::info!(
-            "[system_proxy] enabled SOCKS on {ok_count}/{} services → {host}:{port}",
+            "[system_proxy] enabled SOCKS via SC on {updated}/{} services → {host}:{port}",
             svcs.len()
         );
         Ok(())
@@ -156,10 +139,11 @@ impl MacSystemProxy {
     /// 关闭"目标网卡"的 SOCKS 代理。
     ///
     /// 与 enable 对称:只对 `pick_target_services` 列表操作,避免对从未被 enable 的虚拟
-    /// service(Thunderbolt Bridge / iPhone USB)发 disable 命令,降低无谓的失败 →
-    /// 减少 osascript 触发概率。
+    /// service(Thunderbolt Bridge / iPhone USB)发 disable 命令,降低无谓的失败。
     ///
-    /// 单 service 部分失败不算 fatal(设计取舍:disable 的可恢复性比 enable 重要)。
+    /// 走 SC framework + 进程缓存的 AuthorizationRef:**如果 enable 已经弹过密码,
+    /// disable 不再弹**。失败仅 log warning 不返 Err,因为 disconnect 时让用户再
+    /// 次输密码体验很差,且代理"开着"比"关不掉"更易恢复(用户可以在系统设置里手动关)。
     #[cfg(target_os = "macos")]
     pub fn disable(&self) -> Result<(), String> {
         let all = list_services()?;
@@ -171,17 +155,21 @@ impl MacSystemProxy {
             return Ok(());
         }
 
-        let mut ok_count = 0usize;
-        for svc in &svcs {
-            if disable_socks(svc).is_ok() {
-                ok_count += 1;
+        match super::system_proxy_sc::disable_via_sc(&svcs) {
+            Ok(updated) => {
+                log::info!(
+                    "[system_proxy] disabled SOCKS via SC on {updated}/{} services",
+                    svcs.len()
+                );
+            }
+            Err(e) => {
+                log::warn!(
+                    "[system_proxy] disable_via_sc failed on {} services (no fallback \
+                    by design); user may need to turn off SOCKS manually. err={e}",
+                    svcs.len()
+                );
             }
         }
-        if ok_count == 0 {
-            log::info!("[system_proxy] disable all-failed unprivileged → trying osascript admin");
-            run_disable_with_admin(&svcs)?;
-        }
-        log::info!("[system_proxy] disabled SOCKS on {} services", svcs.len());
         Ok(())
     }
 
@@ -191,15 +179,9 @@ impl MacSystemProxy {
     }
 }
 
-#[cfg(target_os = "macos")]
-fn try_set_and_enable_unprivileged(svc: &str, host: &str, port: u16) -> Result<(), String> {
-    set_socks(svc, host, port)?;
-    enable_socks(svc)?;
-    Ok(())
-}
-
 /// 已知"几乎不会用作上网"的虚拟 service —— 在它们上 set socksfirewallproxy 通常会
-/// 失败(且即使成功也没用),纯粹拖累成功率/触发 osascript 提权。
+/// 失败(且即使成功也没用),纯粹拖累成功率,在"无 osascript 兜底"策略下会让整个
+/// `enable()` 直接返 Err,触发 UI 降级提示。
 ///
 /// 关键字匹配(case-insensitive),覆盖常见命名:
 /// - `Thunderbolt Bridge`(雷电桥,虚拟二层桥接)
@@ -235,7 +217,8 @@ fn pick_target_services(all: &[String]) -> Vec<String> {
         .cloned()
         .collect();
     if filtered.is_empty() {
-        // 极端兜底:全部 service 都被黑名单命中 → 退回原列表,让 osascript 兜底也比直接 fail 强
+        // 极端兜底:全部 service 都被黑名单命中 → 退回原列表,让 networksetup 至少有
+        // 机会 set 成功;失败也比直接"无服务可用"强。
         all.to_vec()
     } else {
         filtered
@@ -300,120 +283,12 @@ fn read_socks_state(svc: &str) -> Result<SocksProxyState, String> {
     })
 }
 
-#[cfg(target_os = "macos")]
-fn set_socks(svc: &str, host: &str, port: u16) -> Result<(), String> {
-    run(&[
-        "-setsocksfirewallproxy",
-        svc,
-        host,
-        &port.to_string(),
-    ])
-    .map(|_| ())
-}
-
-#[cfg(target_os = "macos")]
-fn enable_socks(svc: &str) -> Result<(), String> {
-    run(&["-setsocksfirewallproxystate", svc, "on"]).map(|_| ())
-}
-
+/// 启动期 `cleanup_if_pointing_to_us` 用来关闭上次进程崩溃残留的 SOCKS 代理。
+/// 这里走 networksetup CLI(无提权,失败被 swallow),不走 SC framework —— 否则
+/// 每次启动 client 都会弹一次密码框,体验远差于"残留代理偶尔需要用户手动关"。
 #[cfg(target_os = "macos")]
 fn disable_socks(svc: &str) -> Result<(), String> {
     run(&["-setsocksfirewallproxystate", svc, "off"]).map(|_| ())
-}
-
-/// 把字符串包成单引号 sh literal,内部 `'` 替换成 `'"'"'` (single→double→single 三段)。
-///
-/// 用于 `do shell script` 内嵌的 sh 脚本拼装,确保 service 名（可能含空格 / 引号 /
-/// 反斜杠）不会破坏命令结构。
-#[cfg(target_os = "macos")]
-fn sh_quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('\'');
-    for ch in s.chars() {
-        if ch == '\'' {
-            out.push_str("'\"'\"'");
-        } else {
-            out.push(ch);
-        }
-    }
-    out.push('\'');
-    out
-}
-
-/// 把 sh 脚本包进 AppleScript 字符串字面量。AppleScript 的双引号字符串需要转义
-/// `\` 与 `"`,其它字符（含空格 / 制表符 / 中文）都是合法字符。
-#[cfg(target_os = "macos")]
-fn applescript_string_literal(sh: &str) -> String {
-    let escaped = sh.replace('\\', "\\\\").replace('"', "\\\"");
-    format!("\"{escaped}\"")
-}
-
-/// 用 osascript 走 admin 提权一次性执行整批 set+enable。失败时返回 stderr 摘要。
-///
-/// 用户取消密码弹框 → osascript 退出码 1 + stderr `User canceled.`,转换成
-/// `Err("admin password prompt cancelled by user")` 让上层 fail_connect 走 rollback。
-#[cfg(target_os = "macos")]
-fn run_setup_with_admin(svcs: &[String], host: &str, port: u16) -> Result<(), String> {
-    let mut sh_cmds: Vec<String> = Vec::with_capacity(svcs.len() * 2);
-    for svc in svcs {
-        sh_cmds.push(format!(
-            "{} -setsocksfirewallproxy {} {} {}",
-            NETWORKSETUP,
-            sh_quote(svc),
-            host,
-            port,
-        ));
-        sh_cmds.push(format!(
-            "{} -setsocksfirewallproxystate {} on",
-            NETWORKSETUP,
-            sh_quote(svc),
-        ));
-    }
-    let sh = sh_cmds.join("; ");
-    run_osascript_admin(&sh)
-}
-
-/// 用 osascript 走 admin 提权一次性关掉所有 service 的 SOCKS。
-#[cfg(target_os = "macos")]
-fn run_disable_with_admin(svcs: &[String]) -> Result<(), String> {
-    let mut sh_cmds: Vec<String> = Vec::with_capacity(svcs.len());
-    for svc in svcs {
-        sh_cmds.push(format!(
-            "{} -setsocksfirewallproxystate {} off",
-            NETWORKSETUP,
-            sh_quote(svc),
-        ));
-    }
-    let sh = sh_cmds.join("; ");
-    run_osascript_admin(&sh)
-}
-
-#[cfg(target_os = "macos")]
-fn run_osascript_admin(sh_script: &str) -> Result<(), String> {
-    let apple = format!(
-        "do shell script {} with administrator privileges",
-        applescript_string_literal(sh_script)
-    );
-    let out = Command::new(OSASCRIPT)
-        .args(["-e", &apple])
-        .output()
-        .map_err(|e| format!("spawn {OSASCRIPT} failed: {e}"))?;
-    if out.status.success() {
-        return Ok(());
-    }
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    let stderr_trim = stderr.trim();
-    // osascript 用户取消的典型 stderr: "execution error: User canceled. (-128)"
-    if stderr_trim.contains("User canceled")
-        || stderr_trim.contains("(-128)")
-        || stderr_trim.contains("cancel")
-    {
-        return Err("admin password prompt cancelled by user".into());
-    }
-    Err(format!(
-        "{OSASCRIPT} admin elevation failed: exit {} stderr={stderr_trim}",
-        out.status,
-    ))
 }
 
 #[cfg(test)]
@@ -444,10 +319,10 @@ mod tests {
         assert_eq!(MacSystemProxy::is_supported(), cfg!(target_os = "macos"));
     }
 
-    // 提权 fallback 相关 helper 仅 macOS 编译,所以测试也加 cfg。
+    // pick_target_services 仅 macOS 编译,所以测试也加 cfg。
     #[cfg(target_os = "macos")]
-    mod elevation {
-        use super::super::{applescript_string_literal, pick_target_services, sh_quote};
+    mod service_filter {
+        use super::super::pick_target_services;
 
         #[test]
         fn pick_target_services_drops_known_virtual_services() {
@@ -503,35 +378,6 @@ mod tests {
             ];
             let picked = pick_target_services(&raw);
             assert_eq!(picked.len(), 2);
-        }
-
-        #[test]
-        fn sh_quote_wraps_plain_value_in_single_quotes() {
-            assert_eq!(sh_quote("Wi-Fi"), "'Wi-Fi'");
-            assert_eq!(sh_quote(""), "''");
-        }
-
-        #[test]
-        fn sh_quote_handles_embedded_single_quote() {
-            // service 名 "Bob's iPhone" → 'Bob'"'"'s iPhone'
-            // 这是把"已经在单引号内"的状态先 break 出去 (以双引号包一个 ')
-            // 再回到单引号内继续。
-            assert_eq!(sh_quote("Bob's iPhone"), "'Bob'\"'\"'s iPhone'");
-        }
-
-        #[test]
-        fn sh_quote_passes_through_spaces_and_unicode() {
-            assert_eq!(sh_quote("iPhone USB"), "'iPhone USB'");
-            assert_eq!(sh_quote("以太网 1"), "'以太网 1'");
-        }
-
-        #[test]
-        fn applescript_string_escapes_quotes_and_backslashes() {
-            assert_eq!(applescript_string_literal("plain"), "\"plain\"");
-            assert_eq!(
-                applescript_string_literal(r#"a"b\c"#),
-                r#""a\"b\\c""#
-            );
         }
     }
 }

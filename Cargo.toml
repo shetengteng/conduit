@@ -41,6 +41,11 @@ tokio-util = { version = "0.7", features = ["rt"] }
 mdns-sd = "0.13"
 # S2.4 / S2.5 检测物理网卡 / LAN IP
 local-ip-address = "0.6"
+# macOS SystemConfiguration framework FFI 支持(system_proxy 走 SCPreferences API
+# + AuthorizationRef session 缓存,实现首次弹 1 次密码、之后进程内 0 次的体验)
+core-foundation = "0.10"
+core-foundation-sys = "0.8"
+system-configuration-sys = "0.6"
 
 [profile.release]
 codegen-units = 1

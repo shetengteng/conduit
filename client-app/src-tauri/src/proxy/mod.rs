@@ -7,7 +7,8 @@
 //! - [`route_cache`] —— 路由缓存（`dashmap` + TTL）
 //! - [`route_resolver`] —— PAC + cache + probe + private-IP 决策树
 //! - [`local_proxy`] —— 本地 SOCKS5 listener + relay
-//! - [`system_proxy`] —— macOS `networksetup` 系统代理 wrapper
+//! - [`system_proxy`] —— macOS 系统 SOCKS 代理切换入口(走 SystemConfiguration framework)
+//! - [`system_proxy_sc`] —— SC framework + AuthorizationRef session 缓存,首次弹 1 次密码
 //! - [`connectivity`] —— 一次性 probe + 心跳
 //! - [`traffic_meter`] —— 流量统计
 //! - [`control_api`] —— 兼容 UI 现有 REST/SSE 的 127.0.0.1 控制接口
@@ -26,6 +27,8 @@ pub mod local_proxy;
 pub mod route_cache;
 pub mod route_resolver;
 pub mod system_proxy;
+#[cfg(target_os = "macos")]
+pub mod system_proxy_sc;
 pub mod traffic_meter;
 
 pub use config::ClientConfig;

@@ -60,6 +60,16 @@ interface ConnectionStateRefs {
   pendingServerId: string | null;   // connecting 期间显示用
   lastError: string | null;
   loading: boolean;
+  /**
+   * 是否有 connect/disconnect HTTP 请求正在飞。**与 `state` 不同**:
+   * - `state` 反映后端连接状态机(idle/connecting/connected/...)
+   * - `inFlight` 反映 UI 是否正在等本次 connect/disconnect HTTP 响应
+   *
+   * 用来防止用户连续多次点击 connect/disconnect 按钮(后端尽管已修了死锁
+   * 路径,但乐观地避免并发请求依然是好做法)。组件应该用 `isBusy` 来禁用
+   * 按钮。
+   */
+  inFlight: boolean;
 }
 
 const _emptyProgress = (): ConnectionStateRefs["progress"] => ({
@@ -77,6 +87,7 @@ const state = reactive<ConnectionStateRefs>({
   pendingServerId: null,
   lastError: null,
   loading: false,
+  inFlight: false,
 });
 
 async function refresh(): Promise<void> {
@@ -94,6 +105,12 @@ async function refresh(): Promise<void> {
 }
 
 async function connectTo(serverId: string): Promise<void> {
+  // 防御:同一时刻只允许一次 connect/disconnect 飞。直接 return 比抛错友好,
+  // 用户不会看到红屏,只会看到按钮"灰着不响应"。
+  if (state.inFlight) {
+    return;
+  }
+  state.inFlight = true;
   state.lastError = null;
   state.pendingServerId = serverId;
   state.progress = _emptyProgress();
@@ -107,10 +124,16 @@ async function connectTo(serverId: string): Promise<void> {
     state.lastError = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
     state.state = "failed";
     throw e;
+  } finally {
+    state.inFlight = false;
   }
 }
 
 async function disconnect(): Promise<void> {
+  if (state.inFlight) {
+    return;
+  }
+  state.inFlight = true;
   state.lastError = null;
   state.state = "disconnecting";
   try {
@@ -123,6 +146,8 @@ async function disconnect(): Promise<void> {
     state.lastError = e instanceof ApiError ? `${e.code}: ${e.message}` : String(e);
     await refresh();   // 回到真相
     throw e;
+  } finally {
+    state.inFlight = false;
   }
 }
 

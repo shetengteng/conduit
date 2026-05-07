@@ -38,6 +38,9 @@ reqwest = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc.workspace = true
+core-foundation.workspace = true
+core-foundation-sys.workspace = true
+system-configuration-sys.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

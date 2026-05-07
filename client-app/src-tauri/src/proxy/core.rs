@@ -40,6 +40,17 @@ use super::route_resolver::RouteResolver;
 use super::system_proxy::MacSystemProxy;
 use super::traffic_meter::TrafficMeter;
 
+/// 跨平台 diag 写文件:macOS 走 `system_proxy_sc::diag_log_pub`(写
+/// `~/Library/Logs/Conduit/conduit-client.log`),其它平台 noop。
+/// 用来对照 connect_lock 进出和 SC API 调用的时间戳。
+#[cfg(target_os = "macos")]
+fn diag_log(msg: &str) {
+    super::system_proxy_sc::diag_log_pub(msg);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn diag_log(_msg: &str) {}
+
 /// 进程内事件总线消息体，转发给 control API SSE / Tauri webview event listener。
 ///
 /// `kind` 取值：`heartbeat_changed` / `traffic_tick` /
@@ -262,16 +273,34 @@ impl ClientCore {
 
     /// 触发完整 5 步连接流程；任一步失败立即 short-circuit。
     pub async fn connect_to(&self, server: DiscoveredServer) -> Result<ConnectionSnapshot, String> {
+        diag_log(&format!(
+            "core::connect_to ENTER server={}",
+            server.server_id
+        ));
         let _guard = self.inner.connect_lock.lock().await;
+        diag_log(&format!(
+            "core::connect_to LOCK_ACQUIRED server={}",
+            server.server_id
+        ));
 
-        // 已连到同一个 server 直接幂等返回，避免重复跑 5 步流程
-        {
+        // 已连到同一个 server 直接幂等返回，避免重复跑 5 步流程。
+        //
+        // **关键 bug 修复(死锁)**:旧代码在持有 `self.inner.connection.lock()`
+        // guard 的同时调 `self.connection_snapshot().await`,而 snapshot 内部
+        // 又会去 lock 同一把 `connection` mutex。tokio::sync::Mutex 不可重
+        // 入,这就是死锁。症状是 connect_to 拿到 connect_lock 后无任何进展,
+        // 后续所有 disconnect/connect 都卡在 connect_lock(用户实测"反复连
+        // 接 5 次后必然卡 5 步等待中")。
+        //
+        // 修复:用单独 scope 取出需要的标志位,**guard drop 后**再调 snapshot。
+        let already_connected_to_same = {
             let rec = self.inner.connection.lock().await;
-            if rec.state == ConnectionState::Connected
+            rec.state == ConnectionState::Connected
                 && rec.server.as_ref().map(|s| &s.server_id) == Some(&server.server_id)
-            {
-                return Ok(self.connection_snapshot().await);
-            }
+        };
+        if already_connected_to_same {
+            diag_log("core::connect_to IDEMPOTENT_RETURN");
+            return Ok(self.connection_snapshot().await);
         }
 
         self.set_state(ConnectionState::Connecting, Some(server.clone()), None)
@@ -330,12 +359,19 @@ impl ClientCore {
     }
 
     pub async fn disconnect(&self) -> Result<ConnectionSnapshot, String> {
+        diag_log("core::disconnect ENTER");
         let _guard = self.inner.connect_lock.lock().await;
-        {
+        diag_log("core::disconnect LOCK_ACQUIRED");
+        // 同 connect_to 的死锁修复:不能持有 connection.lock() 的同时调
+        // snapshot()(snapshot 内部会再 lock 同一把 mutex,tokio Mutex 不可
+        // 重入)。先 drop guard,再调 snapshot。
+        let already_idle = {
             let rec = self.inner.connection.lock().await;
-            if rec.state == ConnectionState::Idle {
-                return Ok(self.connection_snapshot().await);
-            }
+            rec.state == ConnectionState::Idle
+        };
+        if already_idle {
+            diag_log("core::disconnect IDEMPOTENT_RETURN");
+            return Ok(self.connection_snapshot().await);
         }
         self.set_state(ConnectionState::Disconnecting, None, None).await;
 
@@ -474,23 +510,48 @@ impl ClientCore {
             .local_proxy
             .set_server_endpoint(Some(endpoint))
             .await;
+
+        // System proxy 切换是"锦上添花":失败时只发警告 event,**不阻断连接**。
+        // macOS 上 system_proxy.enable() 走 SystemConfiguration framework + 进程级
+        // AuthorizationRef 缓存(详见 system_proxy_sc.rs):**首次连接弹 1 次原生
+        // 密码框,之后整个进程内 0 次**。用户在密码框点取消 / 输错 → 失败但 Local
+        // proxy 仍可用,UI 横幅提示手动配 SOCKS5,heartbeat 照常启动。
+        let mut system_proxy_warning: Option<String> = None;
         if self.inner.config.enable_system_proxy {
             if let Err(e) = self.try_enable_system_proxy().await {
-                let detail = format!("system_proxy enable failed: {e}");
-                self.publish_progress(
-                    3,
-                    ConnectStepStatus::Failed,
-                    &server.server_id,
-                    &detail,
-                );
-                return Err(detail);
+                warn!("[client_core] system_proxy enable failed (continuing anyway): {e}");
+                system_proxy_warning = Some(e);
             }
         }
+
+        let actual_port = self.inner.local_proxy.actual_port().await;
+        let sp_state = if system_proxy_warning.is_some() {
+            format!("系统代理切换失败,需手动配 SOCKS5 :{actual_port}")
+        } else if self.inner.config.enable_system_proxy {
+            "系统代理已切换".to_string()
+        } else {
+            format!("系统代理未启用,请手动配 SOCKS5 :{actual_port}")
+        };
+
+        if let Some(msg) = &system_proxy_warning {
+            self.inner.bus.publish(ClientEvent::new(
+                "system_proxy_warning",
+                serde_json::json!({
+                    "server_id": server.server_id,
+                    "message": msg,
+                    "manual_socks_port": actual_port,
+                }),
+            ));
+        }
+
         self.publish_progress(
             3,
             ConnectStepStatus::Ok,
             &server.server_id,
-            &format!("upstream={}:{}", server.host, server.socks),
+            &format!(
+                "upstream={}:{} · 本机 SOCKS5 :{actual_port} · {sp_state}",
+                server.host, server.socks
+            ),
         );
         Ok(())
     }
@@ -582,6 +643,12 @@ impl ClientCore {
         detail: &str,
     ) {
         let (key, label) = CONNECT_STEPS[step_idx];
+        diag_log(&format!(
+            "publish_progress step={} status={:?} detail={}",
+            step_idx + 1,
+            status,
+            detail
+        ));
         let payload = ConnectProgress {
             step: (step_idx + 1) as u8,
             total: CONNECT_STEPS.len() as u8,
@@ -607,31 +674,52 @@ impl ClientCore {
             .publish(ClientEvent::new("connect_done", payload));
     }
 
-    /// 尝试设置系统代理. 失败时返回 Err 而不是 swallow,
-    /// 这样 step_switch_endpoint 才能让整个 connect 流程明确失败,
-    /// 避免出现 "UI 显示已连接但实际系统代理未生效" 的歧义.
+    /// 尝试设置系统代理. 失败时返回 Err,但**调用方 step_switch_endpoint 不会**
+    /// **据此中断 connect 流程**——只发 system_proxy_warning event 让前端 toast.
+    /// macOS 上走 SC framework + AuthorizationRef 缓存(首次弹 1 次密码,之后进
+    /// 程内 0 次).
+    ///
+    /// 实现说明:`system_proxy.enable()` 内部调 macOS SCPreferences API,**单次
+    /// 阻塞 2-4 秒**(每个 NetworkService ~0.5-1s,典型 4 张网卡总耗时 2-4s)。
+    /// 不能直接 `await` 在 tokio runtime 上,会卡死 worker thread → SSE 进度事
+    /// 件无法 publish → UI 看到"5 步全等待中"。所以走 `spawn_blocking` 把同步
+    /// SC 调用挪到专用 blocking 线程池,UI 进度事件可以正常推送。
     async fn try_enable_system_proxy(&self) -> Result<(), String> {
         let actual_port = self.inner.local_proxy.actual_port().await;
-        self.inner
-            .system_proxy
-            .enable(&self.inner.config.bind_host, actual_port)
-            .map(|()| {
-                info!(
-                    "[client_core] system proxy → {}:{actual_port}",
-                    self.inner.config.bind_host
-                );
-            })?;
+        let host = self.inner.config.bind_host.clone();
+        diag_log("try_enable_system_proxy SPAWN_BLOCKING");
+        let result = tokio::task::spawn_blocking(move || {
+            super::system_proxy::MacSystemProxy.enable(&host, actual_port)
+        })
+        .await
+        .map_err(|e| format!("system_proxy enable task panic: {e}"))?;
+        diag_log(&format!("try_enable_system_proxy DONE result={result:?}"));
+        result?;
+        info!(
+            "[client_core] system proxy → {}:{actual_port}",
+            self.inner.config.bind_host
+        );
         *self.inner.system_proxy_active.lock().await = true;
         Ok(())
     }
 
     async fn rollback_system_proxy(&self) {
+        diag_log("rollback_system_proxy ENTER");
         let mut active = self.inner.system_proxy_active.lock().await;
         if !*active {
+            diag_log("rollback_system_proxy SKIP (not active)");
             return;
         }
-        if let Err(e) = self.inner.system_proxy.disable() {
-            warn!("[client_core] system_proxy disable failed: {e}");
+        diag_log("rollback_system_proxy SPAWN_BLOCKING");
+        let result = tokio::task::spawn_blocking(|| {
+            super::system_proxy::MacSystemProxy.disable()
+        })
+        .await;
+        diag_log(&format!("rollback_system_proxy DONE result={result:?}"));
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => warn!("[client_core] system_proxy disable failed: {e}"),
+            Err(e) => warn!("[client_core] system_proxy disable task panic: {e}"),
         }
         *active = false;
     }
