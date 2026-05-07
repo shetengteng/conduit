@@ -2,7 +2,8 @@
 //!
 //! ## 模块路线图
 //!
-//! - [`error`] —— 通用错误模型 [`ConduitError`] / [`ConduitResult`]（已实装）
+//! - [`error`] —— 通用业务错误模型 [`ConduitError`] / [`ConduitResult`]（已实装）
+//! - [`boot_error`] —— 双端 boot 阶段共享错误 [`BootError`] / [`BootResult`]（v0.2.0 W6 后续整理新增）
 //! - [`pac`] —— PAC 引擎（regex 解析 5 段 numbered section，已实装）
 //! - [`events`] —— 基于 `tokio::sync::broadcast` 的 EventBus（已实装）
 //! - [`relay`] —— 双向流量转发（已实装）
@@ -12,6 +13,7 @@
 //!
 //! 详见 `design/2026-05-06-2-Conduit-Rust-重写设计文档.md`。
 
+pub mod boot_error;
 pub mod error;
 pub mod events;
 pub mod healthz;
@@ -22,6 +24,7 @@ pub mod relay;
 pub mod socks5_proto;
 pub mod types;
 
+pub use boot_error::{BootError, BootResult};
 pub use error::{ConduitError, ConduitResult};
 pub use events::EventBus;
 pub use healthz::{wait_until_ready, HealthzError};
