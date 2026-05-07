@@ -6,7 +6,7 @@ name: build-dmg
 #      用于在另一台机器下载验证（不打 tag 不发 release）
 #
 # 矩阵：macos-15 (Apple Silicon, aarch64) + macos-15-intel (Intel, x86_64)
-# 跨平台编译不支持（PyInstaller + Tauri 都要本机架构），所以两个 runner 跑两次。
+# 跨平台编译不支持（Tauri 依赖本机 toolchain 出 .app/.dmg），所以两个 runner 各跑一次。
 # Intel 镜像 macos-15-intel 是 GitHub 提供的最后一代 x86_64 镜像（EOL: 2027-08）。
 #
 # 未公证：默认 ad-hoc 签名（APPLE_SIGNING_IDENTITY=-），可在 Apple Silicon
@@ -52,19 +52,6 @@ jobs:
       - name: checkout
         uses: actions/checkout@v5
 
-      - name: setup python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: install python sidecar deps
-        run: |
-          python3 -m pip install --upgrade pip
-          # 两个 sidecar 依赖一致（aiohttp + zeroconf），直接合并装
-          python3 -m pip install -e ./server-app/core
-          python3 -m pip install -e ./client-app/core
-          python3 -m pip install --upgrade pyinstaller
-
       - name: setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -94,7 +81,7 @@ jobs:
       - name: pnpm install
         run: pnpm install --frozen-lockfile
 
-      - name: build sidecars + bundle
+      - name: build bundle
         env:
           # workflow_dispatch 才有 inputs.app；tag push 时为空，默认 both
           APP_INPUT: ${{ inputs.app || 'both' }}
@@ -103,7 +90,7 @@ jobs:
           # 或在 Finder 里 Ctrl+Click → 打开。
           APPLE_SIGNING_IDENTITY: '-'
         run: |
-          chmod +x scripts/build-sidecars.sh scripts/release.sh
+          chmod +x scripts/release.sh
           if [[ "$APP_INPUT" == "both" ]]; then
             ./scripts/release.sh
           else
