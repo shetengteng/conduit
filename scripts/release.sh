@@ -83,23 +83,47 @@ build_app() {
   done
 
   # 归集产物
-  local bundle_dir="$dir/src-tauri/target/release/bundle"
+  #
+  # 项目是 Cargo workspace（根 Cargo.toml + crates/conduit-core +
+  # server-app/src-tauri + client-app/src-tauri），workspace 默认共用
+  # 一个根 target/，所以 tauri build 的产物在 <repo-root>/target/release/bundle/
+  # 而不是 <app>/src-tauri/target/release/bundle/。CI 上 cache miss 全量
+  # 编译时只会有 root target；本机看着两边都有是因为 IDE 单 crate 跑过
+  # 留下的 per-app target 残留（里面甚至是上一版的旧 dmg，是 v0.2.0 release
+  # 打出 0.1.x 命名 dmg 的真正根因之一）。
+  local bundle_dir="target/release/bundle"
   if [[ ! -d "$bundle_dir" ]]; then
-    echo "⚠ bundle dir not found: $bundle_dir" >&2
-    return
+    echo "✗ bundle dir not found: $bundle_dir" >&2
+    exit 1
   fi
 
   local out="dist/$app"
   mkdir -p "$out"
+  # 同一个 bundle_dir 里同时含 server + client 的 .app / .dmg（按 product 名
+  # 区分），所以必须按 "$product" 精确 glob，不能用 *.app / *.dmg 一锅端，
+  # 否则 client 的产物会被拷进 dist/server/，反之亦然。
   # macOS: dmg + app
-  cp -R "$bundle_dir/macos/"*.app "$out/" 2>/dev/null || true
-  cp "$bundle_dir/dmg/"*.dmg "$out/" 2>/dev/null || true
+  cp -R "$bundle_dir/macos/$product.app" "$out/" 2>/dev/null || true
+  cp "$bundle_dir/dmg/$product"*.dmg "$out/" 2>/dev/null || true
   # Linux: deb + AppImage
-  cp "$bundle_dir/deb/"*.deb "$out/" 2>/dev/null || true
-  cp "$bundle_dir/appimage/"*.AppImage "$out/" 2>/dev/null || true
+  cp "$bundle_dir/deb/$product"*.deb "$out/" 2>/dev/null || true
+  cp "$bundle_dir/appimage/$product"*.AppImage "$out/" 2>/dev/null || true
   # Windows: msi + nsis
-  cp "$bundle_dir/msi/"*.msi "$out/" 2>/dev/null || true
-  cp "$bundle_dir/nsis/"*.exe "$out/" 2>/dev/null || true
+  cp "$bundle_dir/msi/$product"*.msi "$out/" 2>/dev/null || true
+  cp "$bundle_dir/nsis/$product"*.exe "$out/" 2>/dev/null || true
+
+  # 校验：归集后必须至少有一个 .dmg / .deb / .AppImage / .msi / .exe
+  # 否则上游 tauri build 看着 success 实际啥都没产，CI 下游 upload-artifact
+  # 会拿到空 glob，再下游 release job 拿到空 artifacts/，最终报一堆假错。
+  local found=$(find "$out" -maxdepth 1 -type f \
+    \( -name "*.dmg" -o -name "*.deb" -o -name "*.AppImage" \
+       -o -name "*.msi" -o -name "*.exe" \) 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$found" == "0" ]]; then
+    echo "✗ no installer found in $bundle_dir for $product (检查 tauri build 是否真的产出了 dmg)" >&2
+    echo "  bundle_dir 现有内容：" >&2
+    find "$bundle_dir" -maxdepth 2 -mindepth 1 >&2 || true
+    exit 1
+  fi
 
   echo "✓ artifacts -> $out/"
   ls -lh "$out/" | tail -n +2
