@@ -211,6 +211,15 @@ export const connectionStore = {
   isConnecting: computed(() => state.state === "connecting"),
   isConnected: computed(() => state.state === "connected"),
   isFailed: computed(() => state.state === "failed"),
+  /**
+   * 综合判断 UI 是否处于"正在响应连接/断开请求"状态:
+   * - inFlight=true:本次 connect/disconnect HTTP 请求未返回
+   * - state=connecting/disconnecting:后端报告正在过渡
+   * 任一为真都禁用按钮,防止重复点击。
+   */
+  isBusy: computed(
+    () => state.inFlight || state.state === "connecting" || state.state === "disconnecting",
+  ),
   connectedServer: computed(() => state.snapshot?.server ?? null),
   connectedSince: computed(() => state.snapshot?.connected_since ?? null),
   systemProxyActive: computed(() => Boolean(state.snapshot?.system_proxy_active)),

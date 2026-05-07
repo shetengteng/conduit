@@ -22,6 +22,7 @@ import {
   RiCloseLine,
   RiAlertLine,
   RiCompass3Line,
+  RiLoader4Line,
 } from '@remixicon/vue'
 import ConnectingProgress from '@/components/business/ConnectingProgress.vue'
 import TrafficChart from '@/components/business/TrafficChart.vue'
@@ -102,6 +103,9 @@ const heartbeatToneClass = computed(() => {
 })
 
 async function handleDisconnect() {
+  // store.isBusy 已经保护了并发请求,但这里再加一层 UI 锁,避免连续点击
+  // disconnect 按钮(store 层会忽略后续点击,但 UI 上按钮先变灰更直观)。
+  if (connectionStore.isBusy.value) return
   isDisconnecting.value = true
   try {
     await connectionStore.disconnect()
@@ -141,12 +145,13 @@ function backToDiscovery() {
       <Button
         variant="outline"
         size="sm"
-        :disabled="isDisconnecting"
+        :disabled="isDisconnecting || connectionStore.isBusy.value"
         class="gap-1.5 hover:border-destructive hover:text-destructive"
         @click="handleDisconnect"
       >
-        <RiCloseLine class="size-3.5" />
-        {{ isDisconnecting ? t('connected.btnDisconnecting') : t('connected.btnDisconnect') }}
+        <RiLoader4Line v-if="isDisconnecting || connectionStore.isBusy.value" class="size-3.5 animate-spin" />
+        <RiCloseLine v-else class="size-3.5" />
+        {{ isDisconnecting || connectionStore.isBusy.value ? t('connected.btnDisconnecting') : t('connected.btnDisconnect') }}
       </Button>
     </div>
 

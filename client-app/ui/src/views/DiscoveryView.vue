@@ -43,6 +43,7 @@ import {
   RiTimeLine,
   RiCloseLine,
   RiDeleteBinLine,
+  RiLoader4Line,
 } from '@remixicon/vue'
 
 import { useDiscovery } from '@/composables/useDiscovery'
@@ -68,7 +69,9 @@ const {
 } = useDiscovery()
 
 async function handleConnect(srv: DiscoveredServer) {
-  if (connectionStore.isConnecting.value) return
+  // 任一"忙"状态下都拒绝新点击,避免连续点击导致后端并发处理(后端
+  // 已修死锁路径,但 UI 防御依旧必要,体验也更好)。
+  if (connectionStore.isBusy.value) return
   // 跳到「已连接」标签页（connecting / connected 时该 view 会展示 ConnectingProgress / ConnectedView）
   uiStore.setActive('connected')
   try {
@@ -371,19 +374,21 @@ const headerHint = computed(() => {
               variant="default"
               size="sm"
               disabled
-              class="h-7 text-xs"
+              class="h-7 text-xs gap-1.5"
             >
+              <RiLoader4Line class="size-3.5 animate-spin" />
               {{ t('discovery.btnConnecting') }}
             </Button>
             <Button
               v-else
               variant="default"
               size="sm"
-              :disabled="!isOnline(srv) || connectionStore.isConnecting.value || connectionStore.isConnected.value"
-              class="h-7 text-xs"
+              :disabled="!isOnline(srv) || connectionStore.isBusy.value || connectionStore.isConnected.value"
+              class="h-7 text-xs gap-1.5"
               :title="!isOnline(srv) ? t('discovery.btnTitleHistory') : connectionStore.isConnected.value ? t('discovery.btnTitleAlreadyConnected') : ''"
               @click="handleConnect(srv)"
             >
+              <RiLoader4Line v-if="connectionStore.isBusy.value" class="size-3.5 animate-spin" />
               {{ t('discovery.btnConnect') }}
             </Button>
           </div>

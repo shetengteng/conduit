@@ -155,6 +155,7 @@ async function handleManualConnect() {
     toast.error(t('settings.manual.toastNeedHostPort'))
     return
   }
+  if (connectionStore.isBusy.value) return
   const name = manualName.value.trim() || `manual-${manualHost.value}`
   // server_id 格式必须与后端一致:name@host:port
   const serverId = `${name}@${manualHost.value.trim()}:${manualPort.value}`
@@ -318,8 +319,9 @@ async function handleFlushCache() {
             <Input v-model.number="manualApi" type="number" placeholder="8090" class="h-8 text-xs font-mono" />
           </div>
         </div>
-        <Button :disabled="manualBusy" class="w-fit gap-1.5" @click="handleManualConnect">
-          <RiLinkM class="size-3.5" />{{ manualBusy ? t('settings.manual.btnBusy') : t('settings.manual.btn') }}
+        <Button :disabled="manualBusy || connectionStore.isBusy.value" class="w-fit gap-1.5" @click="handleManualConnect">
+          <RiLoader4Line v-if="manualBusy || connectionStore.isBusy.value" class="size-3.5 animate-spin" />
+          <RiLinkM v-else class="size-3.5" />{{ manualBusy || connectionStore.isBusy.value ? t('settings.manual.btnBusy') : t('settings.manual.btn') }}
         </Button>
         <div class="flex items-start gap-2 rounded-md border border-amber-300/50 bg-amber-50/40 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950/10 dark:text-amber-200">
           <RiAlertLine class="size-3.5 mt-0.5 shrink-0" />
