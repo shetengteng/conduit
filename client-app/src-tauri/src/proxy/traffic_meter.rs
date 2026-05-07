@@ -54,16 +54,20 @@ impl ProgressSink for TrafficMeter {
         }
         let new_sent = self.inner.sent.fetch_add(sent_delta, Ordering::Relaxed) + sent_delta;
         let new_recv = self.inner.recv.fetch_add(recv_delta, Ordering::Relaxed) + recv_delta;
+        let ts = epoch_now();
+        // 字段名与 UI 端 `TrafficTickPayload` / REST `/api/traffic` `traffic_payload` 保持一致。
+        // 旧版用 sent_total/recv_total/sent_delta/recv_delta，前端 store 直接拿 undefined → NaN。
         let payload = serde_json::json!({
-            "sent_total": new_sent,
-            "recv_total": new_recv,
-            "sent_delta": sent_delta,
-            "recv_delta": recv_delta,
+            "ts": ts,
+            "uplink_bytes": sent_delta,
+            "downlink_bytes": recv_delta,
+            "total_uplink": new_sent,
+            "total_downlink": new_recv,
         });
         self.inner.bus.publish(ClientEvent {
             kind: "traffic_tick".into(),
             payload,
-            ts: epoch_now(),
+            ts,
         });
     }
 }

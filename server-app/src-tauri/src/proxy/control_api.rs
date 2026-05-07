@@ -179,7 +179,13 @@ async fn serve_status<W: AsyncWriteExt + Unpin>(
 ) -> std::io::Result<()> {
     let cfg = core.config();
     let inner = core.status().await;
-    let pac_url = format!("http://{}:{}/proxy.pac", chosen_host(&cfg.bind), cfg.http_port);
+    let host = super::effective_advertised_host(&cfg);
+    let pac_url = format!("http://{}:{}/proxy.pac", host, cfg.http_port);
+    let mdns_name = if cfg.mdns_service_name.is_empty() {
+        super::mdns::detect_hostname()
+    } else {
+        cfg.mdns_service_name.clone()
+    };
     let resp = ServerStatusOut {
         running: inner.running,
         version: env!("CARGO_PKG_VERSION").to_string(),
@@ -189,7 +195,7 @@ async fn serve_status<W: AsyncWriteExt + Unpin>(
         pac_url: Some(pac_url),
         mdns: MdnsStatus {
             enabled: inner.mdns_enabled,
-            name: cfg.mdns_service_name.clone(),
+            name: mdns_name,
             service_type: conduit_core::mdns::SERVICE_TYPE.to_string(),
         },
         vpn: VpnStatus {
@@ -483,14 +489,6 @@ async fn send_json_status<W: AsyncWriteExt + Unpin>(
         out.write_all(body).await?;
     }
     out.flush().await
-}
-
-fn chosen_host(bind: &str) -> &str {
-    if bind.is_empty() || bind == "0.0.0.0" {
-        "127.0.0.1"
-    } else {
-        bind
-    }
 }
 
 fn epoch_secs() -> f64 {

@@ -25,7 +25,10 @@ use super::core::ProxyCore;
 pub const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// 检测一个用于广播的 LAN IP。失败时返回 `127.0.0.1`，让本地 client 至少能用。
-fn detect_lan_ip() -> String {
+///
+/// 也被 `control_api` / `core` / `http` 用来推断 PAC URL / 接入信息里展示的 host：
+/// 当用户没显式指定 `--pac-host` 且 bind 是 `0.0.0.0` 时，单一来源避免三处实现漂移。
+pub fn detect_lan_ip() -> String {
     match local_ip_address::local_ip() {
         Ok(ip) => ip.to_string(),
         Err(e) => {
@@ -35,7 +38,9 @@ fn detect_lan_ip() -> String {
     }
 }
 
-fn detect_hostname() -> String {
+/// 取系统短主机名。同时被 `control_api::serve_status` 用于在用户没传
+/// `--mdns-name` 时上报"实际广播的名字"，避免 UI 显示空。
+pub fn detect_hostname() -> String {
     // 不依赖 hostname crate；先读 $HOSTNAME 环境变量再 fallback 到 "host"
     if let Ok(h) = std::env::var("HOSTNAME") {
         if !h.is_empty() {
@@ -64,11 +69,7 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) {
         return;
     }
 
-    let host_ip = if !cfg.pac_advertised_host.is_empty() {
-        cfg.pac_advertised_host.clone()
-    } else {
-        detect_lan_ip()
-    };
+    let host_ip = super::effective_advertised_host(&cfg);
     let instance_name = if !cfg.mdns_service_name.is_empty() {
         cfg.mdns_service_name.clone()
     } else {

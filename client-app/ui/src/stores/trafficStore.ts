@@ -41,8 +41,12 @@ async function refresh(): Promise<void> {
   state.loading = true;
   try {
     const snap = await ClientApi.traffic();
-    state.totalUplink = snap.total_uplink;
-    state.totalDownlink = snap.total_downlink;
+    if (Number.isFinite(snap.total_uplink)) {
+      state.totalUplink = snap.total_uplink;
+    }
+    if (Number.isFinite(snap.total_downlink)) {
+      state.totalDownlink = snap.total_downlink;
+    }
   } catch (_) {
     /* 静默 */
   } finally {
@@ -51,16 +55,26 @@ async function refresh(): Promise<void> {
 }
 
 function onTick(payload: TrafficTickPayload): void {
+  // 防御:后端字段缺失 / 旧版 server 字段名漂移时,把 undefined 兜成 0,避免 NaN 渗入
+  // computed (peakAny / latest*) 与 fmtBytes 显示。
+  const uplink = Number.isFinite(payload.uplink_bytes) ? payload.uplink_bytes : 0;
+  const downlink = Number.isFinite(payload.downlink_bytes)
+    ? payload.downlink_bytes
+    : 0;
   state.samples.push({
     ts: payload.ts,
-    uplink: payload.uplink_bytes,
-    downlink: payload.downlink_bytes,
+    uplink,
+    downlink,
   });
   if (state.samples.length > WINDOW_SIZE) {
     state.samples.splice(0, state.samples.length - WINDOW_SIZE);
   }
-  state.totalUplink = payload.total_uplink;
-  state.totalDownlink = payload.total_downlink;
+  if (Number.isFinite(payload.total_uplink)) {
+    state.totalUplink = payload.total_uplink;
+  }
+  if (Number.isFinite(payload.total_downlink)) {
+    state.totalDownlink = payload.total_downlink;
+  }
 }
 
 function reset(): void {

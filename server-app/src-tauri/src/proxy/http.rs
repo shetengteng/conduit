@@ -127,7 +127,7 @@ async fn handle_connection(
     let path_only = target.split('?').next().unwrap_or("").to_string();
     if method == "GET" && (path_only == "/proxy.pac" || path_only == "/wpad.dat") {
         drain_headers(&mut reader).await.ok();
-        serve_pac(&mut write_half, &cfg.pac_advertised_host, cfg.http_port, &cfg.bind).await?;
+        serve_pac(&mut write_half, &cfg).await?;
         info!("[http] PAC served to {peer_ip}");
         return Ok(());
     }
@@ -598,23 +598,17 @@ async fn build_upstream_head(
     Ok(out.into_bytes())
 }
 
-/// PAC 文件渲染并发出。`advertised_host` 为空时用 bind 地址；进一步为空时用 127.0.0.1。
+/// PAC 文件渲染并发出。代理 host 走 [`super::effective_advertised_host`]
+/// 的统一推断（`pac_advertised_host` → 非通配 `bind` → LAN IP → 127.0.0.1），
+/// 与 mDNS 广播 IP 同源，避免同事拿到的 PAC 里写着 loopback。
 async fn serve_pac(
     out: &mut tokio::net::tcp::OwnedWriteHalf,
-    advertised_host: &str,
-    http_port: u16,
-    bind: &str,
+    cfg: &super::config::ProxyConfig,
 ) -> std::io::Result<()> {
-    let proxy_host = if !advertised_host.is_empty() {
-        advertised_host
-    } else if !bind.is_empty() && bind != "0.0.0.0" {
-        bind
-    } else {
-        "127.0.0.1"
-    };
+    let proxy_host = super::effective_advertised_host(cfg);
     let body = PAC_TEMPLATE
-        .replace("__PROXY_HOST__", proxy_host)
-        .replace("__PROXY_PORT__", &http_port.to_string());
+        .replace("__PROXY_HOST__", &proxy_host)
+        .replace("__PROXY_PORT__", &cfg.http_port.to_string());
     send_simple(
         out,
         200,

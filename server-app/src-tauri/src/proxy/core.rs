@@ -80,13 +80,7 @@ impl ProxyCore {
     /// / outbound policy 在 `start()` 之前就能给出决策。
     pub fn new(cfg: ProxyConfig) -> Self {
         let mut rules = PacRules::parse(PAC_TEMPLATE);
-        let host = if !cfg.pac_advertised_host.is_empty() {
-            cfg.pac_advertised_host.clone()
-        } else if !cfg.bind.is_empty() && cfg.bind != "0.0.0.0" {
-            cfg.bind.clone()
-        } else {
-            "127.0.0.1".to_string()
-        };
+        let host = super::effective_advertised_host(&cfg);
         rules.update_proxy_target(&host, cfg.http_port);
         Self {
             cfg: Arc::new(cfg),

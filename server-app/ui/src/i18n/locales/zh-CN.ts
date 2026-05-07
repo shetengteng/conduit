@@ -123,10 +123,10 @@ export default {
 
   settings: {
     title: "设置",
-    subtitle: "端口、安全策略、mDNS 广播 —— v0.1 阶段为只读占位",
+    subtitle: "端口、安全策略、mDNS 广播",
     readonly: "只读",
     readonlyAlertBody:
-      "v0.1 阶段所有配置项为只读展示,与代理运行状态无关。如需自定义,请通过启动参数(如 {mdns} / {port})指定。在窗口里编辑并热重启的能力将在 S4 与打包同步发布。",
+      "当前为只读展示。如需自定义,启动时加 {mdns} 或 {port}。",
 
     general: {
       title: "通用",
@@ -160,9 +160,8 @@ export default {
       desc: "让 LAN 上的 Conduit Client 自动发现本机",
       enable: "启用 mDNS 广播",
       name: "广播名称",
-      nameHint:
-        "默认取系统短主机名;如需自定义请用 {cmd} 启动 server",
-      nameTitle: "v0.1 不支持窗口内编辑;启动时用 {cmd} 指定",
+      nameHint: "默认为系统主机名,可用 {cmd} 自定义",
+      nameTitle: "启动时用 {cmd} 指定",
       type: "服务类型",
     },
 

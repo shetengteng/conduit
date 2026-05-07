@@ -121,11 +121,10 @@ export default {
 
   settings: {
     title: "Settings",
-    subtitle:
-      "Ports, security, mDNS broadcast — read-only in v0.1",
+    subtitle: "Ports, security, mDNS broadcast",
     readonly: "Read-only",
     readonlyAlertBody:
-      "All settings in v0.1 are read-only and don't affect runtime. To customize, pass startup flags such as {mdns} or {port}. In-window editing with hot reload ships in S4 alongside packaging.",
+      "Read-only display. To customize, pass startup flags such as {mdns} or {port}.",
 
     general: {
       title: "General",
@@ -161,9 +160,8 @@ export default {
       desc: "Lets Conduit Client on the same LAN auto-discover this server",
       enable: "Enable mDNS broadcast",
       name: "Broadcast name",
-      nameHint:
-        "Defaults to short hostname. To customize, start server with {cmd}.",
-      nameTitle: "Not editable in v0.1. Start with {cmd}.",
+      nameHint: "Defaults to system hostname. Customize with {cmd}.",
+      nameTitle: "Start with {cmd}.",
       type: "Service type",
     },
 

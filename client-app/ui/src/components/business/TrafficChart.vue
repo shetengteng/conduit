@@ -20,14 +20,16 @@ const VH = 120
 const PAD_X = 4
 const PAD_Y = 6
 
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(2)} MB`
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`
+function fmtBytes(n: number | null | undefined): string {
+  // 兜底:SSE payload 字段名漂移 / refresh() 前 store 字段尚未填充时不让 UI 显示 NaN
+  const v = Number.isFinite(n as number) ? (n as number) : 0
+  if (v < 1024) return `${v} B`
+  if (v < 1024 * 1024) return `${(v / 1024).toFixed(1)} KB`
+  if (v < 1024 * 1024 * 1024) return `${(v / 1024 / 1024).toFixed(2)} MB`
+  return `${(v / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
 
-function fmtRate(bytesPerSec: number): string {
+function fmtRate(bytesPerSec: number | null | undefined): string {
   return `${fmtBytes(bytesPerSec)}/s`
 }
 
