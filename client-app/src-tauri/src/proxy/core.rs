@@ -186,7 +186,7 @@ impl ClientCore {
     /// 启动 LocalProxy + Discoverer + （可选）pre-fill 系统代理切换。
     /// control_api 由调用方单独 spawn（拿 ClientCore 的 Arc 传进去）。
     pub async fn start(&self) -> Result<(), String> {
-        // 1) LocalProxy SOCKS5 listener
+        // 1) 启动 LocalProxy SOCKS5 监听器
         let port = self
             .inner
             .local_proxy
@@ -195,7 +195,7 @@ impl ClientCore {
             .map_err(|e| format!("local_proxy start failed: {e}"))?;
         info!("[client_core] local_proxy listening on 127.0.0.1:{port}");
 
-        // 2) traffic meter sink wire
+        // 2) 流量计量 sink 接线
         self.inner
             .local_proxy
             .set_progress_sink(Some(self.inner.traffic_meter.clone()))
@@ -234,7 +234,7 @@ impl ClientCore {
         self.rollback_system_proxy().await;
         // local_proxy
         self.inner.local_proxy.stop().await;
-        // discoverer
+        // 3) 启动 mDNS 发现器
         self.inner.discoverer.stop().await;
         // 全局取消
         self.inner.cancel.cancel();
@@ -294,25 +294,25 @@ impl ClientCore {
             }
         };
 
-        // step 3: prefill_cache
+        // 第 3 步：prefill_cache（拉 PAC 跑一遍 prime hot host）
         if let Err(e) = self.step_prefill_cache(&server, &pac_text).await {
             self.fail_connect(&server_id, &e).await;
             return Err(e);
         }
 
-        // step 4: switch_endpoint
+        // 第 4 步：switch_endpoint（设上游 + 必要时开系统代理）
         if let Err(e) = self.step_switch_endpoint(&server).await {
             self.fail_connect(&server_id, &e).await;
             return Err(e);
         }
 
-        // step 5: start_heartbeat
+        // 第 5 步：start_heartbeat（probe + 通知 server passive registry）
         if let Err(e) = self.step_start_heartbeat(&server).await {
             self.fail_connect(&server_id, &e).await;
             return Err(e);
         }
 
-        // ---- success ----
+        // ---- 5 步全部成功 ----
         let now = epoch_now();
         let label = format!("{}:{}", server.host, server.socks);
         {
@@ -421,7 +421,7 @@ impl ClientCore {
     ) -> Result<(), String> {
         self.publish_progress(2, ConnectStepStatus::Running, &server.server_id, "");
         let rules = PacRules::parse(pac_text);
-        // section 1 (local/private) → DIRECT
+        // 第 1 段（本地 / 私有网段）→ DIRECT
         let mut count = 0usize;
         for d in rules.local_domains.iter().chain(rules.cn_direct_domains.iter()) {
             let host = d.trim_start_matches('.');
@@ -433,7 +433,7 @@ impl ClientCore {
             );
             count += 1;
         }
-        // section 2 (internal) → PROXY
+        // 第 2 段（公司内网域名）→ PROXY
         for d in rules.internal_domains.iter() {
             let host = d.trim_start_matches('.');
             self.inner.cache.set_with_ttl(
@@ -444,7 +444,7 @@ impl ClientCore {
             );
             count += 1;
         }
-        // section 3 (fallback) → PROXY
+        // 第 3 段（其它兜底）→ PROXY
         for d in rules.fallback_domains.iter() {
             let host = d.trim_start_matches('.');
             self.inner.cache.set_with_ttl(
@@ -538,7 +538,7 @@ impl ClientCore {
         self.publish_connect_done(server_id, &snap);
     }
 
-    // -------------------- helpers --------------------
+    // -------------------- 私有 helper --------------------
 
     async fn set_state(
         &self,

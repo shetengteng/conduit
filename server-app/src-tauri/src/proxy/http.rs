@@ -881,7 +881,7 @@ mod tests {
         }
     }
 
-    // ----- integration tests: start ProxyCore on a real ephemeral port -----
+    // ----- 集成测试：起一个真实 ephemeral 端口的 ProxyCore -----
     use crate::proxy::{ProxyConfig, ProxyCore};
     use std::time::Duration as StdDuration;
     use tokio::io::AsyncReadExt as _;

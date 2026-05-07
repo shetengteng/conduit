@@ -52,16 +52,11 @@ async fn spawn_echo_server() -> std::io::Result<u16> {
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
     tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((mut sock, _)) => {
-                    tokio::spawn(async move {
-                        let (mut r, mut w) = sock.split();
-                        let _ = tokio::io::copy(&mut r, &mut w).await;
-                    });
-                }
-                Err(_) => break,
-            }
+        while let Ok((mut sock, _)) = listener.accept().await {
+            tokio::spawn(async move {
+                let (mut r, mut w) = sock.split();
+                let _ = tokio::io::copy(&mut r, &mut w).await;
+            });
         }
     });
     Ok(port)
@@ -71,18 +66,13 @@ async fn spawn_minimal_socks5_server(sink: Arc<CountingSink>) -> std::io::Result
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
     tokio::spawn(async move {
-        loop {
-            match listener.accept().await {
-                Ok((client, _)) => {
-                    let sink = sink.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = handle_socks5_session(client, sink).await {
-                            eprintln!("[smoke] socks5 session error: {e}");
-                        }
-                    });
+        while let Ok((client, _)) = listener.accept().await {
+            let sink = sink.clone();
+            tokio::spawn(async move {
+                if let Err(e) = handle_socks5_session(client, sink).await {
+                    eprintln!("[smoke] socks5 session error: {e}");
                 }
-                Err(_) => break,
-            }
+            });
         }
     });
     Ok(port)

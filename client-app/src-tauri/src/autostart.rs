@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn current_app_bundle_rejects_non_app_exe() {
-        // current_exe() in tests is target/debug/deps/...; should bail out cleanly.
+        // 测试场景下 current_exe() 落在 target/debug/deps/...，应当干净 bail out。
         let r = current_app_bundle();
         assert!(r.is_err(), "expected non-app exe to be rejected");
     }

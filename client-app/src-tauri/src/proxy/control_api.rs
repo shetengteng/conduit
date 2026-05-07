@@ -86,7 +86,7 @@ struct ParsedRequest {
 }
 
 async fn handle_one(mut stream: TcpStream, core: Arc<ClientCore>) -> std::io::Result<()> {
-    // ---- read request line + headers ----
+    // ---- 读 request line + headers ----
     let mut buf = Vec::with_capacity(2048);
     let mut tmp = [0u8; 1024];
     let head_end;
@@ -112,7 +112,7 @@ async fn handle_one(mut stream: TcpStream, core: Arc<ClientCore>) -> std::io::Re
         Err(msg) => return write_simple(&mut stream, 400, "Bad Request", msg).await,
     };
 
-    // ---- read body if needed (small JSON only) ----
+    // ---- 必要时读请求体（仅小 JSON） ----
     let body = if req.content_length > 0 {
         if req.content_length > MAX_BODY_BYTES {
             return write_simple(&mut stream, 413, "Payload Too Large", "body too large").await;
@@ -225,7 +225,7 @@ async fn handle_one(mut stream: TcpStream, core: Arc<ClientCore>) -> std::io::Re
     }
 }
 
-// -------------------- payload builders --------------------
+// -------------------- 响应负载构造 --------------------
 
 fn healthz_payload(core: &Arc<ClientCore>) -> Value {
     let uptime = epoch_now() - core.started_at();
@@ -443,7 +443,7 @@ async fn stream_events(mut stream: TcpStream, core: Arc<ClientCore>) -> std::io:
     }
 }
 
-// -------------------- request parsing --------------------
+// -------------------- 请求解析 --------------------
 
 fn parse_request(buf: &[u8], head_end: usize) -> Result<ParsedRequest, &'static str> {
     let head_text = std::str::from_utf8(&buf[..head_end]).map_err(|_| "non-utf8 headers")?;
@@ -484,7 +484,7 @@ fn parse_json_field(body: &[u8], field: &str) -> Option<String> {
     v.get(field).and_then(|x| x.as_str()).map(|s| s.to_string())
 }
 
-// -------------------- writers --------------------
+// -------------------- 响应写出 --------------------
 
 async fn write_json(stream: &mut TcpStream, code: u16, payload: &Value) -> std::io::Result<()> {
     let body = serde_json::to_vec(payload).unwrap_or_else(|_| b"{}".to_vec());

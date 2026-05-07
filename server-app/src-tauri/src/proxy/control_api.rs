@@ -124,7 +124,7 @@ async fn send_cors_preflight<W: AsyncWriteExt + Unpin>(out: &mut W) -> std::io::
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Endpoint handlers
+// 端点处理器
 // ─────────────────────────────────────────────────────────────────────────────
 
 async fn serve_healthz<W: AsyncWriteExt + Unpin>(

@@ -141,7 +141,7 @@ impl ProxyCore {
         }
         inner.started_at = Some(std::time::Instant::now());
 
-        // S2.2 HTTP forward proxy
+        // S2.2：HTTP 正向代理 accept loop
         let core = self.clone();
         let cancel = self.cancel.clone();
         let sessions = self.sessions.clone();
@@ -163,7 +163,7 @@ impl ProxyCore {
         });
         inner.handles.push(h_socks);
 
-        // S2.4 mDNS advertiser
+        // S2.4：mDNS 广播任务
         let core = self.clone();
         let cancel = self.cancel.clone();
         let h_mdns = tokio::spawn(async move {

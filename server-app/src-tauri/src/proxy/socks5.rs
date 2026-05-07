@@ -152,7 +152,7 @@ async fn handle_connection(
     };
     let host = address.host_string();
 
-    // ─── port (big-endian u16) ───
+    // ─── 端口 (big-endian u16) ───
     let mut port_raw = [0u8; 2];
     read_exact_with_timeout(&mut client, &mut port_raw, timeout).await?;
     let port = u16::from_be_bytes(port_raw);
@@ -325,7 +325,7 @@ mod tests {
         s.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
         let mut g = [0u8; 2];
         s.read_exact(&mut g).await.unwrap();
-        // CONNECT 127.0.0.1:6379
+        // 测试发 CONNECT 127.0.0.1:6379（默认端口白名单不含 6379，预期被拒）
         s.write_all(&[0x05, 0x01, 0x00, 0x01, 127, 0, 0, 1, 0x18, 0xEB])
             .await
             .unwrap();
@@ -352,7 +352,7 @@ mod tests {
         s.write_all(&[0x05, 0x01, 0x00]).await.unwrap();
         let mut g = [0u8; 2];
         s.read_exact(&mut g).await.unwrap();
-        // CONNECT 127.0.0.1:<echo_port>
+        // 测试发 CONNECT 127.0.0.1:<echo_port>
         let port_be = echo_port.to_be_bytes();
         s.write_all(&[0x05, 0x01, 0x00, 0x01, 127, 0, 0, 1, port_be[0], port_be[1]])
             .await
