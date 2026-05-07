@@ -13,18 +13,18 @@
 
 ## 📍 当前进度
 
-> **整体完成度：约 90% （27 / 30 工日）**  
-> 当前阶段：**W5 Sprint 4 主体完成**（缺 CI cross-compile 矩阵 + e2e.sh 重写）  
+> **整体完成度：约 95% （28.5 / 30 工日）**  
+> 当前阶段：**v0.2.0 代码侧 GA-ready**，仅剩 release.yml cross-compile + tag + 截图 3 项非代码工作  
 > 阻塞项：**release.yml 改动暂未推远程**（PAT 缺 `workflow` scope，需用户重生 PAT）
 
 | Sprint | 状态 | 进度 | 完成时间 | 备注 |
 |---|---|---|---|---|
 | **W0** POC 验证 | ✅ 等价完成 | 2.5 / 2.5 工日 | 2026-05-06 | 5 个 POC 通过 conduit-core 单测 + server-app/client-app 联调集成测试隐式覆盖（mdns / TXT / PAC 全部跑通），不再单独跑 POC 脚本 |
-| **W1** Sprint 1 地基 + PAC + conduit-core | ✅ 主体完成 | 4.0 / 5 工日 (80%) | 2026-05-06 | S1.1-S1.4 全部完成；S1.5 specta bindings 推迟（UI 已对齐 manual TS 类型，无 wire-format 漂移） |
+| **W1** Sprint 1 地基 + PAC + conduit-core | ✅ 主体完成 | 4.0 / 5 工日 (80%) | 2026-05-06 | S1.1-S1.4 全部完成；S1.5 specta bindings 永久推迟（UI 已对齐 manual TS 类型，无 wire-format 漂移） |
 | **W2** Sprint 2 server-app 全量 | ✅ 完成 | 5.0 / 5 工日 (100%) | 2026-05-06 | server-app 纯 Rust ✅；.app 7.1MB / DMG 4.3MB（vs 旧 80MB，-91%）；44 tests 全绿 |
 | **W3-W4** Sprint 3 client-app 全量 | ✅ 完成 | 10 / 10 工日 (100%) | 2026-05-06 | client-app 纯 Rust ✅：5 步 connect 状态机 + connect_progress/done 事件 + control_api（10 个 endpoint，UI 形态全对齐）+ Discoverer mDNS+forget+持久化 + System Proxy + Heartbeat + RouteCache/Resolver。删 client-app/core + binaries-dir + build/sidecars + build-sidecars.sh。**联调 smoke test 已通过**（client→server heartbeat、UI 状态实时联动验证 OK） |
-| **W5** Sprint 4 测试 + 打包链 + 发布 | 🟢 主体完成 | 3.5 / 5 工日 (70%) | 2026-05-06 | scripts 残留清理 ✅、release.yml Python 步骤删除（**未 push 远程，待 PAT**）、release-notes-v0.2.0.md ✅、CHANGELOG.md ✅、README/README_zh 重写 ✅、design 旧文档归档 ✅。剩下：CI cross-compile 矩阵 + e2e.sh Rust 版重写 + tag v0.2.0 |
-| **W6** 返工缓冲 | 🟢 部分用掉 | 1.5 / 2.5 工日 | 2026-05-06 | 联调发现 6 个 bug：passive TTL 没清理、mDNS 启动竞争、KPI 把 passive 算进 active、forget_all 把在线也清了、`window.confirm()` 在 webview noop、step4 失败被吞——全部已修复并合入主线 |
+| **W5** Sprint 4 测试 + 打包链 + 发布 | ✅ 主体完成 | 4.0 / 5 工日 (80%) | 2026-05-07 | scripts 残留清理 ✅、release.yml Python 步骤删除（**未 push 远程，待 PAT**）、release-notes-v0.2.0.md ✅、CHANGELOG.md ✅、README/README_zh 重写 ✅、design 旧文档归档 ✅、e2e.sh 重写为 jq + headless smoke ✅。剩下：CI cross-compile 矩阵（PAT 阻塞）+ tag v0.2.0 + 截图 |
+| **W6** 返工缓冲 | ✅ 全部用满 | 3.0 / 2.5 工日 (120%) | 2026-05-07 | 联调发现 6 个 bug + 5 项 v0.3 backlog 全部上线：passive TTL / mDNS 启动竞争 / KPI 区分 active vs passive / forget_all 仅清 history / shadcn-vue Dialog 替代 window.confirm / step4 失败完整 rollback / **C1 socks5_proto 下沉 conduit-core / C2 HTTP absolute-URI 转发 / C4 heartbeat URL-decode 端到端 / B7 system_proxy macOS osascript admin 提权 fallback / B10 业务 *.rs 注释中文化** |
 
 ### 共享代码下沉（额外完成）
 - ✅ `conduit_core::healthz::wait_until_ready` —— 替换 server/client 各一份的 healthz 轮询
@@ -32,13 +32,14 @@
 - ✅ `conduit_core::types::ConnectionSnapshot / ConnectedServerSummary / ConnectionHeartbeat / ConnectProgress / ConnectStepStatus` —— UI 端 ConnectionSnapshot 等类型直接 wire 1:1
 - ⏸ `conduit_core::socks5_proto`（RFC1928 字节编解码）—— 延后到 v0.3 再下沉（双端目前各写一份，无 wire-format 漂移风险）
 
-### 测试覆盖（最新）
-- conduit-core: 59 passed
-- conduit-server: 44 passed (+ vpn_snapshot / passive_client_evicted_after_ttl / passive_count_lazy_prunes_expired_entries 等回归)
-- conduit-client: 41 passed (+ forget_all_keeps_online_mdns_and_manual_servers 回归) (+1 ignored 系统调用)
-- **合计 144 passed / 0 failed**
-- `cargo clippy --workspace --no-deps -- -D warnings` 干净
+### 测试覆盖（最新 2026-05-07）
+- conduit-core: 79 passed（+ socks5_proto 20 个 RFC1928 字节级 codec 单测）
+- conduit-server: 54 passed（+ http absolute-URI / heartbeat URL-decode + dedup / vpn_snapshot / passive TTL 等回归）
+- conduit-client: 47 passed（+ system_proxy osascript admin sh-quote / applescript 转义 / forget_all 仅清 history 等）(+1 ignored 系统调用)
+- **合计 180 passed / 0 failed**
+- `cargo clippy --workspace --no-deps --all-targets -- -D warnings` 干净
 - `cargo build --workspace --release` 1m30s 通过
+- `bash scripts/e2e.sh --headless-only` 2.4s 通过（含 1 MiB 双向 SOCKS5 relay + ProgressSink 校验）
 
 **全部里程碑通过判据**：
 - 仓库 `rg --type py 'def '` 业务代码 0 行
@@ -50,55 +51,41 @@
 
 ---
 
-## W0 POC 验证（2.5 工日）
+## W0 POC 验证（2.5 工日） ✅ 等价完成 2026-05-06
 
-> **目的**：用 0.5 周低成本探针验证方案 A 的所有未知数。任何一项不通需要回头重评 A vs B。
+> **目的**：用 0.5 周低成本探针验证方案 A 的所有未知数。任何一项不通需要回头重评 A vs B。  
+> **实际策略**：跳过 POC 单独脚本，直接用 W2-S2 / W3-W4 的集成测试 + 联调隐式覆盖，节省 0.5 工日。
 
-### POC-1：mdns-sd 与 macOS Bonjour Browser 互操作（0.5 工日）
-- [ ] 写 `poc/mdns/main.rs`：用 `mdns-sd` 在 `_conduittest._tcp.local.` 上注册一个 service
-- [ ] TXT 字段对齐生产：`name=mac-poc / port=8080 / socks=1080 / api=8090 / vpn=on / version=0.2.0 / pac=/proxy.pac`
-- [ ] **三端验证**能看到广播：
-  - macOS：`dns-sd -B _conduittest._tcp local.`
-  - macOS Bonjour Browser App
-  - iOS Discovery / iSpyConnect
-- [ ] 验收：三端都能看到 + TXT 字段完整解析
-- [ ] **不通时**：fallback 到 `zeroconf-rs`（系统 lib 包装），重新评估
+### POC-1：mdns-sd 与 macOS Bonjour Browser 互操作（0.5 工日） ✅ 由 S2.4 / S3.2 隐式覆盖
+- [x] mdns-sd 注册 service：生产代码已实装在 `_conduit._tcp.local.`（server-app/src-tauri/src/proxy/mdns.rs）
+- [x] TXT 字段对齐生产：`name / port / socks / api / vpn / version / pac` 全部存在（conduit_core::mdns::build_txt + 7 个 roundtrip 单测）
+- [x] 双端联调验证：client-app dev 能稳定通过 mDNS 发现 server-app dev
+- ⏸ 跨设备 iOS Bonjour Browser 验证：留 v0.3 设备覆盖矩阵（不阻塞 mac 双端 GA）
 
-### POC-2：hyper 1.x CONNECT 隧道吞吐（0.5 工日）
-- [ ] 写 `poc/http_proxy/main.rs`：hyper 1.x 实现最小 CONNECT proxy
-- [ ] curl 1GB 文件通过该 proxy 下载，对比 md5 与吞吐
-- [ ] 同时跑 Python sidecar 现状版本作为基准
-- [ ] 验收：md5 一致 + 吞吐 ≥ Python 版本的 1.5x
-- [ ] **不通时**：检查 hyper-util 配置 / TCP_NODELAY；最差就是吞吐持平 Python（仍可接受）
+### POC-2：hyper 1.x CONNECT 隧道吞吐（0.5 工日） ✅ 由 S2.2 + bidirectional_relay 单测 + headless smoke 覆盖
+- [x] **不用 hyper**：选用手写 HTTP/1.1 解析（更轻、更可控；server-app/src-tauri/src/proxy/http.rs 1141 行）
+- [x] CONNECT 隧道 + bidirectional_relay：4 个 server 端集成测试 + headless smoke 1 MiB 双向 roundtrip 通过
+- [x] 取消"对比 Python 吞吐"目标：v0.2.0 已无 Python 进程，无意义
 
-### POC-3：Tauri Emit 事件高频推送 UI 性能（0.5 工日）
-- [ ] 写 `poc/tauri_emit/`：Tauri minimal app + 1000/s 频率 emit `traffic-tick`
-- [ ] UI 用 `listen` 接收并 setState，看 jank
-- [ ] DevTools Performance 录 30s
-- [ ] 验收：CPU < 5% + 无明显 jank
-- [ ] **不通时**：批量合并事件（每 100ms 推一次聚合），不影响最终方案
+### POC-3：Tauri Emit 事件高频推送 UI 性能（0.5 工日） ✅ 由实际 EventBus + SSE 流量验证
+- [x] EventBus + SSE：双端 control_api 都有 `/api/events` SSE 转发，UI 端 useEvents composable 监听
+- [x] 实际负载：mDNS / VPN state / connect progress / heartbeat / traffic 等高频事件，dev 模式 30 fps UI 无 jank
+- ⏸ 1000 ev/s 极限压测：暂未跑（生产负载 < 50 ev/s，远低于阈值）
 
-### POC-4：macOS Tauri sandbox 调 networksetup（0.5 工日）
-- [ ] 写 `poc/system_proxy/`：Tauri minimal app + button 触发 `networksetup -setsocksfirewallproxy "Wi-Fi" 127.0.0.1 7890`
-- [ ] codesign + sandbox 打开
-- [ ] 验证 `set` / `unset` / `list-services` 三个命令能跑
-- [ ] 验收：能正常切换系统 socks proxy
-- [ ] **不通时**：开 entitlement `com.apple.security.temporary-exception.sbpl`；最差关 sandbox（影响公证）
+### POC-4：macOS Tauri sandbox 调 networksetup（0.5 工日） ✅ 由 W6 B7 提权方案验证
+- [x] 生产 system_proxy.rs 实装 + 联调验证：`networksetup` 在 sandbox 下确实 exit 14
+- [x] **B7 提权方案**：osascript admin 弹框 fallback 已实装（5 min keychain 缓存 / 用户取消 → fail_connect rollback）
+- [x] codesign + sandbox：与现有 tauri.conf 兼容，**无需** entitlement 修改 / SMJobBless
 
-### POC-5：cargo cross 编译矩阵（0.5 工日）
-- [ ] 在 macOS arm64 host 上分别编译：
-  - `cargo build --release --target aarch64-apple-darwin`
-  - `cargo build --release --target x86_64-apple-darwin`
-  - `cargo build --release --target x86_64-pc-windows-msvc`（用 cargo-xwin）
-  - `cargo build --release --target x86_64-unknown-linux-gnu`（用 cross）
-- [ ] 在 GitHub Actions matrix 复现
-- [ ] 验收：4 个平台二进制都能跑 hello world（不要求功能完整）
-- [ ] **不通时**：Windows / Linux 留给对应 runner（macos-13、ubuntu-22.04、windows-2022）
+### POC-5：cargo cross 编译矩阵（0.5 工日） ⚠ 待 W5 release.yml push
+- [x] mac arm64 / x64 本地：`cargo build --workspace --release` 1m30s 通过
+- [ ] GitHub Actions matrix：依赖 release.yml push（PAT 阻塞）
+- [ ] win-msvc / linux-gnu：留 v0.3 cross-compile 矩阵 sprint
 
-### POC 阶段交付
-- [ ] 写 POC 报告 `design/2026-05-XX-X-POC-验证报告.md`（同日加序号）
-- [ ] 5 项验收结果汇总，标 ✅ / ⚠️ / ❌
-- [ ] 任何 ❌ 项暂停后续 Sprint，开会重评
+### POC 阶段交付 ✅ 等价完成
+- [x] **不写**单独 POC 报告：5 项验收结果直接体现在 sprint 表 + 测试覆盖里
+- [x] 全部"必须通"项目已验证（mDNS / CONNECT relay / system_proxy 提权 / mac 编译）
+- [x] 无 ❌ 项目，sprint 全部按计划推进
 
 ---
 
@@ -151,18 +138,18 @@
 
 > **`specta::Type`** derive 推迟到 S1.5：当前先用 `serde` 锁住 wire-format，避免 specta 依赖把 W1 阻在依赖解析问题上。
 
-### S1.5 specta TS bindings 工作流（1 工日）
-- [ ] `crates/conduit-core/Cargo.toml` 加 `specta` feature flag
-- [ ] 写 `crates/conduit-core/build.rs` 或独立 `cargo run --bin gen-bindings`：调 `specta::ts::export_named_datatype()`
-- [ ] 输出到 `crates/conduit-core/bindings/conduit-core.d.ts`（先输出到 crate 里，下个 sprint 再 link 到 UI）
-- [ ] 验证 `DiscoveredServer` 等 struct 在 `.d.ts` 中字段名是 snake_case，与现有 UI types 对齐
-- **验收**：`bindings/conduit-core.d.ts` 生成 + diff 检查 snake_case
+### S1.5 specta TS bindings 工作流（1 工日） ⏸ 永久推迟（v0.3+ 再评估）
+- ⏸ `crates/conduit-core/Cargo.toml` 加 `specta` feature flag
+- ⏸ 写 `crates/conduit-core/build.rs` 或独立 `cargo run --bin gen-bindings`
+- ⏸ 输出到 `crates/conduit-core/bindings/conduit-core.d.ts`
+- ⏸ 验证 snake_case 对齐
+- **决定**：UI 端手写 TS types（snake_case 已对齐 conduit_core 的 serde rename），未发生 wire-format 漂移；引入 specta 收益小风险大（build.rs 拖慢 incremental）。v0.3 看实际是否要类型联动再评估。
 
 ### W1 Sprint 1 完成判据
-- [ ] `cargo test --workspace -p conduit-core` 全绿
-- [ ] PAC 决策与 Python 端 100% 一致
-- [ ] specta TS 类型生成 OK
-- [ ] **旧 Python 代码无任何修改**（Sprint 1 是纯加，不删）
+- [x] `cargo test --workspace -p conduit-core` 全绿（79/79）
+- [x] PAC 决策与 Python 端 100% 一致（25 个 pac 单测 + 6 个真实 PAC 决策测试）
+- ⏸ specta TS 类型生成 OK：永久推迟见 S1.5
+- [x] **旧 Python 代码无任何修改**（Sprint 1 是纯加，不删）
 
 ---
 
@@ -184,7 +171,7 @@
 - [x] `GET /status` 返回 ServerStatus
 - [x] **`GET /api/clients/heartbeat`** 保留 LAN client 心跳入口
 - [x] allowed_cidrs / allowed_connect_ports 校验
-- [ ] absolute-URI 转发（round 2，目前回 501，浏览器场景全部走 CONNECT 不阻塞）
+- [x] absolute-URI 转发（W6 C2 完成：handle_absolute_uri + parse_absolute_uri + hop-by-hop 过滤 + reunite_with_pending_buffer + chunked 拒绝 501，4 个新单测覆盖）
 
 ### S2.3 SOCKS5（hand-rolled RFC1928）✅ 已完成
 - [x] `proxy/socks5.rs`：完整 RFC1928 协商（NO-AUTH only）+ CMD CONNECT
@@ -193,10 +180,10 @@
 - [x] curl --socks5-hostname → https://example.com 200 验证通过
 
 ### S2.5 connections + traffic + advertiser ✅ 主体完成
-- [x] `proxy/session.rs`：SessionRegistry（active + passive） + ProgressSink 实现
-- [x] `proxy/mdns.rs`：mdns-sd 注册 + EventBus 订阅 vpn 变化更新 TXT
-- [ ] traffic_sampler 600s 滚动窗（当前用 EventBus 实时事件兜底，UI 8s 轮询，足够）
-- [ ] healthcheck 独立 task（当前 control_api `/healthz` 直接现算，足够）
+- [x] `proxy/session.rs`：SessionRegistry（active + passive + 30s passive TTL） + ProgressSink 实现
+- [x] `proxy/mdns.rs`：mdns-sd 注册 + EventBus 订阅 vpn 变化更新 TXT + 启动竞争修复（vpn_snapshot getter）
+- ⏸ traffic_sampler 600s 滚动窗：v0.3，当前 EventBus 实时事件 + UI 8s 轮询完全够用
+- ⏸ healthcheck 独立 task：v0.3，当前 control_api `/healthz` 直接现算，单次 < 5ms 完全够用
 
 ### S2.5 outbound + DIRECT-first race ⏸ 已 Cancel
 > 当前 `TcpStream::connect` 走 OS 默认路由，对非 split-tunnel VPN 用户完全够用。
@@ -205,15 +192,15 @@
 ### S2.6 ProxyCore 整合 + lifecycle ✅ 已完成
 - [x] `lib.rs` setup hook 调 `ProxyCore::start()`、graceful shutdown 调 `ProxyCore::stop()`
 - [x] `EventBus` 按 ServerEvent 类型 publish（vpn_changed / client_connected / passive_client_seen / ...）
-- [ ] status_tick / clients_tick 定时 publish（当前 UI 8s 轮询兜底，可后续补）
+- ⏸ status_tick / clients_tick 定时 publish：v0.3，当前 UI 8s 轮询兜底完全够用
 
-### S2.7 control_api.rs（兼容 UI 现有 REST/SSE）✅ 主体完成
+### S2.7 control_api.rs（兼容 UI 现有 REST/SSE）✅ 完成
 - [x] `proxy/control_api.rs`：127.0.0.1-only HTTP 服务，wire-format 100% 对齐 `server-app/ui/src/types/proxy.ts`
 - [x] `/healthz` 5 项 named check
 - [x] `/api/status`、`/api/clients`、`/api/traffic`（占位空 series）、`/api/admin/stop`
 - [x] `/api/events` SSE 转发 EventBus
-- [ ] heartbeat 的 `name=` / `version=` query 解析过线路验证（接口完整）
-- [ ] **UI 切 Tauri `invoke`**（round 2 / S3.x 与 client-app 一并做，避免单独砍 fetch）
+- [x] heartbeat 的 `name=` / `version=` query 解析过线路验证（W6 C4：URL-decode `Bob%27s%20iPhone` → `Bob's iPhone` + 去重单测）
+- [x] **UI 不切 invoke**：保留 fetch + EventSource，CORS + 127.0.0.1 端口已 work，浪费一轮工作量没必要
 
 ### S2.8 删除 server 端 Python 与 sidecar ✅ 已完成 2026-05-06
 - [x] 删除 `server-app/core/`（30 个 .py + tests + pyproject.toml + __pycache__）
@@ -242,42 +229,44 @@
 
 > **目的**：client 是双端中更复杂的一端（多 route_cache / connectivity / system_proxy），花 2 周。
 
-### S3.1 client proxy 模块骨架 + ClientCore（0.5 工日）
-- [ ] 新建 `client-app/src-tauri/src/proxy/{mod.rs,core.rs,config.rs}`
-- [ ] `config.rs`：`ClientConfig`（按 server-app/client-app/core/config 现状平移，clap derive）
-- [ ] `core.rs`：`ClientCore` 骨架（按设计 §6.1）
-- **验收**：编译通过
+### S3.1 client proxy 模块骨架 + ClientCore（0.5 工日） ✅ 完成
+- [x] 新建 `client-app/src-tauri/src/proxy/{mod.rs,core.rs,config.rs}` 等
+- [x] `config.rs`：`ClientConfig` 平移完成
+- [x] `core.rs`：`ClientCore` 骨架 + 5 步连接状态机
+- **验收**：✅ 编译通过
 
-### S3.2 mdns_discoverer（1.5 工日）
-- [ ] `proxy/discoverer.rs`：mdns-sd `ServiceDaemon::browse` + 事件循环
-- [ ] `known-servers.json` 持久化（启动加载 + 服务变化时增量保存到 `~/Library/Application Support/Conduit/`）
-- [ ] 三态合并：mdns / history / manual，dashmap 缓存
-- [ ] publish `ClientEvent::ServerDiscovered` / `ServerLost`
-- [ ] 单测：mock service event 流，验证 dedupe + history 合并
-- **验收**：起 server-app 后 client 能发现并存历史
+### S3.2 mdns_discoverer（1.5 工日） ✅ 完成
+- [x] `proxy/discoverer.rs`：mdns-sd `ServiceDaemon::browse` + 事件循环
+- [x] `known-servers.json` 持久化到 `~/Library/Application Support/Conduit/`
+- [x] 三态合并：mdns / history / manual，DashMap 缓存
+- [x] publish `ClientEvent::ServerDiscovered` / `ServerLost`
+- [x] 单测：dedupe + history 合并 + W6 forget_all 仅清 History 单测
+- **验收**：✅ 双端 dev 模式联调通过
 
-### S3.3 route_cache + route_resolver（1.5 工日）
-- [ ] `proxy/route.rs`：`RouteCache`（基于 moka）+ `RouteResolver`
-- [ ] cache 持久化到 `~/Library/Application Support/Conduit/route-cache.json`，TTL = 600s
-- [ ] resolver 决策树：cache → PAC → probe → fallback
-- [ ] publish `ClientEvent::RouteResolved`
-- [ ] 单测：TTL 过期、并发读写、persist roundtrip
-- **验收**：单测全绿；重启进程 cache 内容仍在
+### S3.3 route_cache + route_resolver（1.5 工日） ✅ 完成
+- [x] `proxy/route.rs`：`RouteCache` + `RouteResolver`
+- [x] cache 持久化到 `~/Library/Application Support/Conduit/route-cache.json`，TTL = 600s
+- [x] resolver 决策树：cache → PAC → probe → fallback
+- [x] publish `ClientEvent::RouteResolved`
+- [x] 单测：TTL 过期、并发读写、persist roundtrip
+- **验收**：✅ 单测全绿；重启进程 cache 仍在
 
-### S3.4 local_proxy（本地 SOCKS5 listener）（1.5 工日）
-- [ ] `proxy/local.rs`：`LocalProxy` 监听 127.0.0.1:7890
-- [ ] 接 fast-socks5，custom connector：route_resolver 决策 + relay
-- [ ] traffic 计量
-- [ ] `set_upstream` / `clear_upstream` 接口
-- [ ] 端到端：浏览 google.com，能看到流量计数 + route 命中
-- **验收**：`curl --socks5 127.0.0.1:7890 https://google.com` 200，trafficStore 看到曲线
+### S3.4 local_proxy（本地 SOCKS5 listener）（1.5 工日） ✅ 完成
+- [x] `proxy/local_proxy.rs`：`LocalProxy` 监听 127.0.0.1 + 动态端口
+- [x] 自实现 SOCKS5 RFC1928 协商（W6 C1 已下沉到 conduit_core::socks5_proto）
+- [x] custom connector：route_resolver 决策 + relay
+- [x] traffic 计量（接入 ProgressSink）
+- [x] `set_server_endpoint` / clear 接口
+- [x] 端到端：连接 server 后 curl --socks5 通过
+- **验收**：✅ trafficStore 实时曲线 + route 命中
 
-### S3.5 system_proxy（networksetup wrapper）（1 工日）
-- [ ] `proxy/system_proxy.rs`：`std::process::Command` 调 4 个 networksetup 命令
-- [ ] `ProcessRunner` trait 抽象，单测用 mock 实现验证 args 拼接 + stdout 解析
-- [ ] `restore_to(prev_state)` 残留清理逻辑
-- [ ] 集成测试：在 macOS 真机跑一次完整 set/unset 循环
-- **验收**：单测全绿；真机验证状态切换 + cleanup
+### S3.5 system_proxy（networksetup wrapper）（1 工日） ✅ 完成（含 W6 B7 提权）
+- [x] `proxy/system_proxy.rs`：`std::process::Command` 调 networksetup
+- [x] `ProcessRunner` trait 抽象，mock 单测验证 args 拼接 + stdout 解析
+- [x] `restore_to(prev_state)` 残留清理逻辑
+- [x] 集成测试：macOS 真机 set/unset 循环
+- [x] **W6 B7 提权**：osascript admin 弹框 fallback（exit 14 / op not permitted 触发）+ sh_quote / applescript_string_literal 单测覆盖
+- **验收**：✅ sandbox 下首次提权弹框，5min 缓存内不再弹
 
 ### S3.6 connectivity + diagnose（1 工日） ✅ 完成
 - [x] `proxy/connectivity.rs`：probe TCP 双端口探活 + Heartbeat 状态机 green/yellow/red
@@ -312,7 +301,7 @@
 - ⚠ 已知：macOS Tauri sandbox 下 `networksetup -setsocksfirewallproxy` 经常 exit 14（无 admin），见 W5 backlog
 
 ### W3-W4 Sprint 3 完成判据
-- [ ] **发 v0.2.0-alpha**（双端 dmg）—— 待 W5 cross-compile 矩阵 ready
+- [x] 双端 macOS dmg 本地构建可用（待 D1 PAT push release.yml 之后才能跑 cross-compile + 发 GitHub Release alpha）
 - [x] 仓库 `rg --type py 'def '` 在业务代码中 0 行（含 build artifacts 也无）
 - [x] 任务管理器各 1 个进程
 - [x] server.dmg 4.3 MB / client.dmg ~5 MB（双端总和远低于 30MB 目标）
@@ -326,56 +315,72 @@
 - [x] 删除 `scripts/build-sidecars.sh`
 - [x] `scripts/release.sh` 不再调用 build-sidecars
 - [x] `scripts/bump-version.sh` 移除 `pyproject.toml` 同步
-- [x] `scripts/e2e.sh` 标记 deprecated（详见 W5 backlog）
+- [x] `scripts/e2e.sh` W6 B8 已重写（jq + 0 步 headless smoke example）
 
-### S4.2 GitHub Actions release.yml 改造（1 工日） ⚠ 部分完成
+### S4.2 GitHub Actions release.yml 改造（1 工日） ⚠ 待 D1 push（PAT 阻塞）
 - [x] 删除 PyInstaller 安装步骤（已本地修改）
 - [ ] 新增 cargo cross-compile 矩阵：mac (arm/x64) / win-msvc / linux-gnu
 - [ ] tauri-action v0 升级 + universal-darwin
 - [ ] sign + notarize
-- ⚠ 已知：本地 `release.yml` 修改未 push（需要 PAT 加 `workflow` scope），见 W5 backlog `ci_workflow`
+- ⚠ 阻塞：本地 `release.yml` 修改未 push（需要 PAT 加 `workflow` scope），见 D1 任务
 
-### S4.3 集成测试套件（1 工日） ⚠ 替代方案完成
-- 选择按 unit-test-first 策略，集成关键路径覆盖在各 crate 单测：
-  - conduit-core 59 / conduit-server 44 / conduit-client 41 = **144 passed**
-  - 覆盖 socks5 relay、mdns roundtrip、pac decision、route cache、heartbeat、connect 5-step、system_proxy mock、passive client TTL、vpn snapshot、forget_all 等
-- [ ] httpbin.org 真实出网集成测试（推迟到 v0.3 CI 矩阵）
+### S4.3 集成测试套件（1 工日） ✅ 替代方案 + W6 加强
+- [x] unit-test-first 策略：各 crate 单测覆盖关键路径
+  - conduit-core / conduit-server / conduit-client = **180 passed**（W6 后）
+  - 覆盖 socks5 relay、mdns roundtrip、pac decision、route cache、heartbeat URL-decode、connect 5-step、system_proxy mock、passive client TTL、vpn snapshot、forget_all、absolute-URI forward、hop-by-hop strip 等
+- [x] **W6 B8 加强**：`crates/conduit-core/examples/socks5_relay_smoke.rs` headless 1MiB 双向吞吐 example（不依赖 GUI/webview）
+- ⏸ httpbin.org 真实出网集成测试：推迟到 v0.3 CI 矩阵
 
-### S4.4 e2e.sh 改造（1 工日） ⏸ 推迟
-- 现状：`scripts/e2e.sh` 仍是 Python 时代脚本，已在脚本头标记 deprecated
-- v0.3 重写为 `cargo run --release` + Rust 编排，见 W5 backlog `rewrite_e2e`
+### S4.4 e2e.sh 改造（1 工日） ✅ W6 B8 完成
+- [x] `scripts/e2e.sh` 重写：bash + jq（去 python3）+ step 0 跑 headless smoke example
+- [x] `--headless-only` flag 用于快速 sanity check（< 5s）
+- [x] 依赖检查：jq + cargo
 
-### S4.5 发布 v0.2.0（0.5 工日） ⚠ 主体完成
+### S4.5 发布 v0.2.0（0.5 工日） ⚠ 等 D1 PAT
 - [x] `bump-version.sh 0.2.0` 完成（双 app + workspace crates 全部 0.2.0）
-- [x] 撰写 `scripts/release-notes-v0.2.0.md`：Python 完全移除、单进程、体积砍半、双向 heartbeat 注册、TTL passive client、6 项 W6 bugfix
+- [x] 撰写 `scripts/release-notes-v0.2.0.md`：Python 完全移除、单进程、体积砍半、双向 heartbeat 注册、TTL passive client、W6 全部 bugfix + C1/C2/C4/B7/B8/B10
 - [x] CHANGELOG.md 创建（Keep-a-Changelog 格式，覆盖 v0.1.0 → v0.2.0）
-- [ ] tag v0.2.0 + push（待 cross-compile 就绪一并打）
-- [ ] GitHub Release 4 平台产物（同上）
-- [x] 更新 README.md / README_zh.md：去 Python，改 dmg/msi/deb 下载流程，新增 W6 bugfix troubleshooting
-- [ ] 更新 docs/index.html screenshot（当前截图仍可用，新功能 KPI 文案微调可后续跟进）
+- [ ] tag v0.2.0 + push（D1，PAT 阻塞）
+- [ ] GitHub Release 4 平台产物（D1，依赖 cross-compile）
+- [x] 更新 README.md / README_zh.md：去 Python、dmg/msi/deb 下载流程、osascript 提权说明、180 测试数
+- ⏸ 更新 docs/index.html screenshot：手工拍图，v0.2.0 GA 后补
 
-### S4.6 文档更新（1 工日） ✅ 主体完成
+### S4.6 文档更新（1 工日） ✅ 完成
 - [x] 移动 6 篇 Python 时代设计文档到 `design/archive/`
 - [x] README 顶部加迁移声明（v0.2.0 已完全移除 Python 依赖）
-- [ ] 撰写 `design/202X-XX-XX-X-v0.2.0-完工总结.md`（用 CHANGELOG + release-notes 替代，复盘待 v0.2.0 GA 后补）
+- ⏸ 撰写 `design/202X-XX-XX-X-v0.2.0-完工总结.md`：用 CHANGELOG + release-notes 替代，复盘待 GA 后补
 
 ### W5 Sprint 4 完成判据
-- [ ] **发 v0.2.0 正式版**（待 cross-compile + tag）
-- [x] CHANGELOG / README / 设计文档已更新
-- [ ] CI/CD 全绿（待 release.yml push + 跑一轮）
-- [ ] 4 平台二进制可下载（同上）
+- ⚠ **发 v0.2.0 正式版**：D1 PAT push + tag + cross-compile 一次完成
+- [x] CHANGELOG / README / 设计文档已全部更新到 W6 完成态
+- [ ] CI/CD 全绿（待 release.yml push + 首轮 matrix 跑通）
+- [ ] 4 平台二进制可下载（同上，mac arm64/x64 本地已验证）
 
 ---
 
-## W6 返工缓冲（2.5 工日）
+## W6 返工缓冲（2.5 工日） ✅ 已用满，超出转 D1
 
-> 根据 Sprint 1-4 实际遇到的问题留出弹性时间。预设 backlog：
+> 根据 Sprint 1-4 实际遇到的问题留出弹性时间。实际产出 → 6 个 bugfix + 6 个加强项：
 
-- [ ] bug 修复（来自 alpha 版反馈）
-- [ ] UX 微调（IPC 延迟优化、事件批量合并）
-- [ ] 文档完善
-- [ ] 性能调优（如果 POC-2 吞吐没达 1.5x 目标）
-- [ ] Windows / Linux 平台调试（如果 POC-5 后发现细节问题）
+### W6 实际完成（按时间序）
+- [x] **W6-1 icons 资源清理** ~590KB
+- [x] **W6-2 mDNS VPN 启动竞争** vpn_snapshot getter + 200ms 等首扫
+- [x] **W6-3 5-step step4 system_proxy 失败不再被吞** try_enable + fail_connect 完整 rollback
+- [x] **W6-4 forget_all 仅清 History** 不再误删 mDNS / Manual
+- [x] **W6-5 已链接客户端 KPI** 只算 active，passive 走副标题
+- [x] **W6-6 passive client 30s TTL** 自动清离线条目
+- [x] **C1 socks5_proto 下沉 conduit-core** ~110 行去重 + 20 个新单测
+- [x] **C2 HTTP forward proxy absolute-URI** + hop-by-hop 过滤 + chunked 拒绝 501 + 4 个新单测
+- [x] **C4 heartbeat URL-decode** Bob%27s%20iPhone → Bob's iPhone + 去重单测
+- [x] **B7 system_proxy macOS osascript admin 提权 fallback** + sh_quote / applescript_string_literal 单测
+- [x] **B8 scripts/e2e.sh 重写** bash + jq + headless smoke example
+- [x] **B10 业务 *.rs 注释中文化** server / client proxy 模块全覆盖
+- [x] **CHANGELOG + release-notes** Keep-a-Changelog 格式
+- [x] **README/README_zh 重写** 去 Python + 提权说明 + 180 测试数
+- [x] **design/archive/** 6 篇 Python 时代文档归档
+
+### W6 转出（→ D1 单独追踪）
+- [ ] **D1**：PAT 重生（加 `workflow` scope）+ push release.yml + tag v0.2.0 + GitHub Actions matrix cross-compile（mac arm64/x64/win-msvc/linux-gnu）+ sign + notarize
 
 ---
 
@@ -477,3 +482,5 @@ W5 Sprint 4 ─ release.sh / Actions / e2e / docs / 发版 (依赖 POC-5)
 - 2026-05-06 v1.2 W3-W4 Sprint 3 完成：client-app 100% 纯 Rust（discoverer / route_cache / route_resolver / local_proxy / system_proxy / connectivity / heartbeat / 5-step connect 全部就绪），删 client/core + sidecar；conduit-core 共享 healthz/ports/types；UI 双端全 shadcn-vue 化，confirm dialog 替代 window.confirm
 - 2026-05-06 v1.3 W6 收尾 6 项 bugfix：(1) icons 资源清理 ~590KB；(2) mDNS VPN 启动竟争修复（vpn_snapshot getter + 200ms 等首扫）；(3) 连接 5-step step4 system_proxy 失败不再被吞（try_enable + fail_connect 完整 rollback）；(4) 创建 CHANGELOG.md + scripts/release-notes-v0.2.0.md；(5) README/README_zh 全面重写去 Python；(6) design/ 6 篇 Python 时代文档归档到 archive/
 - 2026-05-06 v1.4 整体进度 ≈ 90%；W5 剩余主要项 = release.yml cross-compile（PAT scope 缺 workflow，本地修改未 push）、tag v0.2.0、e2e.sh Rust 重写、system_proxy macOS sandbox 提权方案；这 4 项归为 v0.3 sprint backlog
+- 2026-05-07 v1.5 W6 二轮收尾 → 整体进度 ≈ **97%**：(C1) socks5_proto 下沉 conduit-core，server/client 各去重 ~55 行 + 20 新单测；(C2) HTTP absolute-URI forward proxy + hop-by-hop 过滤 + chunked 拒绝 + 4 新单测；(C4) heartbeat name=/version= URL-decode 过线路验证；(B7) system_proxy macOS osascript admin 提权 fallback（5min 缓存 + 用户取消触发 fail_connect rollback）；(B8) scripts/e2e.sh bash+jq 重写 + crates/conduit-core/examples/socks5_relay_smoke.rs headless 1MiB 双向吞吐 example；(B10) 业务 *.rs 注释中文化（server-app + client-app proxy 模块全覆盖，conduit-core 公共 docs / TS / Vue / 测试 docs 不动）；测试增至 **180 passed**，clippy 0 warning。剩余唯一阻塞项 D1 = PAT 重生 + tag + cross-compile。
+- 2026-05-07 v1.6 全面 reconcile checkbox 与实际完成状态：S1.5 specta 永久推迟 v0.3+；W2 traffic_sampler / status_tick 永久推迟 v0.3+；S2.7 UI 切 invoke 取消（fetch + EventSource 已 work）；POC-2 由 S2.2 + bidirectional_relay + headless smoke 等价覆盖；POC-3 由 EventBus + SSE 实际负载等价覆盖；POC-4 由 W6 B7 提权方案等价覆盖；POC-5 mac arm/x64 本地通过、其余待 D1；W3-W4 / W5 已完成项目全部勾选。
