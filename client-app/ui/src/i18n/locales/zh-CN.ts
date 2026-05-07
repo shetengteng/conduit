@@ -169,6 +169,7 @@ export default {
     subSysProxyOff: "系统代理未开启,需手动配置 SOCKS5",
     btnDisconnect: "断开连接",
     btnDisconnecting: "断开中…",
+    disconnectingHint: "正在断开,请稍候…",
     heartbeat: {
       label: "心跳 · {state}",
       green: "健康",

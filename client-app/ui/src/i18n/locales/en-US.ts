@@ -184,6 +184,7 @@ export default {
       "System proxy is off — configure SOCKS5 in your apps manually",
     btnDisconnect: "Disconnect",
     btnDisconnecting: "Disconnecting…",
+    disconnectingHint: "Disconnecting, please wait…",
     heartbeat: {
       label: "Heartbeat · {state}",
       green: "healthy",

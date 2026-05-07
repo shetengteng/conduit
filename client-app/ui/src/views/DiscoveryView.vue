@@ -69,10 +69,9 @@ const {
 } = useDiscovery()
 
 async function handleConnect(srv: DiscoveredServer) {
-  // 任一"忙"状态下都拒绝新点击,避免连续点击导致后端并发处理(后端
-  // 已修死锁路径,但 UI 防御依旧必要,体验也更好)。
   if (connectionStore.isBusy.value) return
-  // 跳到「已连接」标签页（connecting / connected 时该 view 会展示 ConnectingProgress / ConnectedView）
+  // 跳到「已连接」标签页 —— 该 view 在 isBusy 期间也会渲染
+  // ConnectingProgress(见 ConnectedView.vue),所以不用担心闪烁未连接页面。
   uiStore.setActive('connected')
   try {
     await connectionStore.connectTo(srv.server_id)

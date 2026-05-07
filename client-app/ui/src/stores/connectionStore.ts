@@ -104,6 +104,25 @@ async function refresh(): Promise<void> {
   }
 }
 
+/**
+ * 最小 inFlight 显示时间(毫秒)。后端可能很快返回(尤其是幂等命中分支
+ * 或本地 cache 命中),如果不强制最小显示,UI 上的 spinner 会一闪而过
+ * 用户根本看不见。500ms 足够人眼感知"我点了按钮 → 系统在响应"。
+ */
+const MIN_INFLIGHT_MS = 500;
+
+async function withMinDuration<T>(p: Promise<T>): Promise<T> {
+  const t0 = Date.now();
+  try {
+    return await p;
+  } finally {
+    const elapsed = Date.now() - t0;
+    if (elapsed < MIN_INFLIGHT_MS) {
+      await new Promise((r) => setTimeout(r, MIN_INFLIGHT_MS - elapsed));
+    }
+  }
+}
+
 async function connectTo(serverId: string): Promise<void> {
   // 防御:同一时刻只允许一次 connect/disconnect 飞。直接 return 比抛错友好,
   // 用户不会看到红屏,只会看到按钮"灰着不响应"。
@@ -116,7 +135,7 @@ async function connectTo(serverId: string): Promise<void> {
   state.progress = _emptyProgress();
   state.state = "connecting";   // 乐观置位,SSE 会确认
   try {
-    const snap = await ClientApi.connect(serverId);
+    const snap = await withMinDuration(ClientApi.connect(serverId));
     state.snapshot = snap;
     state.state = snap.state;
     state.lastError = snap.last_error;
@@ -137,7 +156,7 @@ async function disconnect(): Promise<void> {
   state.lastError = null;
   state.state = "disconnecting";
   try {
-    await ClientApi.disconnect();
+    await withMinDuration(ClientApi.disconnect());
     state.state = "idle";
     state.snapshot = null;
     state.pendingServerId = null;
@@ -219,6 +238,19 @@ export const connectionStore = {
    */
   isBusy: computed(
     () => state.inFlight || state.state === "connecting" || state.state === "disconnecting",
+  ),
+  /**
+   * 是否正在执行"连接"流程(用于 ConnectedView 决定渲染 ConnectingProgress
+   * 还是已连接卡):
+   * - state=connecting:经典路径,后端确认 connecting
+   * - inFlight && pendingServerId:用户刚点连接按钮,inFlight 已置位但
+   *   后端 SSE / HTTP 还没把 state 翻成 connecting
+   * 关键是 disconnecting 不算 — 断开时不该显示"5 步连接进度页"。
+   */
+  isConnectingOrPending: computed(
+    () =>
+      state.state === "connecting" ||
+      (state.inFlight && state.pendingServerId !== null),
   ),
   connectedServer: computed(() => state.snapshot?.server ?? null),
   connectedSince: computed(() => state.snapshot?.connected_since ?? null),

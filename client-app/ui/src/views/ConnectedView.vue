@@ -124,8 +124,24 @@ function backToDiscovery() {
 </script>
 
 <template>
-  <!-- connecting:进度 stepper -->
-  <ConnectingProgress v-if="connectionStore.isConnecting.value" />
+  <!-- connecting:进度 stepper。
+       触发条件:isConnectingOrPending —— state=connecting 或
+       (inFlight && 有 pendingServerId)。后者覆盖刚点击连接但 state 还
+       没翻成 connecting 的瞬间(setActive 同步,store.state 同步赋值,
+       但渲染时机依然可能在 store 异步段之前),避免闪一下"未连接"页面。
+       disconnecting 不命中此分支(用 state==='disconnecting' 单独显
+       示一个 disconnecting 卡)。 -->
+  <ConnectingProgress v-if="connectionStore.isConnectingOrPending.value" />
+
+  <!-- disconnecting:专门的"正在断开" loading 卡(不显示 5 步进度,因为
+       那是连接流程,非断开流程)。 -->
+  <div
+    v-else-if="connectionStore.connectionState.value === 'disconnecting'"
+    class="flex flex-col items-center justify-center gap-4 p-12"
+  >
+    <RiLoader4Line class="size-10 animate-spin text-muted-foreground" />
+    <p class="text-sm text-muted-foreground">{{ t('connected.disconnectingHint') }}</p>
+  </div>
 
   <!-- connected:当前 server 信息 -->
   <div v-else-if="connectionStore.isConnected.value && connectionStore.connectedServer.value" class="flex flex-col gap-6 p-6">
