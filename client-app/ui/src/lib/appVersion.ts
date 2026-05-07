@@ -1,9 +1,9 @@
 /**
  * 单一版本来源:由 vite.config.ts 在 build/dev 阶段从 client-app/ui/package.json 注入。
- * 改版本时只需要 `pnpm scripts/bump-version.sh 0.x.y`,这里自动跟。
+ * 改版本时只需要 `bash scripts/bump-version.sh 0.x.y`,这里自动跟。
  *
  * 仅用于:Sidebar 角标、SettingsView 的"包定义版本号"展示等。
- * "运行时实际跑的版本"应该走 healthz 的 status?.version (来自 Python core)。
+ * "运行时实际跑的版本"应该走 healthz 的 status?.version (来自 ClientCore)。
  */
 export const APP_VERSION = __APP_VERSION__;
 

@@ -1,7 +1,7 @@
 //! 系统托盘 —— M-δ。
 //!
 //! 菜单结构 (从上到下):
-//!   1. 当前状态 (disabled item, 文字会被 5 秒一次的轮询更新)
+//!   1. 当前状态 (disabled item, 文字会被周期性轮询更新)
 //!   2. ─────
 //!   3. 打开主窗口
 //!   4. 诊断 / 设置 (走 invoke 命令打开窗口并切换路由)
@@ -9,43 +9,24 @@
 //!   6. 断开连接 (动态启用/禁用)
 //!   7. 退出
 //!
-//! 状态轮询用 reqwest 直接打 sidecar 控制 API,不引入 SSE client,代码更简单。
-//! 节流到 5 秒,Rust 端开销可忽略。
+//! W3 Sprint 3：从原来的 reqwest 拉 `/api/connection` 改成直接 `ClientCore`
+//! 进程内方法调用 + EventBus 订阅，去掉 sidecar 依赖。
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use log::warn;
-use serde::Deserialize;
 use tauri::image::Image;
 use tauri::menu::{MenuBuilder, MenuItem, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{App, AppHandle, Emitter, Manager};
 use tokio::time::interval;
 
-use crate::sidecar::SidecarHandle;
+use conduit_core::{ConnectionSnapshot, ConnectionState, HeartbeatTone};
+
+use crate::proxy::ClientCore;
 
 const POLL_SEC: u64 = 5;
-
-/// /api/connection 的精简反序列化 —— 只取我们绘制菜单需要的字段。
-#[derive(Debug, Deserialize, Clone)]
-struct ConnectionSnapshot {
-    state: String,
-    server: Option<ConnectedServer>,
-    heartbeat: Option<HeartbeatBlock>,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct ConnectedServer {
-    name: String,
-    host: String,
-    port: u16,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct HeartbeatBlock {
-    tone: String,
-}
 
 pub fn setup(app: &App) -> tauri::Result<()> {
     let handle = app.handle();
@@ -73,9 +54,6 @@ pub fn setup(app: &App) -> tauri::Result<()> {
         .item(&item_quit)
         .build()?;
 
-    // 菜单栏专用 template icon(透明 PNG,只用 alpha,macOS 自动 light/dark 反色)
-    // 优先用 @2x(44x44),退回到 1x;如果都加载失败,退回到默认窗口图标(会显示成方块,
-    // 但至少能看到托盘存在)。
     let tray_icon = load_tray_icon(handle).unwrap_or_else(|| {
         warn!("tray icon assets missing, falling back to default window icon");
         handle.default_window_icon().unwrap().clone()
@@ -130,21 +108,13 @@ fn navigate_to(app: &AppHandle, key: &str) {
 }
 
 fn spawn_disconnect(app: AppHandle) {
-    let Some(sidecar) = app.try_state::<Arc<SidecarHandle>>() else {
+    let Some(core) = app.try_state::<Arc<ClientCore>>() else {
         return;
     };
-    let port = sidecar.api_port;
+    let core = (*core).clone();
     tauri::async_runtime::spawn(async move {
-        let url = format!("http://127.0.0.1:{port}/api/disconnect");
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(3))
-            .build()
-            .ok();
-        let Some(client) = client else { return };
-        match client.post(&url).send().await {
-            Ok(resp) if resp.status().is_success() => {}
-            Ok(resp) => warn!("tray disconnect failed: {}", resp.status()),
-            Err(e) => warn!("tray disconnect error: {e}"),
+        if let Err(e) = core.disconnect().await {
+            warn!("tray disconnect error: {e}");
         }
     });
 }
@@ -155,79 +125,52 @@ fn spawn_status_poller(
     item_disconnect: Arc<MenuItem<tauri::Wry>>,
 ) {
     tauri::async_runtime::spawn(async move {
-        let port = match handle.try_state::<Arc<SidecarHandle>>() {
-            Some(s) => s.api_port,
+        let core = match handle.try_state::<Arc<ClientCore>>() {
+            Some(c) => (*c).clone(),
             None => {
-                warn!("tray poller: sidecar handle missing");
-                return;
-            }
-        };
-        let url = format!("http://127.0.0.1:{port}/api/connection");
-        let client = match reqwest::Client::builder()
-            .timeout(Duration::from_secs(2))
-            .build()
-        {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("tray poller: build client failed: {e}");
+                warn!("tray poller: ClientCore handle missing");
                 return;
             }
         };
 
         let mut tick = interval(Duration::from_secs(POLL_SEC));
-        // 第一次 tick 立刻触发
         tick.tick().await;
-
         loop {
-            let snapshot = client.get(&url).send().await.ok().and_then(|r| {
-                if r.status().is_success() {
-                    Some(r.json::<ConnectionSnapshot>())
-                } else {
-                    None
-                }
-            });
-            let snapshot = match snapshot {
-                Some(fut) => fut.await.ok(),
-                None => None,
-            };
-
-            let (label, can_disconnect) = render_status(snapshot.as_ref());
+            let snapshot = core.connection_snapshot().await;
+            let (label, can_disconnect) = render_status(&snapshot);
             let _ = item_status.set_text(&label);
             let _ = item_disconnect.set_enabled(can_disconnect);
-            // 顺便把状态广播给 Vue,UI 层可拿来同步 sidebar 高亮
-            if let Some(s) = snapshot {
-                let _ = handle.emit("tray:connection_state", s.state.clone());
-            }
+
+            let _ = handle.emit("tray:connection_state", snapshot.state.as_str().to_string());
 
             tick.tick().await;
         }
     });
 }
 
-/// 从二进制内嵌的 PNG 字节构造 menu bar template icon。
-/// 编译期 `include_bytes!` 嵌入,免去 release 模式下查找资源路径的麻烦。
 fn load_tray_icon(_handle: &AppHandle) -> Option<Image<'static>> {
     const TRAY_PNG: &[u8] = include_bytes!("../icons/tray/tray-client@2x.png");
     Image::from_bytes(TRAY_PNG).ok()
 }
 
-fn render_status(s: Option<&ConnectionSnapshot>) -> (String, bool) {
-    let Some(s) = s else {
-        return ("状态: 离线 (sidecar 未就绪)".to_string(), false);
-    };
-    match s.state.as_str() {
-        "connected" => {
-            let suffix = match (&s.server, s.heartbeat.as_ref().map(|h| h.tone.as_str())) {
-                (Some(srv), Some("yellow")) => format!("{} ({}:{}) · 波动", srv.name, srv.host, srv.port),
-                (Some(srv), Some("red")) => format!("{} ({}:{}) · 失联", srv.name, srv.host, srv.port),
-                (Some(srv), _) => format!("{} ({}:{})", srv.name, srv.host, srv.port),
-                _ => "未知 server".to_string(),
+fn render_status(snapshot: &ConnectionSnapshot) -> (String, bool) {
+    match snapshot.state {
+        ConnectionState::Connected => {
+            let label = snapshot
+                .server
+                .as_ref()
+                .map(|s| format!("{}:{}", s.host, s.socks))
+                .unwrap_or_else(|| "?".to_string());
+            let suffix = match snapshot.heartbeat.as_ref().map(|h| h.tone) {
+                Some(HeartbeatTone::Yellow) => format!("{label} · 波动"),
+                Some(HeartbeatTone::Red) => format!("{label} · 失联"),
+                _ => label,
             };
-            (format!("已连接: {}", suffix), true)
+            (format!("已连接: {suffix}"), true)
         }
-        "connecting" => ("状态: 正在连接…".to_string(), false),
-        "disconnecting" => ("状态: 断开中…".to_string(), false),
-        "failed" => ("状态: 上次连接失败".to_string(), false),
-        _ => ("状态: 未连接".to_string(), false),
+        ConnectionState::Connecting => ("状态: 正在连接…".to_string(), false),
+        ConnectionState::Disconnecting => ("状态: 断开中…".to_string(), false),
+        ConnectionState::Failed => ("状态: 上次连接失败".to_string(), false),
+        ConnectionState::Idle => ("状态: 未连接".to_string(), false),
     }
 }

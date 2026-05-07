@@ -42,6 +42,19 @@ async function tauriInvoke(cmd: string): Promise<unknown> {
   return fn(cmd)
 }
 
+// Tauri command 抛出的 ConduitError 经 serde 序列化为 `{ code, message }` 普通对象，
+// 不是 Error 实例，直接 String(e) 会得到 "[object Object]"。这里集中抽 message + code。
+function extractTauriError(e: unknown): { code: string; message: string } {
+  if (e && typeof e === 'object') {
+    const o = e as Record<string, unknown>
+    const code = typeof o.code === 'string' ? o.code : 'UNKNOWN'
+    const message = typeof o.message === 'string' ? o.message : ''
+    if (message) return { code, message }
+  }
+  if (e instanceof Error) return { code: 'UNKNOWN', message: e.message }
+  return { code: 'UNKNOWN', message: String(e) }
+}
+
 async function handleRestart() {
   if (restarting.value) return
   restarting.value = true
@@ -51,10 +64,16 @@ async function handleRestart() {
     })
     await tauriInvoke('restart_app')
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    toast.error(t('topbar.toastRestartFail'), {
-      detail: `${msg}\n${t('topbar.toastRestartFailHint')}`,
-    })
+    const { code, message } = extractTauriError(e)
+    if (code === 'DEV_RESTART_UNSUPPORTED') {
+      toast.info(t('topbar.toastRestartDevTitle'), {
+        detail: t('topbar.toastRestartDevDetail'),
+      })
+    } else {
+      toast.error(t('topbar.toastRestartFail'), {
+        detail: `${message}\n${t('topbar.toastRestartFailHint')}`,
+      })
+    }
     restarting.value = false
   }
 }

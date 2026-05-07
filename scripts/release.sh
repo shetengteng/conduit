@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # release.sh —— 打 Conduit Server / Client 的发布包(.dmg / .msi / .deb / .AppImage)。
 #
+# server-app + client-app 是纯 Rust + TypeScript（in-process ProxyCore /
+# ClientCore），打包流程只跑 pnpm install + pnpm tauri build。
+#
 # 流程:
-#   1. 跑 build-sidecars.sh 把 Python 打成单二进制 → src-tauri/binaries/
-#   2. 跑 pnpm install (确保前端依赖就绪)
-#   3. 跑 pnpm tauri build 在每个 app 目录里
-#   4. 输出归集到 dist/<app>/<bundle-files>
+#   1. pnpm install (确保前端依赖就绪)
+#   2. pnpm tauri build 在每个 app 目录里
+#   3. 输出归集到 dist/<app>/<bundle-files>
 #
 # 跑法:
 #   ./scripts/release.sh           # 打两个 app
@@ -36,24 +38,14 @@ need() {
 }
 need pnpm
 need cargo
-need python3
 
-# ---------- step 1: sidecar ----------
-echo "═══ step 1/4: build sidecars ═══"
-if [[ $# -gt 0 ]]; then
-  ./scripts/build-sidecars.sh "$@"
-else
-  ./scripts/build-sidecars.sh
-fi
-
-# ---------- step 2: pnpm install ----------
-echo ""
-echo "═══ step 2/4: pnpm install ═══"
+# ---------- step 1: pnpm install ----------
+echo "═══ step 1/3: pnpm install ═══"
 if [[ ! -d node_modules ]]; then
   pnpm install
 fi
 
-# ---------- step 3: tauri build per app ----------
+# ---------- step 2: tauri build per app ----------
 build_app() {
   local app="$1"
   local dir="${app}-app"
@@ -70,9 +62,7 @@ build_app() {
   fi
 
   echo ""
-  echo "═══ step 3/4: tauri build $product ═══"
-  # sidecar 通过 bundle.resources 走 onedir 目录树（见 build-sidecars.sh
-  # 顶部注释），不再使用 externalBin 单二进制约定。
+  echo "═══ step 2/3: tauri build $product ═══"
   (cd "$dir" && pnpm tauri build)
 
   # 归集产物
@@ -108,7 +98,7 @@ else
 fi
 
 echo ""
-echo "═══ step 4/4: notarization (optional) ═══"
+echo "═══ step 3/3: notarization (optional) ═══"
 if [[ "$(uname -s)" == "Darwin" ]] && [[ -n "${APPLE_ID:-}" ]]; then
   echo "→ APPLE_ID set, attempting notarization (TODO: implement via xcrun notarytool submit ...)"
   # TODO: 等 Apple Developer 账号到位后填实

@@ -11,20 +11,11 @@ target/
 **/src-tauri/binaries-dir/
 **/src-tauri/gen/
 
-# ── Python ──
+# ── Python（历史 sidecar 残留保护，v0.2.0 后已无 Python 代码）──
 __pycache__/
 *.py[cod]
-*$py.class
 .venv/
 venv/
-.eggs/
-*.egg-info/
-build/
-*.spec
-
-# ── PyInstaller / Nuitka 输出 ──
-*.dist/
-*.build/
 
 # ── Editor / OS ──
 .vscode/
@@ -46,7 +37,8 @@ htmlcov/
 .tsbuildinfo
 
 # ── Tauri 打包产物已包含在 target/ ──
-# 注意：src-tauri/Cargo.lock 应当提交（应用类项目可重现构建）
+# 注意：仓库根 Cargo.lock 应当提交（应用类项目可重现构建，workspace 模式只在根生成）
+# 子 crate 的 src-tauri/Cargo.lock 在 workspace 模式下不再使用，已 git rm
 
 # ── 交互/调试临时文件 ──
 prompts.txt

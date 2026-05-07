@@ -2,30 +2,30 @@
 mod autostart;
 mod commands;
 mod error;
-mod healthz;
-mod sidecar;
+mod proxy;
 mod state;
 mod tray;
 
 use std::sync::Arc;
 
+use conduit_core::{pick_unused_ports, wait_until_ready};
 use log::{error, info, warn};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, WindowEvent};
 
 use crate::error::ConduitError;
-use crate::sidecar::SidecarHandle;
+use crate::proxy::{control_api, ClientConfig, ClientCore};
 use crate::state::{AppRuntime, AppState, LifecyclePhase};
 
-const HEALTHZ_TIMEOUT_SEC: u64 = 60;
+const HEALTHZ_TIMEOUT_SEC: u64 = 30;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .try_init();
 
-    let (socks_port, api_port) = match pick_two_ports() {
-        Some(t) => t,
-        None => {
+    let (socks_port, api_port) = match pick_unused_ports(2) {
+        Some(v) if v.len() == 2 => (v[0], v[1]),
+        _ => {
             eprintln!("FATAL: could not allocate two free TCP ports");
             std::process::exit(2);
         }
@@ -34,17 +34,19 @@ pub fn run() {
     let runtime = AppRuntime::booting(socks_port, api_port);
     info!("boot socks={} api={}", socks_port, api_port);
 
-    let sidecar = Arc::new(SidecarHandle::new(socks_port, api_port));
+    // ClientCore 进程内承载 SOCKS5 入口 / 路由决策 / mDNS 发现 / 控制 API。
+    let cfg = ClientConfig::with_ports(socks_port, api_port);
+    let core = Arc::new(ClientCore::new(cfg));
+    let core_for_setup = core.clone();
+    let core_for_runevent = core.clone();
+    let core_for_manage = core.clone();
 
     let app_state = AppState::new(runtime);
-
-    let sidecar_for_setup = sidecar.clone();
-    let sidecar_for_runevent = sidecar.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(app_state)
-        .manage(sidecar.clone())
+        .manage(core_for_manage)
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime,
             commands::open_external,
@@ -59,9 +61,9 @@ pub fn run() {
             tray::setup(app)?;
 
             let handle = app.handle().clone();
-            let sidecar = sidecar_for_setup.clone();
+            let core = core_for_setup.clone();
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = boot_sequence(handle, sidecar).await {
+                if let Err(e) = boot_sequence(handle, core).await {
                     error!("client boot failed: {e}");
                 }
             });
@@ -89,37 +91,40 @@ pub fn run() {
             }
 
             if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
-                let sc = sidecar_for_runevent.clone();
+                let core = core_for_runevent.clone();
                 let h = app.clone();
                 tauri::async_runtime::block_on(async move {
-                    request_graceful_shutdown(&h, &sc).await;
+                    request_graceful_shutdown(&h, core).await;
                 });
             }
         });
 }
 
-async fn boot_sequence(
-    handle: AppHandle,
-    sidecar: Arc<SidecarHandle>,
-) -> Result<(), ConduitError> {
+async fn boot_sequence(handle: AppHandle, core: Arc<ClientCore>) -> Result<(), ConduitError> {
     let state = handle.state::<AppState>();
     state.set_phase(LifecyclePhase::Booting, None);
     let _ = handle.emit("boot:phase", "booting");
 
-    match sidecar.spawn(&handle).await {
-        Ok(pid) => {
-            state.set_sidecar_pid(Some(pid));
-            info!("client sidecar pid={}", pid);
-        }
-        Err(e) => {
-            state.set_phase(LifecyclePhase::Failed, Some(e.to_string()));
-            let _ = handle.emit("boot:phase", "failed");
-            let _ = handle.emit("boot:error", e.to_string());
-            return Err(e);
-        }
+    if let Err(e) = core.start().await {
+        warn!("client_core start failed: {e}");
+        state.set_phase(LifecyclePhase::Failed, Some(e.clone()));
+        let _ = handle.emit("boot:phase", "failed");
+        let _ = handle.emit("boot:error", e.clone());
+        return Err(ConduitError::Internal(e));
     }
+    info!("[boot] client_core started");
 
-    match healthz::wait_until_ready(sidecar.api_port, HEALTHZ_TIMEOUT_SEC).await {
+    let api_port = core.config().api_port;
+    if let Err(e) = control_api::start(core.clone(), api_port).await {
+        warn!("control_api start failed: {e}");
+        state.set_phase(LifecyclePhase::Failed, Some(e.clone()));
+        let _ = handle.emit("boot:phase", "failed");
+        let _ = handle.emit("boot:error", e.clone());
+        return Err(ConduitError::Internal(e));
+    }
+    state.set_sidecar_pid(Some(std::process::id()));
+
+    match wait_until_ready(api_port, HEALTHZ_TIMEOUT_SEC).await {
         Ok(_) => {
             state.set_phase(LifecyclePhase::Ready, None);
             let _ = handle.emit("boot:phase", "ready");
@@ -130,36 +135,20 @@ async fn boot_sequence(
             Ok(())
         }
         Err(e) => {
-            warn!("healthz timeout: {e}");
-            state.set_phase(LifecyclePhase::Failed, Some(e.to_string()));
+            let msg = e.to_string();
+            warn!("healthz timeout: {msg}");
+            state.set_phase(LifecyclePhase::Failed, Some(msg.clone()));
             let _ = handle.emit("boot:phase", "failed");
-            let _ = handle.emit("boot:error", e.to_string());
-            Err(e)
+            let _ = handle.emit("boot:error", msg);
+            Err(ConduitError::HealthzTimeout(HEALTHZ_TIMEOUT_SEC))
         }
     }
 }
 
-/// 优雅退出：M-α 阶段先做"还没接通 control API 就退" —— 直接 kill。
-/// M-δ 完成后会改为先 POST /api/disconnect 还原系统代理，再 kill。
-async fn request_graceful_shutdown(handle: &AppHandle, sidecar: &SidecarHandle) {
+async fn request_graceful_shutdown(handle: &AppHandle, core: Arc<ClientCore>) {
     if let Some(state) = handle.try_state::<AppState>() {
         state.set_phase(LifecyclePhase::Stopped, None);
     }
-    sidecar.kill().await;
-}
-
-fn pick_two_ports() -> Option<(u16, u16)> {
-    let mut taken = vec![];
-    let mut next = || {
-        for _ in 0..32 {
-            if let Some(p) = portpicker::pick_unused_port() {
-                if !taken.contains(&p) {
-                    taken.push(p);
-                    return Some(p);
-                }
-            }
-        }
-        None
-    };
-    Some((next()?, next()?))
+    core.stop().await;
+    info!("client_core stopped");
 }

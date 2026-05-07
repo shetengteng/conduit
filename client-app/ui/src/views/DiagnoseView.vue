@@ -2,8 +2,8 @@
 /**
  * 诊断视图 —— M-δ。
  *
- * 5 步自检（与 client-app/core/api/diagnose.py 严格 1:1）:
- *   1. Sidecar 进程
+ * 5 步自检（与 client-app/src-tauri/src/proxy/control_api.rs::diagnose_payload 严格 1:1）:
+ *   1. ClientCore 后台服务
  *   2. mDNS 服务发现
  *   3. 上游 Server 可达
  *   4. PAC 文件

@@ -2,17 +2,18 @@
 #
 # bump-version.sh — 一键同步整个 monorepo 的版本号到指定版本。
 #
-# 触发的所有"产权方"(13 处文件):
-#   - 7 个 package.json (root + 2 个 app + 2 个 ui + 2 个 src-tauri 已经被 Cargo 同步)
-#   - 2 个 Cargo.toml + 触发 cargo update -p 同步 lock
+# 仓库纯 Rust + TypeScript，没有 pyproject.toml / _version.py 需要同步。
+#
+# 触发的所有"产权方":
+#   - 5 个 package.json (root + 2 个 app + 2 个 ui)
+#   - workspace Cargo.toml（仓库根，version.workspace 自动同步两个 src-tauri Cargo.toml）
 #   - 2 个 tauri.conf.json
-#   - 2 个 pyproject.toml
 #
 # 触发后,以下"消费者"会自动跟上(不需要手改):
 #   - server-app/ui + client-app/ui 通过 vite.config.ts define 注入 __APP_VERSION__,
 #     所有 UI 代码用 @/lib/appVersion 拿 APP_VERSION
-#   - server-app/core + client-app/core 通过 _version.py 的 importlib.metadata 拿
-#     pyproject 里的 version (打包阶段会嵌入)
+#   - server-app/src-tauri / client-app/src-tauri 通过 CARGO_PKG_VERSION 直接读
+#     workspace.package.version
 #   - docs/index.html 在浏览器里 fetch GitHub /releases/latest 拿 tag,跟代码无关
 #
 # Usage:
@@ -47,18 +48,18 @@ done
 
 # Files we own: each line is "<path>|<sed-pattern>"
 # sed-pattern uses |...| as delimiter so we can keep / clean.
+#
+# v0.2.0 起：workspace Cargo.toml 是 Rust 版本号唯一来源；两个 src-tauri/Cargo.toml
+# 用 version.workspace = true 自动继承，因此不再列入。server-app 已删 pyproject.toml。
 FILES=(
+  "Cargo.toml|^(version = \")[^\"]+(\".*)$"
   "package.json|^(  \"version\": \")[^\"]+(\".*)$"
   "server-app/package.json|^(  \"version\": \")[^\"]+(\".*)$"
   "client-app/package.json|^(  \"version\": \")[^\"]+(\".*)$"
   "server-app/ui/package.json|^(  \"version\": \")[^\"]+(\".*)$"
   "client-app/ui/package.json|^(  \"version\": \")[^\"]+(\".*)$"
-  "server-app/src-tauri/Cargo.toml|^(version = \")[^\"]+(\".*)$"
-  "client-app/src-tauri/Cargo.toml|^(version = \")[^\"]+(\".*)$"
   "server-app/src-tauri/tauri.conf.json|^(  \"version\": \")[^\"]+(\".*)$"
   "client-app/src-tauri/tauri.conf.json|^(  \"version\": \")[^\"]+(\".*)$"
-  "server-app/core/pyproject.toml|^(version = \")[^\"]+(\".*)$"
-  "client-app/core/pyproject.toml|^(version = \")[^\"]+(\".*)$"
 )
 
 # ---------- check ----------
@@ -150,24 +151,8 @@ done
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
   echo
-  echo "Syncing _version.py fallback strings..."
-  for vfile in server-app/core/_version.py client-app/core/_version.py; do
-    if [[ -f "$vfile" ]]; then
-      sed -i.bak -E "s|^_FALLBACK = \"[^\"]+\"|_FALLBACK = \"${NEW}\"|" "$vfile"
-      rm -f "${vfile}.bak"
-      printf '  %-50s _FALLBACK -> %s\n' "$vfile" "$NEW"
-    fi
-  done
-
-  echo
-  echo "Syncing Cargo lockfiles..."
-  for crate in conduit-server conduit-client; do
-    if [[ "$crate" == "conduit-server" ]]; then
-      ( cd "$ROOT/server-app/src-tauri" && cargo update -p "$crate" 2>&1 | tail -2 )
-    else
-      ( cd "$ROOT/client-app/src-tauri" && cargo update -p "$crate" 2>&1 | tail -2 )
-    fi
-  done
+  echo "Syncing Cargo workspace lockfile..."
+  ( cd "$ROOT" && cargo update -p conduit-core -p conduit-server -p conduit-client 2>&1 | tail -3 )
 
   echo
   echo "Bump complete. Verify:"

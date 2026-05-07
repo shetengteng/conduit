@@ -61,13 +61,16 @@ export default {
     toastRestartTipDetail: "Main window will close and the sidecar will relaunch",
     toastRestartFail: "Restart failed",
     toastRestartFailHint: "Please quit and reopen Conduit Server manually.",
+    toastRestartDevTitle: "Restart not supported in dev mode",
+    toastRestartDevDetail:
+      "Dev-mode restart would orphan the vite dev server. Please ctrl+c the terminal and rerun `pnpm tauri dev`. Release builds don't have this limitation.",
     tauriUnavailable: "Tauri invoke unavailable (likely browser preview).",
   },
 
   dashboard: {
     proxyEngine: "Proxy engine",
     kpi: {
-      clients: "Connected clients",
+      clients: "Active clients",
       clientsUnit: "",
       down: "Downstream",
       up: "Upstream",

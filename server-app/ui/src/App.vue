@@ -17,7 +17,8 @@ import TopStatusBar from '@/components/layout/TopStatusBar.vue'
 import BootScreen from '@/components/layout/BootScreen.vue'
 import BootFailedScreen from '@/components/layout/BootFailedScreen.vue'
 import FirstLaunchModal from '@/components/feedback/FirstLaunchModal.vue'
-import ToastHost from '@/components/feedback/ToastHost.vue'
+import { Toaster } from 'vue-sonner'
+import 'vue-sonner/style.css'
 import DashboardView from '@/views/DashboardView.vue'
 import LogsView from '@/views/LogsView.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -114,8 +115,16 @@ function handleRetry() {
     </div>
 
     <FirstLaunchModal />
-    <ToastHost />
   </template>
 
   <BootScreen v-else />
+
+  <!-- shadcn-vue 推荐的 toast 实现，独立于 boot phase 始终挂载，
+       这样 BootScreen / BootFailedScreen 阶段也能弹 toast。 -->
+  <Toaster
+    position="bottom-right"
+    :rich-colors="true"
+    :close-button="true"
+    theme="system"
+  />
 </template>

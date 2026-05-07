@@ -1,7 +1,7 @@
 /**
  * Conduit Client 共享数据类型
  *
- * 与后端 Python `client-app/core/api/*` 的 JSON 响应严格 1:1 对齐（snake_case）。
+ * 与后端 Rust `client-app/src-tauri/src/proxy/control_api.rs` 的 JSON 响应严格 1:1 对齐（snake_case）。
  * 一旦后端契约变化，此文件必须同步更新。
  *
  * 设计原则：M-α 阶段只声明已有 API（healthz + Tauri runtime），
@@ -44,7 +44,7 @@ export interface AppRuntime {
 
 /** 单个被发现到（或历史上见过）的 Conduit Server。
  *
- * 字段语义见 client-app/core/discoverer.py · DiscoveredServer。
+ * 字段语义见 client-app/src-tauri/src/proxy/discoverer.rs · DiscoveredServer。
  */
 export interface DiscoveredServer {
   server_id: string;          // name@host:port,跨 session 稳定

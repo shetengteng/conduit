@@ -43,6 +43,9 @@ export default {
     toastRestartTipDetail: "主窗口将立即关闭并重新启动 sidecar",
     toastRestartFail: "重启失败",
     toastRestartFailHint: "请手动退出并重新打开 Conduit Client",
+    toastRestartDevTitle: "开发模式不支持重启",
+    toastRestartDevDetail:
+      "在 dev 模式下重启会让 vite 与 binary 解耦，请回到终端 ctrl+c 后重跑 `pnpm tauri dev`。Release 包没有这个限制。",
   },
 
   boot: {
@@ -58,7 +61,7 @@ export default {
     failedSub: "Tauri 主进程未能在 9 秒内完成健康检查",
     failedHints: "可以这样做:",
     hint1: "检查 8090 / 1080 / 8080 端口是否被其他进程占用",
-    hint2: "若是首次启动,请确认 Python 3.10+ 与 zeroconf 已就绪",
+    hint2: "确认同一局域网中已启动 Conduit Server（mDNS / Bonjour 可达）",
     hint3: "可在「设置 → 端口」中为 API/HTTP/SOCKS5 改用其他端口",
     retry: "重试",
     quit: "退出",
@@ -120,6 +123,10 @@ export default {
     forgetTitle: "从历史中移除",
     confirmForget: "确定从历史中移除「{name}」?\n该 server 重新广播时仍会自动出现。",
     confirmForgetAll: "确定清空全部 {count} 条历史 server?\n(在线 server 不受影响)",
+    confirmForgetTitle: "从历史移除该 server?",
+    confirmForgetAllTitle: "清空所有历史 server?",
+    confirmOk: "确定",
+    confirmCancel: "取消",
     toastRemoved: "已移除",
     toastNotFound: "未找到该 server",
     toastNotFoundDetail: "它可能已自行清理",

@@ -61,8 +61,8 @@ fn copy_pac(app: &AppHandle) {
 }
 
 fn write_clipboard(_app: &AppHandle, _text: &str) -> Result<(), String> {
-    // tauri-plugin-clipboard-manager is not yet wired in S2; landing in S3.
-    // For now we just log so the menu item is observable.
+    // tauri-plugin-clipboard-manager 在 S2 阶段还没接入，留到 S3 再装。
+    // 暂时只 log，让托盘菜单项至少可被观测到执行了。
     log::info!("(stub) PAC URL: {}", _text);
     Ok(())
 }

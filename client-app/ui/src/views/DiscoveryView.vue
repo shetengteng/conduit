@@ -15,7 +15,7 @@
  *   - 元信息行：SOCKS / API 端口 + VPN 状态 chip
  *   - 操作区：暂禁用"连接"按钮（M-β.2 才启用）
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Card,
@@ -25,6 +25,14 @@ import {
   CardDescription,
 } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   RiCompass3Line,
   RiRefreshLine,
@@ -71,8 +79,18 @@ async function handleConnect(srv: DiscoveredServer) {
   }
 }
 
-async function handleForget(srv: DiscoveredServer) {
-  if (!confirm(t('discovery.confirmForget', { name: srv.name }))) return
+const forgetTarget = ref<DiscoveredServer | null>(null)
+const forgetAllOpen = ref(false)
+const forgetBusy = ref(false)
+
+function handleForget(srv: DiscoveredServer) {
+  forgetTarget.value = srv
+}
+
+async function confirmForgetOne() {
+  const srv = forgetTarget.value
+  if (!srv || forgetBusy.value) return
+  forgetBusy.value = true
   try {
     const resp = await ClientApi.forgetServer(srv.server_id)
     if (resp.removed) {
@@ -87,12 +105,20 @@ async function handleForget(srv: DiscoveredServer) {
     const code = e instanceof ApiError ? e.code : 'UNKNOWN'
     const msg = e instanceof Error ? e.message : String(e)
     toast.error(t('discovery.toastRemoveFail'), { detail: `${code}: ${msg}` })
+  } finally {
+    forgetBusy.value = false
+    forgetTarget.value = null
   }
 }
 
-async function handleForgetAll() {
+function handleForgetAll() {
   if (historyCount.value === 0) return
-  if (!confirm(t('discovery.confirmForgetAll', { count: historyCount.value }))) return
+  forgetAllOpen.value = true
+}
+
+async function confirmForgetAll() {
+  if (forgetBusy.value) return
+  forgetBusy.value = true
   try {
     const resp = await ClientApi.forgetAllHistory()
     toast.success(t('discovery.toastClearedTitle'), {
@@ -103,6 +129,9 @@ async function handleForgetAll() {
     const code = e instanceof ApiError ? e.code : 'UNKNOWN'
     const msg = e instanceof Error ? e.message : String(e)
     toast.error(t('discovery.toastClearFail'), { detail: `${code}: ${msg}` })
+  } finally {
+    forgetBusy.value = false
+    forgetAllOpen.value = false
   }
 }
 
@@ -133,8 +162,8 @@ function isOnline(srv: DiscoveredServer): boolean {
   return srv.source === 'mdns'
 }
 
-// 与 backend client-app/core/discoverer.py:_persist_merged_history 的容量上限保持一致。
-// 改这里前请同步检查后端常量。
+// 仅用于 i18n 文案的展示数。Rust v0.2 起后端 (`client-app/src-tauri/src/proxy/discoverer.rs`)
+// 不再对 `known-servers.json` 做容量截断；前端只是把这个数字展示给用户。
 const HISTORY_MAX = 32
 
 const headerSubtitle = computed(() => {
@@ -362,4 +391,71 @@ const headerHint = computed(() => {
       </Card>
     </div>
   </div>
+
+  <Dialog
+    :open="forgetTarget !== null"
+    @update:open="(v: boolean) => { if (!v) forgetTarget = null }"
+  >
+    <DialogContent class="sm:max-w-[440px]">
+      <DialogHeader>
+        <DialogTitle class="flex items-center gap-2 text-base">
+          <RiAlertLine class="size-4 text-destructive" />
+          {{ t('discovery.confirmForgetTitle') }}
+        </DialogTitle>
+        <DialogDescription class="pt-2 text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
+          {{ forgetTarget ? t('discovery.confirmForget', { name: forgetTarget.name }) : '' }}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter class="gap-2 sm:gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="forgetBusy"
+          @click="forgetTarget = null"
+        >
+          {{ t('discovery.confirmCancel') }}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          :disabled="forgetBusy"
+          @click="confirmForgetOne"
+        >
+          {{ t('discovery.confirmOk') }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog v-model:open="forgetAllOpen">
+    <DialogContent class="sm:max-w-[440px]">
+      <DialogHeader>
+        <DialogTitle class="flex items-center gap-2 text-base">
+          <RiDeleteBinLine class="size-4 text-destructive" />
+          {{ t('discovery.confirmForgetAllTitle') }}
+        </DialogTitle>
+        <DialogDescription class="pt-2 text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
+          {{ t('discovery.confirmForgetAll', { count: historyCount }) }}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter class="gap-2 sm:gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          :disabled="forgetBusy"
+          @click="forgetAllOpen = false"
+        >
+          {{ t('discovery.confirmCancel') }}
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          :disabled="forgetBusy"
+          @click="confirmForgetAll"
+        >
+          {{ t('discovery.confirmOk') }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>

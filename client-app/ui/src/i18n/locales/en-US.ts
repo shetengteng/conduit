@@ -44,6 +44,9 @@ export default {
       "Main window will close and the sidecar will relaunch",
     toastRestartFail: "Restart failed",
     toastRestartFailHint: "Please quit and reopen Conduit Client manually",
+    toastRestartDevTitle: "Restart not supported in dev mode",
+    toastRestartDevDetail:
+      "Dev-mode restart would orphan the vite dev server. Please ctrl+c the terminal and rerun `pnpm tauri dev`. Release builds don't have this limitation.",
   },
 
   boot: {
@@ -61,7 +64,7 @@ export default {
     failedHints: "What to try:",
     hint1: "Check whether ports 8090 / 1080 / 8080 are taken",
     hint2:
-      "First launch? Make sure Python 3.10+ and zeroconf are installed",
+      "Confirm a Conduit Server is running on the same LAN (mDNS / Bonjour reachable)",
     hint3:
       "Pick different API/HTTP/SOCKS5 ports under Settings → Ports",
     retry: "Retry",
@@ -131,6 +134,10 @@ export default {
       "Remove “{name}” from history?\nIt will reappear when the server broadcasts again.",
     confirmForgetAll:
       "Clear all {count} historical servers?\n(Online servers are not affected.)",
+    confirmForgetTitle: "Remove this server from history?",
+    confirmForgetAllTitle: "Clear all historical servers?",
+    confirmOk: "Confirm",
+    confirmCancel: "Cancel",
     toastRemoved: "Removed",
     toastNotFound: "Server not found",
     toastNotFoundDetail: "It may have been cleaned up already",

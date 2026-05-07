@@ -1,30 +1,44 @@
 [package]
 name = "conduit-client"
-version = "0.1.4"
 description = "Conduit Client desktop application (smart local proxy, macOS only in v0.1)"
-authors = ["TerrellShe"]
-edition = "2021"
-rust-version = "1.78"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
 
 [lib]
 name = "conduit_client_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build.workspace = true
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
-tauri-plugin-opener = "2"
-tokio = { version = "1", features = ["sync", "time", "process", "rt-multi-thread", "macros"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-thiserror = "1"
-log = "0.4"
-env_logger = "0.11"
-portpicker = "0.1"
-once_cell = "1"
+serde.workspace = true
+serde_json.workspace = true
+tauri = { workspace = true, features = ["image-png"] }
+tauri-plugin-opener.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+log.workspace = true
+env_logger.workspace = true
+portpicker.workspace = true
+once_cell.workspace = true
+# 内嵌 ClientCore（SOCKS5 入口 / 路由决策 / mDNS 发现 / 控制 API 全部进程内）
+conduit-core.workspace = true
+tokio-util.workspace = true
+mdns-sd.workspace = true
+local-ip-address.workspace = true
+ipnet.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dashmap = "6"
+dirs = "5"
+# step_fetch_pac 拉 PAC 需要的轻量 HTTP client（runtime 依赖）
+reqwest = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-libc = "0.2"
+libc.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["full"] }
