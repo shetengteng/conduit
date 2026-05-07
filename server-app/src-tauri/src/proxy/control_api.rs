@@ -133,6 +133,27 @@ async fn serve_healthz<W: AsyncWriteExt + Unpin>(
 ) -> std::io::Result<()> {
     let cfg = core.config();
     let status = core.status().await;
+    // detail 反映**真实 bind**(http/socks5 默认 0.0.0.0,api 固定 127.0.0.1),
+    // 而不是之前硬编码的 127.0.0.1 —— 之前展示给用户的"端口监听 listening on 127.0.0.1"
+    // 与实际"任何网卡都接受"严重不符。
+    let proxy_bind = if cfg.bind.is_empty() {
+        "0.0.0.0"
+    } else {
+        cfg.bind.as_str()
+    };
+    let lan_hint = if proxy_bind == "0.0.0.0" {
+        // 通配监听 → 顺手把 LAN IP 也告诉用户,直观说明"同事实际拨过来用什么 IP"
+        let host = super::effective_advertised_host(&cfg);
+        if host != "127.0.0.1" {
+            format!(" (LAN: {host})")
+        } else {
+            " (loopback fallback, no LAN iface detected)".into()
+        }
+    } else if proxy_bind == "127.0.0.1" {
+        " (loopback only)".into()
+    } else {
+        String::new()
+    };
     let resp = HealthzResponse {
         ready: status.running,
         running: status.running,
@@ -141,17 +162,17 @@ async fn serve_healthz<W: AsyncWriteExt + Unpin>(
             HealthCheckEntry {
                 name: "http_port".into(),
                 ok: status.running,
-                detail: format!("listening on 127.0.0.1:{}", cfg.http_port),
+                detail: format!("listening on {proxy_bind}:{}{lan_hint}", cfg.http_port),
             },
             HealthCheckEntry {
                 name: "socks5_port".into(),
                 ok: status.running,
-                detail: format!("listening on 127.0.0.1:{}", cfg.socks_port),
+                detail: format!("listening on {proxy_bind}:{}{lan_hint}", cfg.socks_port),
             },
             HealthCheckEntry {
                 name: "api_port".into(),
                 ok: true,
-                detail: format!("listening on 127.0.0.1:{}", cfg.api_port),
+                detail: format!("listening on 127.0.0.1:{} (loopback only)", cfg.api_port),
             },
             HealthCheckEntry {
                 name: "lan_ip".into(),
@@ -564,6 +585,56 @@ mod tests {
         for expected in ["http_port", "socks5_port", "api_port", "lan_ip", "vpn_tunnel"] {
             assert!(names.contains(&expected), "missing {expected} in {names:?}");
         }
+        core.stop().await;
+    }
+
+    /// http/socks5 detail 必须如实反映 cfg.bind(默认 0.0.0.0,而不是历史硬编码
+    /// 的 127.0.0.1),api 始终 loopback only。
+    /// 这里另起一个 core 用真实 default bind(0.0.0.0)。
+    #[tokio::test]
+    async fn healthz_detail_reflects_actual_bind() {
+        let http = portpicker::pick_unused_port().unwrap();
+        let socks = portpicker::pick_unused_port().unwrap();
+        let api = portpicker::pick_unused_port().unwrap();
+        let mut cfg = ProxyConfig::with_ports(http, socks, api);
+        cfg.mdns_enabled = false;
+        let core = ProxyCore::new(cfg);
+        let cancel = core.cancel_token();
+        let core_clone = core.clone();
+        tokio::spawn(async move {
+            let _ = super::run(core_clone, cancel).await;
+        });
+        for _ in 0..50 {
+            if TS::connect(("127.0.0.1", api)).await.is_ok() {
+                break;
+            }
+            tokio::time::sleep(StdDuration::from_millis(20)).await;
+        }
+
+        let (_, body) = http_get(api, "/healthz").await;
+        let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+        let by_name: std::collections::HashMap<&str, &str> = json["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| (c["name"].as_str().unwrap(), c["detail"].as_str().unwrap()))
+            .collect();
+        let http_detail = by_name["http_port"];
+        let socks5_detail = by_name["socks5_port"];
+        let api_detail = by_name["api_port"];
+        assert!(
+            http_detail.starts_with("listening on 0.0.0.0:"),
+            "http_port detail should reflect 0.0.0.0 bind, got: {http_detail}"
+        );
+        assert!(
+            socks5_detail.starts_with("listening on 0.0.0.0:"),
+            "socks5_port detail should reflect 0.0.0.0 bind, got: {socks5_detail}"
+        );
+        assert!(
+            api_detail.starts_with("listening on 127.0.0.1:")
+                && api_detail.contains("loopback only"),
+            "api_port detail should be loopback only, got: {api_detail}"
+        );
         core.stop().await;
     }
 
