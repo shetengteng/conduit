@@ -14,8 +14,6 @@
 
 ---
 
-## Screenshots
-
 ### Server · dashboard
 
 ![Conduit Server dashboard](./docs/screenshots/ds_en.png)

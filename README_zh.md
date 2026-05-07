@@ -14,8 +14,6 @@
 
 ---
 
-## 截图
-
 ### Server · 主控台
 
 ![Conduit Server 主控台](./docs/screenshots/ds_zh.png)
