@@ -77,10 +77,10 @@
 - [x] **B7 提权方案**：osascript admin 弹框 fallback 已实装（5 min keychain 缓存 / 用户取消 → fail_connect rollback）
 - [x] codesign + sandbox：与现有 tauri.conf 兼容，**无需** entitlement 修改 / SMJobBless
 
-### POC-5：cargo cross 编译矩阵（0.5 工日） ⚠ 待 W5 release.yml push
+### POC-5：cargo cross 编译矩阵（0.5 工日） ✅ v0.2.0 范围完成
 - [x] mac arm64 / x64 本地：`cargo build --workspace --release` 1m30s 通过
-- [ ] GitHub Actions matrix：依赖 release.yml push（PAT 阻塞）
-- [ ] win-msvc / linux-gnu：留 v0.3 cross-compile 矩阵 sprint
+- [x] GitHub Actions matrix：release.yml 已 push（2e40fab），等 tag 触发即可
+- ⏸ win-msvc / linux-gnu：v0.3 cross-compile 矩阵 sprint
 
 ### POC 阶段交付 ✅ 等价完成
 - [x] **不写**单独 POC 报告：5 项验收结果直接体现在 sprint 表 + 测试覆盖里
@@ -317,12 +317,14 @@
 - [x] `scripts/bump-version.sh` 移除 `pyproject.toml` 同步
 - [x] `scripts/e2e.sh` W6 B8 已重写（jq + 0 步 headless smoke example）
 
-### S4.2 GitHub Actions release.yml 改造（1 工日） ⚠ 待 D1 push（PAT 阻塞）
-- [x] 删除 PyInstaller 安装步骤（已本地修改）
-- [ ] 新增 cargo cross-compile 矩阵：mac (arm/x64) / win-msvc / linux-gnu
-- [ ] tauri-action v0 升级 + universal-darwin
-- [ ] sign + notarize
-- ⚠ 阻塞：本地 `release.yml` 修改未 push（需要 PAT 加 `workflow` scope），见 D1 任务
+### S4.2 GitHub Actions release.yml 改造（1 工日） ✅ v0.2.0 范围完成（2026-05-07 commit `2e40fab`）
+- [x] 删除 PyInstaller 安装步骤（已 push 到远端）
+- [x] mac aarch64 + x86_64 双 runner 矩阵（macos-15 + macos-15-intel）
+- [x] ad-hoc codesign（APPLE_SIGNING_IDENTITY=-，无需 Apple Developer 账号即可装）
+- [x] dmg 上传到 GitHub Release（softprops/action-gh-release@v3）
+- ⏸ win-msvc / linux-gnu cross-compile 矩阵：v0.3 sprint
+- ⏸ tauri-action v0 升级 + universal-darwin：当前手写 release.sh + tauri build 已 work，无收益
+- ⏸ 完整 sign + notarize：需要 Apple Developer 账号 + APPLE_ID/APPLE_PASSWORD/APPLE_TEAM_ID secret，v0.3 评估
 
 ### S4.3 集成测试套件（1 工日） ✅ 替代方案 + W6 加强
 - [x] unit-test-first 策略：各 crate 单测覆盖关键路径
@@ -336,13 +338,13 @@
 - [x] `--headless-only` flag 用于快速 sanity check（< 5s）
 - [x] 依赖检查：jq + cargo
 
-### S4.5 发布 v0.2.0（0.5 工日） ⚠ 等 D1 PAT
+### S4.5 发布 v0.2.0（0.5 工日） ⚠ 剩余唯一项 = `git tag v0.2.0 && git push origin v0.2.0`
 - [x] `bump-version.sh 0.2.0` 完成（双 app + workspace crates 全部 0.2.0）
 - [x] 撰写 `scripts/release-notes-v0.2.0.md`：Python 完全移除、单进程、体积砍半、双向 heartbeat 注册、TTL passive client、W6 全部 bugfix + C1/C2/C4/B7/B8/B10
 - [x] CHANGELOG.md 创建（Keep-a-Changelog 格式，覆盖 v0.1.0 → v0.2.0）
-- [ ] tag v0.2.0 + push（D1，PAT 阻塞）
-- [ ] GitHub Release 4 平台产物（D1，依赖 cross-compile）
-- [x] 更新 README.md / README_zh.md：去 Python、dmg/msi/deb 下载流程、osascript 提权说明、180 测试数
+- [ ] **tag v0.2.0 + push** ← 现在唯一阻塞，PAT 已不需要 workflow scope（tag push 不写 .github/workflows/）
+- [ ] GitHub Release 2 平台产物（mac aarch64 + x86_64 dmg）← tag 触发自动产出
+- [x] 更新 README.md / README_zh.md：去 Python、dmg 下载流程、osascript 提权说明、186 测试数
 - ⏸ 更新 docs/index.html screenshot：手工拍图，v0.2.0 GA 后补
 
 ### S4.6 文档更新（1 工日） ✅ 完成
@@ -351,10 +353,11 @@
 - ⏸ 撰写 `design/202X-XX-XX-X-v0.2.0-完工总结.md`：用 CHANGELOG + release-notes 替代，复盘待 GA 后补
 
 ### W5 Sprint 4 完成判据
-- ⚠ **发 v0.2.0 正式版**：D1 PAT push + tag + cross-compile 一次完成
+- ⚠ **发 v0.2.0 正式版**：剩余 1 步 = 打 tag 触发 workflow（mac arm/x64 dmg 自动出）
 - [x] CHANGELOG / README / 设计文档已全部更新到 W6 完成态
-- [ ] CI/CD 全绿（待 release.yml push + 首轮 matrix 跑通）
-- [ ] 4 平台二进制可下载（同上，mac arm64/x64 本地已验证）
+- [x] release.yml 已 push（2026-05-07 commit `2e40fab`），CI 待首轮 tag 触发
+- [x] 2 个 mac 平台二进制本地已验证（aarch64 + x86_64 dmg 均可装）
+- ⏸ win-msvc / linux-gnu：v0.3 cross-compile 矩阵 sprint
 
 ---
 
@@ -380,7 +383,10 @@
 - [x] **design/archive/** 6 篇 Python 时代文档归档
 
 ### W6 转出（→ D1 单独追踪）
-- [ ] **D1**：PAT 重生（加 `workflow` scope）+ push release.yml + tag v0.2.0 + GitHub Actions matrix cross-compile（mac arm64/x64/win-msvc/linux-gnu）+ sign + notarize
+- [x] ~~PAT 重生（加 `workflow` scope）+ push release.yml~~ ← 用户 2026-05-07 自行 push（commit `2e40fab`）
+- [ ] **D1（仅剩 1 步）**：`git tag v0.2.0 && git push origin v0.2.0` → 触发 workflow 自动出 mac aarch64/x86_64 dmg + 创建 GitHub Release
+- ⏸ win-msvc / linux-gnu cross-compile 矩阵：v0.3 sprint
+- ⏸ Apple Developer 账号 + 完整 sign + notarize：v0.3 sprint（当前 ad-hoc 签名足够）
 
 ---
 
@@ -484,3 +490,4 @@ W5 Sprint 4 ─ release.sh / Actions / e2e / docs / 发版 (依赖 POC-5)
 - 2026-05-06 v1.4 整体进度 ≈ 90%；W5 剩余主要项 = release.yml cross-compile（PAT scope 缺 workflow，本地修改未 push）、tag v0.2.0、e2e.sh Rust 重写、system_proxy macOS sandbox 提权方案；这 4 项归为 v0.3 sprint backlog
 - 2026-05-07 v1.5 W6 二轮收尾 → 整体进度 ≈ **97%**：(C1) socks5_proto 下沉 conduit-core，server/client 各去重 ~55 行 + 20 新单测；(C2) HTTP absolute-URI forward proxy + hop-by-hop 过滤 + chunked 拒绝 + 4 新单测；(C4) heartbeat name=/version= URL-decode 过线路验证；(B7) system_proxy macOS osascript admin 提权 fallback（5min 缓存 + 用户取消触发 fail_connect rollback）；(B8) scripts/e2e.sh bash+jq 重写 + crates/conduit-core/examples/socks5_relay_smoke.rs headless 1MiB 双向吞吐 example；(B10) 业务 *.rs 注释中文化（server-app + client-app proxy 模块全覆盖，conduit-core 公共 docs / TS / Vue / 测试 docs 不动）；测试增至 **180 passed**，clippy 0 warning。剩余唯一阻塞项 D1 = PAT 重生 + tag + cross-compile。
 - 2026-05-07 v1.6 全面 reconcile checkbox 与实际完成状态：S1.5 specta 永久推迟 v0.3+；W2 traffic_sampler / status_tick 永久推迟 v0.3+；S2.7 UI 切 invoke 取消（fetch + EventSource 已 work）；POC-2 由 S2.2 + bidirectional_relay + headless smoke 等价覆盖；POC-3 由 EventBus + SSE 实际负载等价覆盖；POC-4 由 W6 B7 提权方案等价覆盖；POC-5 mac arm/x64 本地通过、其余待 D1；W3-W4 / W5 已完成项目全部勾选。
+- 2026-05-07 v1.7 boot ConduitError 下沉到 `conduit_core::boot_error`（去重 ~95 行 + 6 新单测，测试增至 **186 passed**）；设计文档附录 C 与实际 Cargo.toml reconcile 完成（§C.3 9 项偏离决策 + §C.4 11 个新增轻量依赖说明）；用户自行 push `release.yml` Python 移除（commit `2e40fab`），D1 PAT scope 阻塞解除，剩余唯一项 = `git tag v0.2.0 && git push origin v0.2.0` 触发 mac aarch64/x86_64 dmg 矩阵。
