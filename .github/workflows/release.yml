@@ -110,22 +110,32 @@ jobs:
 
       # 按 app + arch 拆成 4 个独立 artifact（server-aarch64 / server-x86_64 /
       # client-aarch64 / client-x86_64），下载侧更直观，可以只下需要的那个。
-      # if-no-files-found: ignore —— workflow_dispatch 选 "server" 时 client
-      # 这步会找不到文件（不是错误），跳过即可。
+      #
+      # if-no-files-found 必须用 error（不能用 ignore）—— 否则 tauri build 静默
+      # 失败、dist/<app>/*.dmg 为空时，build job 仍会 success，下游 release job
+      # download-artifact 拉到 0 个 artifact，artifacts/ 目录甚至不会被创建
+      # （v7 已知行为），最终 `ls -lhR artifacts/` exit 2，把锅甩给 release
+      # 而非真正的 build 故障，难排查。
+      #
+      # workflow_dispatch 选 "server" 时不能跑 "upload client dmg"（dist/client/
+      # 根本不存在），所以这里用 step-level if 跳过整个 step，而不是靠 ignore。
+      # tag push 触发时 inputs.app 不存在（== null），按默认 both 处理。
       - name: upload server dmg
+        if: ${{ inputs.app == null || inputs.app == 'both' || inputs.app == 'server' }}
         uses: actions/upload-artifact@v7
         with:
           name: conduit-server-${{ matrix.arch }}
           path: dist/server/*.dmg
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
       - name: upload client dmg
+        if: ${{ inputs.app == null || inputs.app == 'both' || inputs.app == 'client' }}
         uses: actions/upload-artifact@v7
         with:
           name: conduit-client-${{ matrix.arch }}
           path: dist/client/*.dmg
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
   release:
@@ -140,8 +150,25 @@ jobs:
         with:
           path: artifacts
 
+      # download-artifact@v7 在 build matrix 一个 artifact 都没产出时
+      # 不会创建 artifacts/ 目录（issue #455），裸 ls 会 exit 2 且只看到
+      # "No such file or directory"，无法判断是 build 没出 dmg 还是
+      # download 步骤本身出错。这里先做存在性检查并给出明确指引。
       - name: list collected files
-        run: ls -lhR artifacts/
+        run: |
+          if [[ ! -d artifacts ]]; then
+            echo "✗ artifacts/ 不存在 —— build matrix 没有任何 artifact 产出"
+            echo "  请回到上游 build-* job 查看 'build bundle' / 'list artifacts' 的日志。"
+            exit 1
+          fi
+          ls -lhR artifacts/
+          dmg_count=$(find artifacts -name '*.dmg' -type f | wc -l | tr -d ' ')
+          echo ""
+          echo "→ 共找到 ${dmg_count} 个 .dmg 文件"
+          if [[ "$dmg_count" == "0" ]]; then
+            echo "✗ 没有 .dmg 可发布，终止 release"
+            exit 1
+          fi
 
       - name: create release
         uses: softprops/action-gh-release@v3
