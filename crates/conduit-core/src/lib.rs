@@ -7,6 +7,7 @@
 //! - [`events`] —— 基于 `tokio::sync::broadcast` 的 EventBus（已实装）
 //! - [`relay`] —— 双向流量转发（已实装）
 //! - [`mdns`] —— mDNS service-type / TXT 字段约定（已实装）
+//! - [`socks5_proto`] —— RFC 1928 字节级编解码（双端共享，已实装）
 //! - [`types`] —— 双端共享 wire types（serde；specta 绑定在 S1.5 接入）
 //!
 //! 详见 `design/2026-05-06-2-Conduit-Rust-重写设计文档.md`。
@@ -18,6 +19,7 @@ pub mod mdns;
 pub mod pac;
 pub mod ports;
 pub mod relay;
+pub mod socks5_proto;
 pub mod types;
 
 pub use error::{ConduitError, ConduitResult};

@@ -18,6 +18,11 @@ use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 
+use conduit_core::socks5_proto::{
+    bnd_addr_len, consts as s5, encode_connect_request, encode_method_request_no_auth,
+    encode_method_response, encode_reply, parse_address_bytes, parse_method_response,
+    parse_reply_head, validate_version, Socks5Address,
+};
 use conduit_core::{bidirectional_relay, ProgressSink, RouteDirection};
 
 use super::route_resolver::RouteResolver;
@@ -137,21 +142,18 @@ async fn run_accept_loop(inner: Arc<Inner>, listener: TcpListener) {
 }
 
 async fn handle_socks5(inner: Arc<Inner>, mut client: TcpStream) -> std::io::Result<()> {
-    // ---- step 1: 协商方法 ----
+    // ---- step 1: 协商方法（用 conduit_core::socks5_proto 解 + 编） ----
     timeout(HANDSHAKE_TIMEOUT, async {
         let mut head = [0u8; 2];
         client.read_exact(&mut head).await?;
-        if head[0] != 0x05 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "not socks5",
-            ));
-        }
+        validate_version(head[0]).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, format!("not socks5: {e}"))
+        })?;
         let nmethods = head[1] as usize;
         let mut methods = vec![0u8; nmethods];
         client.read_exact(&mut methods).await?;
-        // 一律回 NO-AUTH（0x00）
-        client.write_all(&[0x05, 0x00]).await?;
+        // 一律 NO-AUTH 接受
+        client.write_all(&encode_method_response(true)).await?;
         Ok::<(), std::io::Error>(())
     })
     .await
@@ -160,41 +162,37 @@ async fn handle_socks5(inner: Arc<Inner>, mut client: TcpStream) -> std::io::Res
     // ---- step 2: 解析请求 ----
     let mut req_head = [0u8; 4];
     client.read_exact(&mut req_head).await?;
-    if req_head[0] != 0x05 {
+    if validate_version(req_head[0]).is_err() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             "bad req version",
         ));
     }
-    if req_head[1] != 0x01 {
-        // 仅接受 SOCKS5 CONNECT；其他命令一律回 0x07 command-not-supported
-        write_reply(&mut client, 0x07).await?;
+    if req_head[1] != s5::CMD_CONNECT {
+        write_local_reply(&mut client, s5::REP_CMD_NOT_SUPPORTED).await?;
         return Ok(());
     }
     let atyp = req_head[3];
-    let host = match atyp {
-        0x01 => {
-            let mut buf = [0u8; 4];
-            client.read_exact(&mut buf).await?;
-            std::net::Ipv4Addr::from(buf).to_string()
+    let address: Socks5Address = match atyp {
+        s5::ATYP_IPV4 | s5::ATYP_IPV6 => {
+            let len = bnd_addr_len(atyp).expect("ATYP_IPV4/IPV6 长度已知").unwrap();
+            let mut raw = vec![0u8; len];
+            client.read_exact(&mut raw).await?;
+            parse_address_bytes(atyp, &raw).expect("固定长度 IP parse 不会失败")
         }
-        0x04 => {
-            let mut buf = [0u8; 16];
-            client.read_exact(&mut buf).await?;
-            std::net::Ipv6Addr::from(buf).to_string()
-        }
-        0x03 => {
+        s5::ATYP_DOMAIN => {
             let mut len_buf = [0u8; 1];
             client.read_exact(&mut len_buf).await?;
             let mut name = vec![0u8; len_buf[0] as usize];
             client.read_exact(&mut name).await?;
-            String::from_utf8_lossy(&name).to_string()
+            parse_address_bytes(atyp, &name).expect("ATYP_DOMAIN parse 不会失败")
         }
         _ => {
-            write_reply(&mut client, 0x08).await?;
+            write_local_reply(&mut client, s5::REP_ATYP_NOT_SUPPORTED).await?;
             return Ok(());
         }
     };
+    let host = address.host_string();
     let mut port_buf = [0u8; 2];
     client.read_exact(&mut port_buf).await?;
     let port = u16::from_be_bytes(port_buf);
@@ -230,11 +228,11 @@ async fn handle_socks5(inner: Arc<Inner>, mut client: TcpStream) -> std::io::Res
             if matches!(decision.source, super::route_resolver::DecisionSource::Cache) {
                 let _ = inner.resolver.cache().flip(&host);
             }
-            write_reply(&mut client, 0x05).await?; // connection refused
+            write_local_reply(&mut client, s5::REP_CONNECT_REFUSED).await?;
             return Ok(());
         }
     };
-    write_reply(&mut client, 0x00).await?; // succeeded
+    write_local_reply(&mut client, s5::REP_OK).await?;
 
     // ---- step 5: relay ----
     let sink = inner.sink.lock().await.clone();
@@ -262,59 +260,39 @@ async fn connect_via_proxy(
     .await
     .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "proxy connect timeout"))??;
 
-    // 方法协商：[ver=5, nmethods=1, methods=[0x00 no-auth]]
-    s.write_all(&[0x05, 0x01, 0x00]).await?;
+    s.write_all(&encode_method_request_no_auth()).await?;
     let mut neg_resp = [0u8; 2];
     s.read_exact(&mut neg_resp).await?;
-    if neg_resp != [0x05, 0x00] {
-        return Err(std::io::Error::other(
-            "upstream socks5: no-auth not accepted",
-        ));
-    }
+    parse_method_response(&neg_resp).map_err(|e| {
+        std::io::Error::other(format!("upstream socks5 method negotiation: {e}"))
+    })?;
 
-    // 请求 CONNECT host:port，地址类型用 DOMAIN
-    let host_bytes = host.as_bytes();
-    if host_bytes.len() > 255 {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "host too long for socks5 domain",
-        ));
-    }
-    let mut req = vec![0x05, 0x01, 0x00, 0x03, host_bytes.len() as u8];
-    req.extend_from_slice(host_bytes);
-    req.extend_from_slice(&port.to_be_bytes());
+    let req = encode_connect_request(&Socks5Address::Domain(host.to_string()), port)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
     s.write_all(&req).await?;
 
-    // 响应：[ver, rep, rsv, atyp, bnd_addr, bnd_port]
     let mut head = [0u8; 4];
     s.read_exact(&mut head).await?;
-    if head[1] != 0x00 {
-        return Err(std::io::Error::other(format!(
-            "upstream socks5 reply rep={:#x}",
-            head[1]
-        )));
-    }
-    // 跳过 bnd_addr
-    match head[3] {
-        0x01 => {
-            let mut b = [0u8; 4];
+    let atyp = parse_reply_head(&head)
+        .map_err(|e| std::io::Error::other(format!("upstream socks5 reply: {e}")))?;
+
+    // 跳过 BND.ADDR：固定长度直接读；DOMAIN 先读 1 字节长度再按值读。
+    match bnd_addr_len(atyp) {
+        Ok(Some(len)) => {
+            let mut b = vec![0u8; len];
             s.read_exact(&mut b).await?;
         }
-        0x04 => {
-            let mut b = [0u8; 16];
-            s.read_exact(&mut b).await?;
-        }
-        0x03 => {
+        Ok(None) => {
             let mut len_buf = [0u8; 1];
             s.read_exact(&mut len_buf).await?;
             let mut name = vec![0u8; len_buf[0] as usize];
             s.read_exact(&mut name).await?;
         }
-        _ => {
+        Err(e) => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "upstream socks5: bad atyp in reply",
-            ))
+                format!("upstream socks5 reply: {e}"),
+            ));
         }
     }
     let mut port_buf = [0u8; 2];
@@ -322,10 +300,10 @@ async fn connect_via_proxy(
     Ok(s)
 }
 
-async fn write_reply(client: &mut TcpStream, rep: u8) -> std::io::Result<()> {
-    // 简化：BND.ADDR/PORT 全部 0
+/// 给本地 SOCKS5 客户端回简化 reply（BND.ADDR/PORT 全 0），调用 conduit-core 编码。
+async fn write_local_reply(client: &mut TcpStream, rep: u8) -> std::io::Result<()> {
     client
-        .write_all(&[0x05, rep, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
+        .write_all(&encode_reply(rep, s5::ATYP_IPV4, &[0, 0, 0, 0], 0))
         .await
 }
 

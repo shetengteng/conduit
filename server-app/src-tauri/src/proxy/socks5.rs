@@ -15,6 +15,10 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use conduit_core::socks5_proto::{
+    bnd_addr_len, consts, encode_error_reply, encode_method_response, encode_reply,
+    parse_address_bytes, validate_version, Socks5Address,
+};
 use conduit_core::{bidirectional_relay, ProgressSink};
 use log::{debug, info, warn};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -25,24 +29,11 @@ use super::config::ProxyConfig;
 use super::core::ProxyCore;
 use super::session::SessionRegistry;
 
-const VER: u8 = 0x05;
-const NO_AUTH: u8 = 0x00;
-const NO_ACCEPTABLE: u8 = 0xFF;
-
-const CMD_CONNECT: u8 = 0x01;
-
-const ATYP_IPV4: u8 = 0x01;
-const ATYP_DOMAIN: u8 = 0x03;
-const ATYP_IPV6: u8 = 0x04;
-
-const REP_OK: u8 = 0x00;
-const REP_GENERAL: u8 = 0x01;
-const REP_NOT_ALLOWED: u8 = 0x02;
-const REP_NETWORK_UNREACH: u8 = 0x03;
-const REP_CONNECT_REFUSED: u8 = 0x05;
-const REP_TTL_EXPIRED: u8 = 0x06;
-const REP_CMD_NOT_SUPPORTED: u8 = 0x07;
-const REP_ATYP_NOT_SUPPORTED: u8 = 0x08;
+use consts::{
+    ATYP_DOMAIN, ATYP_IPV4, ATYP_IPV6, CMD_CONNECT, NO_AUTH, REP_ATYP_NOT_SUPPORTED,
+    REP_CMD_NOT_SUPPORTED, REP_CONNECT_REFUSED, REP_GENERAL, REP_NETWORK_UNREACH, REP_NOT_ALLOWED,
+    REP_OK, REP_TTL_EXPIRED,
+};
 
 /// SOCKS5 accept loop：监听 `cfg.bind:cfg.socks_port`，单连接独立 spawn。
 pub async fn run(
@@ -101,8 +92,8 @@ async fn handle_connection(
         debug!("[socks5] {peer_ip} read greeting failed: {e}");
         return Ok(());
     }
-    let (ver, nmethods) = (head[0], head[1]);
-    if ver != VER || nmethods == 0 {
+    let nmethods = head[1];
+    if validate_version(head[0]).is_err() || nmethods == 0 {
         return Ok(());
     }
     let mut methods = vec![0u8; nmethods as usize];
@@ -110,11 +101,13 @@ async fn handle_connection(
         debug!("[socks5] {peer_ip} read methods failed: {e}");
         return Ok(());
     }
-    if !methods.contains(&NO_AUTH) {
-        let _ = client.write_all(&[VER, NO_ACCEPTABLE]).await;
+    let no_auth_ok = methods.contains(&NO_AUTH);
+    client
+        .write_all(&encode_method_response(no_auth_ok))
+        .await?;
+    if !no_auth_ok {
         return Ok(());
     }
-    client.write_all(&[VER, NO_AUTH]).await?;
 
     // ─── request 头 (VER, CMD, RSV, ATYP) ───
     let mut head4 = [0u8; 4];
@@ -122,44 +115,43 @@ async fn handle_connection(
         debug!("[socks5] {peer_ip} read request head failed: {e}");
         return Ok(());
     }
-    let (req_ver, cmd, _rsv, atyp) = (head4[0], head4[1], head4[2], head4[3]);
-    if req_ver != VER {
+    let (cmd, _rsv, atyp) = (head4[1], head4[2], head4[3]);
+    if validate_version(head4[0]).is_err() {
         return Ok(());
     }
     if cmd != CMD_CONNECT {
-        let _ = client.write_all(&reply(REP_CMD_NOT_SUPPORTED, ATYP_IPV4, &[0u8; 4], 0)).await;
+        let _ = client.write_all(&encode_error_reply(REP_CMD_NOT_SUPPORTED)).await;
         return Ok(());
     }
 
-    // ─── address ───
-    let host: String = match atyp {
-        ATYP_IPV4 => {
-            let mut raw = [0u8; 4];
+    // ─── address：按 ATYP 读对应字节，再调 conduit_core::parse_address_bytes ───
+    let address: Socks5Address = match atyp {
+        ATYP_IPV4 | ATYP_IPV6 => {
+            let len = bnd_addr_len(atyp).expect("ATYP_IPV4/IPV6 长度已知").unwrap();
+            let mut raw = vec![0u8; len];
             read_exact_with_timeout(&mut client, &mut raw, timeout).await?;
-            std::net::Ipv4Addr::from(raw).to_string()
-        }
-        ATYP_IPV6 => {
-            let mut raw = [0u8; 16];
-            read_exact_with_timeout(&mut client, &mut raw, timeout).await?;
-            std::net::Ipv6Addr::from(raw).to_string()
+            parse_address_bytes(atyp, &raw)
+                .expect("固定长度 IP 地址 parse 不会失败")
         }
         ATYP_DOMAIN => {
             let mut len_buf = [0u8; 1];
             read_exact_with_timeout(&mut client, &mut len_buf, timeout).await?;
             let ln = len_buf[0] as usize;
             if ln == 0 {
-                let _ = client.write_all(&reply(REP_GENERAL, ATYP_IPV4, &[0u8; 4], 0)).await;
+                let _ = client.write_all(&encode_error_reply(REP_GENERAL)).await;
                 return Ok(());
             }
             let mut name = vec![0u8; ln];
             read_exact_with_timeout(&mut client, &mut name, timeout).await?;
-            String::from_utf8_lossy(&name).into_owned()
+            parse_address_bytes(atyp, &name).expect("ATYP_DOMAIN parse 不会失败")
         }
         _ => {
-            let _ = client.write_all(&reply(REP_ATYP_NOT_SUPPORTED, ATYP_IPV4, &[0u8; 4], 0)).await;
+            let _ = client.write_all(&encode_error_reply(REP_ATYP_NOT_SUPPORTED)).await;
             return Ok(());
         }
     };
+    let host = address.host_string();
+
     // ─── port (big-endian u16) ───
     let mut port_raw = [0u8; 2];
     read_exact_with_timeout(&mut client, &mut port_raw, timeout).await?;
@@ -167,7 +159,7 @@ async fn handle_connection(
 
     if !cfg.is_connect_port_allowed(port) {
         warn!("[socks5] {peer_ip} CONNECT {host}:{port} rejected (port not allowed)");
-        let _ = client.write_all(&reply(REP_NOT_ALLOWED, ATYP_IPV4, &[0u8; 4], 0)).await;
+        let _ = client.write_all(&encode_error_reply(REP_NOT_ALLOWED)).await;
         return Ok(());
     }
 
@@ -180,23 +172,23 @@ async fn handle_connection(
     {
         Ok(Ok(s)) => s,
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
-            let _ = client.write_all(&reply(REP_CONNECT_REFUSED, ATYP_IPV4, &[0u8; 4], 0)).await;
+            let _ = client.write_all(&encode_error_reply(REP_CONNECT_REFUSED)).await;
             return Ok(());
         }
         Ok(Err(e)) => {
             warn!("[socks5] connect {host}:{port} failed: {e}");
-            let _ = client.write_all(&reply(REP_NETWORK_UNREACH, ATYP_IPV4, &[0u8; 4], 0)).await;
+            let _ = client.write_all(&encode_error_reply(REP_NETWORK_UNREACH)).await;
             return Ok(());
         }
         Err(_) => {
-            let _ = client.write_all(&reply(REP_TTL_EXPIRED, ATYP_IPV4, &[0u8; 4], 0)).await;
+            let _ = client.write_all(&encode_error_reply(REP_TTL_EXPIRED)).await;
             return Ok(());
         }
     };
 
     let (bnd_atyp, bnd_addr_bytes, bnd_port) = bnd_from_target(&upstream);
     client
-        .write_all(&reply(REP_OK, bnd_atyp, &bnd_addr_bytes, bnd_port))
+        .write_all(&encode_reply(REP_OK, bnd_atyp, &bnd_addr_bytes, bnd_port))
         .await?;
     client.flush().await?;
 
@@ -208,18 +200,6 @@ async fn handle_connection(
     sessions.remove(&session.session_id).await;
     info!("[socks5] CONNECT {host}:{port} from {peer_ip} closed: sent={sent}B recv={recv}B");
     Ok(())
-}
-
-/// 拼装 SOCKS5 reply：`VER REP RSV ATYP BND.ADDR BND.PORT`。
-fn reply(rep: u8, atyp: u8, bnd_addr: &[u8], bnd_port: u16) -> Vec<u8> {
-    let mut out = Vec::with_capacity(6 + bnd_addr.len());
-    out.push(VER);
-    out.push(rep);
-    out.push(0x00);
-    out.push(atyp);
-    out.extend_from_slice(bnd_addr);
-    out.extend_from_slice(&bnd_port.to_be_bytes());
-    out
 }
 
 /// 从 upstream socket 的 local_addr 推 bind reply 字段。

@@ -1,21 +1,25 @@
 //! HTTP forward proxy（hyper-free，纯 tokio + 手写 HTTP/1.1 解析）。
 //!
-//! S2.2 第一轮覆盖：
+//! 已覆盖：
 //! - **PAC serving**：`GET /proxy.pac` / `GET /wpad.dat` 返回
 //!   [`conduit_core::PAC_TEMPLATE`]（来自 `crates/conduit-core/assets/proxy.pac`），
 //!   并替换 `__PROXY_HOST__` / `__PROXY_PORT__` 占位符。
 //! - **CONNECT 隧道**：解析 host:port → 校验端口白名单 → 上游 TcpStream → 回
 //!   `200 Connection Established` → 用 [`conduit_core::bidirectional_relay`]
 //!   做透传，并把会话登记 / 字节计数交给 [`super::session::SessionRegistry`]。
+//! - **absolute-URI 转发**（`GET http://host[:port]/path` 等 forward-proxy 形态）：
+//!   解析 absolute URI → 改写 request-line 为 origin-form → 删除 hop-by-hop
+//!   headers → 强制 `Connection: close` → 双向 relay 到 upstream。
 //! - **`GET /api/clients/heartbeat`**：返回 `{ok, created, ttl_sec}` JSON，
 //!   让 LAN 端 client-app 把自己注册为"已联通但暂无流量"的被动 peer。
 //! - **`GET /status`**：返回当前 [`super::core::ServerStatus`] JSON。
 //! - **`GET /check?host=...`**：返回 PAC 决策 JSON。
 //! - **CIDR 校验**：peer IP 不在 `allowed_cidrs` 任一条目内 → 403。
 //!
-//! 当前未覆盖（留给 S2.2 第二轮）：
-//! - absolute-URI 转发（`GET http://...` 而非 CONNECT）
-//! - CORS preflight
+//! 当前未覆盖：
+//! - CORS preflight（仅 control_api 的 SSE 需要，不在公网 forward proxy 路径）
+//! - chunked / keep-alive 在 absolute-URI 模式下：当前用 EOF 作为 body 边界
+//!   （浏览器 plaintext HTTP 走 absolute-URI 已罕见；CLI 工具会主动 close）
 //! - PAC 决策驱动的 outbound policy（DIRECT-first / VPN-only），需要 S2.5
 //!   完成 outbound 模块后接入。
 
@@ -154,13 +158,27 @@ async fn handle_connection(
     if method == "CONNECT" {
         return handle_connect(reader, write_half, &cfg, &target, &peer_ip, sessions, cancel).await;
     }
+    if let Some((up_host, up_port, origin_target)) = parse_absolute_uri(&target) {
+        return handle_absolute_uri(
+            reader,
+            write_half,
+            &cfg,
+            &method,
+            &origin_target,
+            &up_host,
+            up_port,
+            &peer_ip,
+            sessions,
+        )
+        .await;
+    }
 
-    // absolute-URI 等转发能力留给 S2.2 第二轮，先返回 501 让客户端知道未实现。
+    // 走到这里说明既不是 CONNECT 也不是 absolute-URI（origin-form 直发到 proxy 没意义）。
     send_simple(
         &mut write_half,
-        501,
-        "Not Implemented",
-        b"absolute-URI forwarding not yet ported (W2 S2.2 round-2)\n",
+        400,
+        "Bad Request",
+        b"forward proxy requires CONNECT or absolute-URI request\n",
         None,
     )
     .await
@@ -272,6 +290,23 @@ fn reunite_stream(
         .expect("read/write halves came from the same stream")
 }
 
+/// 拆出 `BufReader` 中尚未消费的字节，再拼回 [`TcpStream`]。
+///
+/// 与 [`reunite_stream`] 的区别：absolute-URI 转发流程在 `drain_headers` 之后
+/// 下一字节可能就是 request body 起点（POST 等），buffer 里大概率还残着字节。
+/// 调用方拿到 `pending` 后必须先把它写到 upstream，再启动 bidirectional_relay。
+fn reunite_with_pending_buffer(
+    reader: BufReader<tokio::net::tcp::OwnedReadHalf>,
+    write_half: tokio::net::tcp::OwnedWriteHalf,
+) -> (TcpStream, Vec<u8>) {
+    let pending = reader.buffer().to_vec();
+    let read_half = reader.into_inner();
+    let stream = read_half
+        .reunite(write_half)
+        .expect("read/write halves came from the same stream");
+    (stream, pending)
+}
+
 /// 读取一行 request line（含末尾 `\r\n`）。空连接 / EOF 返回 `None`。
 async fn read_request_line(
     reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
@@ -341,6 +376,226 @@ fn parse_authority(authority: &str) -> Option<(String, u16)> {
         return None;
     }
     Some((host.to_string(), port))
+}
+
+/// 解析 `http://host[:port]/path?query` → `(host, port, "/path?query")`。
+///
+/// 仅支持 `http://` scheme（forward proxy 给 `https://` 的流量都会走 CONNECT）。
+/// 默认端口 80。`/path` 缺失时回 `/`。
+fn parse_absolute_uri(target: &str) -> Option<(String, u16, String)> {
+    let rest = target.strip_prefix("http://")?;
+    let (authority, path_query) = match rest.find('/') {
+        Some(idx) => (&rest[..idx], &rest[idx..]),
+        None => (rest, "/"),
+    };
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((h, p)) => {
+            let port: u16 = p.parse().ok()?;
+            (h, port)
+        }
+        None => (authority, 80),
+    };
+    if host.is_empty() {
+        return None;
+    }
+    Some((host.to_string(), port, path_query.to_string()))
+}
+
+/// HTTP/1.1 hop-by-hop headers（RFC 7230 §6.1）—— forward proxy 必须删除，
+/// 不能透传给 upstream。`Connection` 也属于此列，但我们会再补一个新的
+/// `Connection: close`。
+fn is_hop_by_hop_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "connection"
+            | "proxy-connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+    )
+}
+
+/// absolute-URI 转发：改写 request line 为 origin-form，删 hop-by-hop，
+/// 强制 `Connection: close`，连接 upstream 并双向 relay。
+#[allow(clippy::too_many_arguments)]
+async fn handle_absolute_uri(
+    mut reader: BufReader<tokio::net::tcp::OwnedReadHalf>,
+    mut write_half: tokio::net::tcp::OwnedWriteHalf,
+    cfg: &super::config::ProxyConfig,
+    method: &str,
+    origin_target: &str,
+    up_host: &str,
+    up_port: u16,
+    peer_ip: &str,
+    sessions: Arc<SessionRegistry>,
+) -> std::io::Result<()> {
+    if !cfg.is_connect_port_allowed(up_port) {
+        warn!("[http] absolute-URI {method} {up_host}:{up_port} from {peer_ip} rejected (port not allowed)");
+        return send_simple(
+            &mut write_half,
+            403,
+            "Forbidden",
+            b"port not allowed\n",
+            None,
+        )
+        .await;
+    }
+
+    // 读 + 过滤 client 的 headers，转成发给 upstream 的 head 块。
+    let upstream_head =
+        match build_upstream_head(method, origin_target, up_host, up_port, &mut reader).await {
+            Ok(buf) => buf,
+            Err(HeaderRewriteError::Io(e)) => return Err(e),
+            Err(HeaderRewriteError::TooLarge) => {
+                return send_simple(&mut write_half, 431, "Request Header Fields Too Large", b"", None)
+                    .await;
+            }
+            Err(HeaderRewriteError::ChunkedRequestBody) => {
+                return send_simple(
+                    &mut write_half,
+                    501,
+                    "Not Implemented",
+                    b"chunked request body not supported by forward proxy\n",
+                    None,
+                )
+                .await;
+            }
+        };
+
+    info!("[http] {method} http://{up_host}:{up_port}{origin_target} from {peer_ip}");
+    let mut upstream = match tokio::time::timeout(
+        Duration::from_secs_f64(cfg.connect_timeout_s),
+        TcpStream::connect((up_host, up_port)),
+    )
+    .await
+    {
+        Ok(Ok(s)) => s,
+        Ok(Err(e)) => {
+            warn!("[http] absolute-URI connect to {up_host}:{up_port} failed: {e}");
+            return send_simple(
+                &mut write_half,
+                502,
+                "Bad Gateway",
+                format!("connect to {up_host}:{up_port} failed: {e}\n").as_bytes(),
+                None,
+            )
+            .await;
+        }
+        Err(_) => {
+            warn!("[http] absolute-URI connect to {up_host}:{up_port} timeout");
+            return send_simple(
+                &mut write_half,
+                504,
+                "Gateway Timeout",
+                format!("connect to {up_host}:{up_port} timed out\n").as_bytes(),
+                None,
+            )
+            .await;
+        }
+    };
+    upstream.write_all(&upstream_head).await?;
+    upstream.flush().await?;
+
+    let session = sessions
+        .add(
+            peer_ip.to_string(),
+            "http",
+            format!("{up_host}:{up_port}{origin_target}"),
+        )
+        .await;
+    let sink: Arc<dyn ProgressSink> = sessions.clone().sink_for(session.session_id.clone());
+
+    // BufReader 里可能还残留了 request body 的前几个字节（drain_headers 用 read_line
+    // 读到 \r\n\r\n 时，下一行的字节有可能已经被 buffer 预读）。把它先吐到 upstream。
+    let (client_stream, pending) = reunite_with_pending_buffer(reader, write_half);
+    if !pending.is_empty() {
+        upstream.write_all(&pending).await?;
+    }
+
+    let (sent, recv) = bidirectional_relay(client_stream, upstream, Some(sink)).await;
+    sessions.remove(&session.session_id).await;
+    info!(
+        "[http] {method} http://{up_host}:{up_port}{origin_target} from {peer_ip} closed: sent={sent}B recv={recv}B"
+    );
+    Ok(())
+}
+
+/// 读 client 剩余 headers，重写后返回准备发给 upstream 的字节块（含 request line + headers + 空行）。
+enum HeaderRewriteError {
+    Io(std::io::Error),
+    TooLarge,
+    ChunkedRequestBody,
+}
+impl From<std::io::Error> for HeaderRewriteError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+async fn build_upstream_head(
+    method: &str,
+    origin_target: &str,
+    up_host: &str,
+    up_port: u16,
+    reader: &mut BufReader<tokio::net::tcp::OwnedReadHalf>,
+) -> Result<Vec<u8>, HeaderRewriteError> {
+    let mut out = String::with_capacity(1024);
+    out.push_str(&format!("{method} {origin_target} HTTP/1.1\r\n"));
+
+    let mut have_host = false;
+    let mut total = 0usize;
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let n = tokio::time::timeout(HANDSHAKE_TIMEOUT, reader.read_line(&mut line))
+            .await
+            .map_err(|_| {
+                HeaderRewriteError::Io(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "absolute-uri header read timeout",
+                ))
+            })??;
+        if n == 0 {
+            break; // EOF before \r\n\r\n
+        }
+        total += n;
+        if total > MAX_HEADERS_BYTES {
+            return Err(HeaderRewriteError::TooLarge);
+        }
+        let trimmed = line.trim_end_matches(['\r', '\n']);
+        if trimmed.is_empty() {
+            break;
+        }
+        let (name, value) = match trimmed.split_once(':') {
+            Some((n, v)) => (n.trim(), v.trim()),
+            None => continue,
+        };
+        if name.eq_ignore_ascii_case("transfer-encoding")
+            && value.to_ascii_lowercase().contains("chunked")
+        {
+            return Err(HeaderRewriteError::ChunkedRequestBody);
+        }
+        if is_hop_by_hop_header(name) {
+            continue;
+        }
+        if name.eq_ignore_ascii_case("host") {
+            have_host = true;
+        }
+        out.push_str(&format!("{name}: {value}\r\n"));
+    }
+    if !have_host {
+        if up_port == 80 {
+            out.push_str(&format!("Host: {up_host}\r\n"));
+        } else {
+            out.push_str(&format!("Host: {up_host}:{up_port}\r\n"));
+        }
+    }
+    out.push_str("Connection: close\r\n\r\n");
+    Ok(out.into_bytes())
 }
 
 /// PAC 文件渲染并发出。`advertised_host` 为空时用 bind 地址；进一步为空时用 127.0.0.1。
@@ -572,6 +827,60 @@ mod tests {
         assert_eq!(url_decode("%XY"), "%XY");
     }
 
+    #[test]
+    fn parse_absolute_uri_default_port_and_path() {
+        let (h, p, t) = parse_absolute_uri("http://example.com").unwrap();
+        assert_eq!(h, "example.com");
+        assert_eq!(p, 80);
+        assert_eq!(t, "/");
+    }
+
+    #[test]
+    fn parse_absolute_uri_with_port_and_path() {
+        let (h, p, t) = parse_absolute_uri("http://example.com:8080/foo/bar?x=1").unwrap();
+        assert_eq!(h, "example.com");
+        assert_eq!(p, 8080);
+        assert_eq!(t, "/foo/bar?x=1");
+    }
+
+    #[test]
+    fn parse_absolute_uri_rejects_non_http_scheme() {
+        assert!(parse_absolute_uri("https://example.com").is_none());
+        assert!(parse_absolute_uri("/relative").is_none());
+        assert!(parse_absolute_uri("example.com:443").is_none());
+    }
+
+    #[test]
+    fn parse_absolute_uri_rejects_empty_host() {
+        assert!(parse_absolute_uri("http://").is_none());
+        assert!(parse_absolute_uri("http:///path").is_none());
+    }
+
+    #[test]
+    fn parse_absolute_uri_rejects_invalid_port() {
+        assert!(parse_absolute_uri("http://h:abc/x").is_none());
+    }
+
+    #[test]
+    fn hop_by_hop_header_matches_canonical_set() {
+        for h in [
+            "Connection",
+            "proxy-connection",
+            "Keep-Alive",
+            "Proxy-Authenticate",
+            "Proxy-Authorization",
+            "TE",
+            "Trailer",
+            "Transfer-Encoding",
+            "Upgrade",
+        ] {
+            assert!(is_hop_by_hop_header(h), "{h} should be hop-by-hop");
+        }
+        for h in ["Host", "User-Agent", "Accept", "Cookie", "Authorization"] {
+            assert!(!is_hop_by_hop_header(h), "{h} must NOT be hop-by-hop");
+        }
+    }
+
     // ----- integration tests: start ProxyCore on a real ephemeral port -----
     use crate::proxy::{ProxyConfig, ProxyCore};
     use std::time::Duration as StdDuration;
@@ -646,6 +955,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn heartbeat_query_url_decodes_special_chars_into_passive_record() {
+        // client 侧 urlencoding 会把 "Bob's iPhone" 编成 "Bob%27s%20iPhone"；
+        // server 侧 url_decode 必须还原出原始字符串并写入 SessionRegistry。
+        let (core, port) = start_test_core().await;
+        let mut s = TS::connect(("127.0.0.1", port)).await.unwrap();
+        s.write_all(
+            b"GET /api/clients/heartbeat?name=Bob%27s%20iPhone&version=v1%2E2%2E3 HTTP/1.1\r\nHost: x\r\n\r\n",
+        )
+        .await
+        .unwrap();
+        let body = read_to_string(s).await;
+        assert!(body.contains("\"ok\":true"), "{body}");
+        let passives = core.sessions().passive_clients().await;
+        assert_eq!(passives.len(), 1, "expect exactly one passive registered");
+        assert_eq!(passives[0].client_name, "Bob's iPhone");
+        assert_eq!(passives[0].version, "v1.2.3");
+        core.stop().await;
+    }
+
+    #[tokio::test]
+    async fn heartbeat_repeated_call_does_not_duplicate_passive_record() {
+        let (core, port) = start_test_core().await;
+        for _ in 0..3 {
+            let mut s = TS::connect(("127.0.0.1", port)).await.unwrap();
+            s.write_all(
+                b"GET /api/clients/heartbeat?name=mac01&version=0.2.0 HTTP/1.1\r\nHost: x\r\n\r\n",
+            )
+            .await
+            .unwrap();
+            let _ = read_to_string(s).await;
+        }
+        let passives = core.sessions().passive_clients().await;
+        assert_eq!(passives.len(), 1, "passive registry must dedup by peer_ip");
+        assert_eq!(passives[0].client_name, "mac01");
+        core.stop().await;
+    }
+
+    #[tokio::test]
     async fn connect_tunnels_payload_to_upstream_echo_server() {
         let (core, port) = start_test_core().await;
 
@@ -691,6 +1038,77 @@ mod tests {
         assert_eq!(echo_back, b"hello-tunnel");
 
         let _ = echo_task.await;
+        core.stop().await;
+    }
+
+    #[tokio::test]
+    async fn absolute_uri_get_is_forwarded_to_upstream_origin_form() {
+        let (core, port) = start_test_core().await;
+
+        // 起一个最简 HTTP/1.1 server：要求看到 origin-form request line（"GET /hello"），
+        // 不能含 "http://"；含 Connection: close；不含 Proxy-Connection。
+        let upstream = TL::bind("127.0.0.1:0").await.unwrap();
+        let up_addr = upstream.local_addr().unwrap();
+        let up_task = tokio::spawn(async move {
+            let (mut sock, _) = upstream.accept().await.unwrap();
+            let mut buf = [0u8; 4096];
+            let mut got = Vec::new();
+            loop {
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                got.extend_from_slice(&buf[..n]);
+                if got.windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let head = String::from_utf8_lossy(&got).to_string();
+            sock.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 9\r\nConnection: close\r\n\r\nUPSTREAMOK",
+            )
+            .await
+            .unwrap();
+            head
+        });
+
+        let mut s = TS::connect(("127.0.0.1", port)).await.unwrap();
+        let req = format!(
+            "GET http://127.0.0.1:{p}/hello HTTP/1.1\r\nHost: x\r\nProxy-Connection: keep-alive\r\nUser-Agent: t\r\n\r\n",
+            p = up_addr.port()
+        );
+        s.write_all(req.as_bytes()).await.unwrap();
+        let body = read_to_string(s).await;
+        assert!(body.starts_with("HTTP/1.1 200"), "client should see upstream 200: {body}");
+        assert!(body.contains("UPSTREAMOK"), "client should see upstream body: {body}");
+
+        let upstream_head = up_task.await.unwrap();
+        assert!(
+            upstream_head.starts_with("GET /hello HTTP/1.1\r\n"),
+            "request-line must be rewritten to origin-form, got: {upstream_head}"
+        );
+        assert!(
+            !upstream_head.to_ascii_lowercase().contains("proxy-connection"),
+            "Proxy-Connection must be stripped: {upstream_head}"
+        );
+        assert!(
+            upstream_head.to_ascii_lowercase().contains("connection: close"),
+            "Connection: close must be forced: {upstream_head}"
+        );
+        core.stop().await;
+    }
+
+    #[tokio::test]
+    async fn absolute_uri_chunked_request_body_returns_501() {
+        let (core, port) = start_test_core().await;
+        let mut s = TS::connect(("127.0.0.1", port)).await.unwrap();
+        s.write_all(
+            b"POST http://127.0.0.1:80/upload HTTP/1.1\r\nHost: x\r\nTransfer-Encoding: chunked\r\n\r\n",
+        )
+        .await
+        .unwrap();
+        let body = read_to_string(s).await;
+        assert!(body.starts_with("HTTP/1.1 501"), "{body}");
         core.stop().await;
     }
 

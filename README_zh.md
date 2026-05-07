@@ -222,7 +222,8 @@ conduit/
 | 第一次打开提示「`Conduit Server` 已损坏，无法打开」 | 未签名构建被 Gatekeeper 拦截。跑 `sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"`（Client 同理）。仍报 `Operation not permitted` 走 [§ 2.3 方案 C](#23--未签名--暂未公证--gatekeeper-补救命令)（系统设置里手动放行）。|
 | Client「发现」页一直空 | 系统设置 → 隐私与安全 → 本地网络 → 启用 client-app。 |
 | 连接卡在第 1 步 | Server 端口被防火墙拦截：`nc -zv <host> <port>` 验证。 |
-| 连接第 4 步失败 `system_proxy enable failed: ... exit status: 14` | macOS `networksetup -setsocksfirewallproxy` 需要管理员权限或 Tauri sandbox 拒绝调用。要么手动开放管理员，要么把 client 配置里 `enable_system_proxy=false`，然后浏览器手动配 SOCKS5。 |
+| 连接第 4 步弹出「Conduit 想要修改系统代理」密码框 | 这是 v0.2.0 起的预期行为：networksetup 设置 SOCKS 系统代理需要管理员权限，输入一次密码即可，macOS keychain 5 分钟内不会再问。取消密码框 → 第 4 步明确报错并自动 rollback partial state（不会留下半连接）。完全不想要弹框：把 client 配置 `enable_system_proxy=false`，浏览器手动配 SOCKS5。 |
+| 连接第 4 步失败 `system_proxy enable failed: ... exit status: 14` | 旧版无 admin fallback 时的现象。v0.2.0 已自动 fallback 到 `osascript with administrator privileges`，如仍出现说明 osascript 也失败 —— 通常是用户取消了密码框（错误信息里会显式说 `cancelled by user`）。 |
 | Server「活跃客户端」一直 0，但 Client 已连接 | Client 仅发心跳（passive 注册）；KPI 只统计 active SOCKS5/HTTP 会话。浏览器开 google.com 让流量真走起来，数字就会变成 1。 |
 | 「待命客户端」列表里关掉的 client 不消失 | v0.2.0 起 30s passive TTL 自动清理；如果仍然不消失，去 server 日志看心跳是否真的断了。 |
 | 想推倒重来 | `rm -rf ~/Library/Application\ Support/Conduit/` |
@@ -233,7 +234,7 @@ conduit/
 
 - ✅ v0.2.0 —— 纯 Rust 重写（Python sidecar 移除、单进程、DMG 缩小约 91%）
 - ✅ v0.1.x 范围全部保留（M-α / M-β / M-γ / M-δ）
-- ✅ `cargo test --workspace`：143 通过（conduit-core 59 + conduit-server 43 + conduit-client 41） / 0 失败 / 2 忽略
+- ✅ `cargo test --workspace`：180 通过（conduit-core 79 含 socks5_proto 下沉 + conduit-server 54 + conduit-client 47） / 0 失败 / 2 忽略
 - ✅ `cargo clippy --workspace --no-deps -- -D warnings` 干净
 - ⏳ v0.3 backlog：Windows / Linux Client（cross-compile 矩阵）、`tauri-plugin-updater` 自动更新、可编辑设置、Apple 公证
 

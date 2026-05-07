@@ -221,7 +221,8 @@ conduit/
 | `"Conduit Server" is damaged and can't be opened` on first launch | Unsigned-build Gatekeeper. Run `sudo xattr -dr com.apple.quarantine "/Applications/Conduit Server.app"` (and same for Client). If you still get `Operation not permitted`, use [§ 2.3 Option C](#23--unsigned--not-yet-notarized--fix-gatekeeper) (whitelist in System Settings). |
 | Client "Discovery" page stays empty | Settings → Privacy & Security → Local Network → enable client-app. |
 | Connect stalls on step 1 | Server port blocked by firewall: `nc -zv <host> <port>` to verify. |
-| Connect step 4 fails with `system_proxy enable failed: ... exit status: 14` | macOS `networksetup -setsocksfirewallproxy` requires admin / Tauri sandbox is denying it. Either grant admin via System Settings, or set `enable_system_proxy=false` in client config and configure SOCKS5 manually in your browser. |
+| Connect step 4 pops up "Conduit wants to make changes" admin password prompt | Expected since v0.2.0: setting the system SOCKS proxy via `networksetup` requires admin. Enter the password once — macOS keychain caches it for 5 min. Cancelling the prompt → step 4 fails cleanly and partial state is rolled back. To suppress the prompt entirely, set `enable_system_proxy=false` in client config and configure SOCKS5 manually in your browser. |
+| Connect step 4 fails with `system_proxy enable failed: ... exit status: 14` | Pre-v0.2.0 symptom (no admin fallback). v0.2.0 auto-falls-back to `osascript with administrator privileges`. If you still see this, osascript itself failed — usually because the user dismissed the password prompt (the error message will say `cancelled by user`). |
 | Server "Active clients" stays 0 even though the client connected | Client only sends a heartbeat (passive registration); the KPI counts active SOCKS5/HTTP sessions only. Open google.com through the proxy and the number should bump to 1. |
 | "Standby clients" list shows a closed client forever | Should self-evict within 30 s as of v0.2.0 (passive-client TTL). If not, check the server log for missed heartbeats. |
 | Wipe everything and start over | `rm -rf ~/Library/Application\ Support/Conduit/` |
@@ -232,7 +233,7 @@ conduit/
 
 - ✅ v0.2.0 — Pure-Rust rewrite (Python sidecar removed, single process per app, ~91 % smaller DMG)
 - ✅ M-α / M-β / M-γ / M-δ scope retained from v0.1.x
-- ✅ `cargo test --workspace`: 143 passing (conduit-core 59 + conduit-server 43 + conduit-client 41) / 0 failed / 2 ignored
+- ✅ `cargo test --workspace`: 180 passing (conduit-core 79 incl. shared `socks5_proto` codec + conduit-server 54 + conduit-client 47) / 0 failed / 2 ignored
 - ✅ `cargo clippy --workspace --no-deps -- -D warnings` clean
 - ⏳ v0.3 backlog: Windows / Linux client (cross-compile matrix), `tauri-plugin-updater` auto-update, editable Settings, Apple notarization
 
