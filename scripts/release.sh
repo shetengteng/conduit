@@ -63,7 +63,24 @@ build_app() {
 
   echo ""
   echo "═══ step 2/3: tauri build $product ═══"
-  (cd "$dir" && pnpm tauri build)
+  # macOS 的 bundle_dmg.sh 在 CI 环境（尤其 Intel runner）上偶发失败：
+  # hdiutil 资源紧张 / osascript 调 Finder 失败 / 临时挂载点回收慢等。
+  # 失败时重试一次（间隔 5s），并把 cargo-packager / tauri-bundler 的 debug log
+  # 打开方便定位；本机首次构建不受影响（一次成功就跳过重试）。
+  local build_attempt=0
+  local build_max_attempts=2
+  while :; do
+    build_attempt=$((build_attempt + 1))
+    if (cd "$dir" && RUST_LOG="${RUST_LOG:-tauri_bundler=debug,cargo_packager=debug}" pnpm tauri build); then
+      break
+    fi
+    if [[ $build_attempt -ge $build_max_attempts ]]; then
+      echo "✗ tauri build $product 连续 ${build_max_attempts} 次失败，放弃" >&2
+      exit 1
+    fi
+    echo "⚠ tauri build $product 第 ${build_attempt} 次失败，5s 后重试..." >&2
+    sleep 5
+  done
 
   # 归集产物
   local bundle_dir="$dir/src-tauri/target/release/bundle"

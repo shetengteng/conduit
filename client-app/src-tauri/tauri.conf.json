@@ -40,6 +40,14 @@
     ],
     "category": "Utility",
     "shortDescription": "Use a Conduit Server's VPN through your LAN",
-    "longDescription": "Conduit Client connects you to a Conduit Server on your LAN and intelligently routes traffic locally or through the server's VPN."
+    "longDescription": "Conduit Client connects you to a Conduit Server on your LAN and intelligently routes traffic locally or through the server's VPN.",
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "dmg": {
+        "appPosition": { "x": 180, "y": 170 },
+        "applicationFolderPosition": { "x": 480, "y": 170 },
+        "windowSize": { "width": 660, "height": 400 }
+      }
+    }
   }
 }
