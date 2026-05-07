@@ -30,13 +30,14 @@
 - ✅ `conduit_core::healthz::wait_until_ready` —— 替换 server/client 各一份的 healthz 轮询
 - ✅ `conduit_core::ports::pick_unused_ports` —— 替换 server/client 的 pick_three_ports/pick_two_ports
 - ✅ `conduit_core::types::ConnectionSnapshot / ConnectedServerSummary / ConnectionHeartbeat / ConnectProgress / ConnectStepStatus` —— UI 端 ConnectionSnapshot 等类型直接 wire 1:1
-- ⏸ `conduit_core::socks5_proto`（RFC1928 字节编解码）—— 延后到 v0.3 再下沉（双端目前各写一份，无 wire-format 漂移风险）
+- ✅ `conduit_core::socks5_proto`（RFC1928 字节编解码）—— W6 C1 已下沉，server/client 各去重 ~55 行 + 20 新单测（2026-05-07 commit `7435e79`）
+- ✅ `conduit_core::boot_error::BootError` —— W6 二轮整理已下沉，去重 ~95 行 + 6 新单测（2026-05-07 commit `e05bc31`）
 
 ### 测试覆盖（最新 2026-05-07）
-- conduit-core: 79 passed（+ socks5_proto 20 个 RFC1928 字节级 codec 单测）
+- conduit-core: 79 + 6 = **85 passed**（+ socks5_proto 20 个 RFC1928 字节级 codec 单测 + boot_error 6 个 Serialize 单测）
 - conduit-server: 54 passed（+ http absolute-URI / heartbeat URL-decode + dedup / vpn_snapshot / passive TTL 等回归）
 - conduit-client: 47 passed（+ system_proxy osascript admin sh-quote / applescript 转义 / forget_all 仅清 history 等）(+1 ignored 系统调用)
-- **合计 180 passed / 0 failed**
+- **合计 186 passed / 0 failed**
 - `cargo clippy --workspace --no-deps --all-targets -- -D warnings` 干净
 - `cargo build --workspace --release` 1m30s 通过
 - `bash scripts/e2e.sh --headless-only` 2.4s 通过（含 1 MiB 双向 SOCKS5 relay + ProgressSink 校验）
@@ -297,11 +298,11 @@
 
 ### S3.11 端到端联调 + autostart 保留（0.5 工日） ✅ 完成
 - [x] `autostart.rs` 保留
-- [x] 完整跑通：server-app dev → client-app dev → mDNS 发现 → 5 步连接（system_proxy 步因 sandbox 权限可能失败，已正确 fail/rollback）→ heartbeat → 待命客户端在 server UI 显示 → 关闭 client → 30s TTL 后从 server UI 自动消失
-- ⚠ 已知：macOS Tauri sandbox 下 `networksetup -setsocksfirewallproxy` 经常 exit 14（无 admin），见 W5 backlog
+- [x] 完整跑通：server-app dev → client-app dev → mDNS 发现 → 5 步连接（system_proxy 步原本因 sandbox 权限可能失败，W6 B7 osascript 提权 fallback 后首次弹密码框）→ heartbeat → 待命客户端在 server UI 显示 → 关闭 client → 30s TTL 后从 server UI 自动消失
+- ✅ macOS Tauri sandbox `networksetup -setsocksfirewallproxy` exit 14：W6 B7 osascript admin 弹框 fallback 已修（5 min keychain 缓存 / 用户取消触发 fail_connect 完整 rollback）
 
 ### W3-W4 Sprint 3 完成判据
-- [x] 双端 macOS dmg 本地构建可用（待 D1 PAT push release.yml 之后才能跑 cross-compile + 发 GitHub Release alpha）
+- [x] 双端 macOS dmg 本地构建可用（release.yml 已 push 2026-05-07，CI 待 tag 触发即可发 GitHub Release）
 - [x] 仓库 `rg --type py 'def '` 在业务代码中 0 行（含 build artifacts 也无）
 - [x] 任务管理器各 1 个进程
 - [x] server.dmg 4.3 MB / client.dmg ~5 MB（双端总和远低于 30MB 目标）
