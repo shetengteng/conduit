@@ -619,7 +619,7 @@ dependencies = [
 
 [[package]]
 name = "conduit-client"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "axum",
  "chrono",
@@ -654,7 +654,7 @@ dependencies = [
 
 [[package]]
 name = "conduit-core"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "globset",
  "ipnet",
@@ -670,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "conduit-server"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "axum",
  "bytes",

@@ -16,6 +16,7 @@
 //! - `GET /healthz` → [`HealthzResponse`] (5 项 named check)
 //! - `GET /api/status` → [`ServerStatusOut`]
 //! - `GET /api/clients` → [`ClientsResponse`]
+//! - `GET /api/sessions/recent` → [`RecentSessionsResponse`] (历史会话, 最多 500 条, 倒序)
 //! - `GET /api/traffic?window=N&peer=X` → [`TrafficResponse`]
 //!   (历史窗口暂时为空,仅占位让 UI 不崩;流量数据走 SSE)
 //! - `POST /api/admin/stop` → 200 + 触发 ProxyCore 取消 + 进程退出
@@ -64,6 +65,7 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) -> std::io::Result<
         .route("/healthz", get(serve_healthz))
         .route("/api/status", get(serve_status))
         .route("/api/clients", get(serve_clients))
+        .route("/api/sessions/recent", get(serve_recent_sessions))
         .route("/api/traffic", get(serve_traffic))
         .route("/api/admin/stop", post(serve_admin_stop))
         .route("/api/events", get(serve_events))
@@ -221,6 +223,27 @@ async fn serve_clients(State(s): State<AppState>) -> Json<ClientsResponse> {
     })
 }
 
+async fn serve_recent_sessions(State(s): State<AppState>) -> Json<RecentSessionsResponse> {
+    let recent = s.core.sessions().recent_sessions().await;
+    Json(RecentSessionsResponse {
+        count: recent.len(),
+        sessions: recent
+            .into_iter()
+            .map(|r| RecentSessionOut {
+                session_id: r.session_id,
+                peer_ip: r.peer_ip,
+                proto: r.proto.to_string(),
+                target: r.target,
+                since: r.since,
+                ended_at: r.ended_at,
+                duration_sec: (r.ended_at - r.since).max(0.0),
+                sent_bytes: r.sent_bytes,
+                recv_bytes: r.recv_bytes,
+            })
+            .collect(),
+    })
+}
+
 /// 历史 traffic 时间窗口聚合当前未实装(设计上排在 DIRECT-first 路由特性之后)。
 /// 先返回 200 + 空 series 让 UI 不崩;实时数据通过 `traffic_tick` SSE event 流推。
 async fn serve_traffic() -> Json<TrafficResponse> {
@@ -347,6 +370,25 @@ struct ClientSession {
     target: String,
     since: f64,
     last_seen: f64,
+    sent_bytes: u64,
+    recv_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct RecentSessionsResponse {
+    count: usize,
+    sessions: Vec<RecentSessionOut>,
+}
+
+#[derive(Serialize)]
+struct RecentSessionOut {
+    session_id: String,
+    peer_ip: String,
+    proto: String,
+    target: String,
+    since: f64,
+    ended_at: f64,
+    duration_sec: f64,
     sent_bytes: u64,
     recv_bytes: u64,
 }

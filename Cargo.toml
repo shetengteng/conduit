@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 # 1.84 是 IpAddr::V6 的 is_unique_local / is_unicast_link_local 稳定版本，
 # RouteResolver 的 private-IP 判断需要它们；早于此版本需手写位运算。

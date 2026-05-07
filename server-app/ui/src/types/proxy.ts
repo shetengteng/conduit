@@ -80,6 +80,24 @@ export interface ClientsResponse {
   passive_clients: PassiveClient[];
 }
 
+/** 已结束会话的历史摘要,由 `/api/sessions/recent` 返回。倒序(最新在前)。 */
+export interface RecentSession {
+  session_id: string;
+  peer_ip: string;
+  proto: Proto;
+  target: string;
+  since: number;
+  ended_at: number;
+  duration_sec: number;
+  sent_bytes: number;
+  recv_bytes: number;
+}
+
+export interface RecentSessionsResponse {
+  count: number;
+  sessions: RecentSession[];
+}
+
 // ============================================================================
 // /api/traffic (server-app)
 // ============================================================================

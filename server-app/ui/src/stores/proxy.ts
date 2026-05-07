@@ -11,6 +11,7 @@ import type {
   PassiveClient,
   PassiveClientLostPayload,
   PassiveClientSeenPayload,
+  RecentSession,
   ServerStatus,
   VpnStatus,
 } from "../types/proxy";
@@ -24,6 +25,8 @@ interface ProxyState {
   status: ServerStatus | null;
   clients: ClientSession[];
   passiveClients: PassiveClient[];
+  /** 已结束会话的历史摘要(后端 `/api/sessions/recent` 返回, 倒序最新在前, 最多 500 条)。 */
+  recentSessions: RecentSession[];
   healthz: HealthzResponse | null;
   loading: boolean;
   error: string | null;
@@ -36,6 +39,7 @@ const state = reactive<ProxyState>({
   status: null,
   clients: [],
   passiveClients: [],
+  recentSessions: [],
   healthz: null,
   loading: false,
   error: null,
@@ -54,14 +58,16 @@ async function refresh(): Promise<void> {
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const [status, clients, healthz] = await Promise.all([
+      const [status, clients, healthz, recent] = await Promise.all([
         ServerApi.status(),
         ServerApi.clients(),
         ServerApi.healthz(),
+        ServerApi.recentSessions(),
       ]);
       state.status = status;
       state.clients = clients.clients;
       state.passiveClients = clients.passive_clients ?? [];
+      state.recentSessions = recent.sessions ?? [];
       state.healthz = healthz;
       state.statusFetchedAtMs = Date.now();
       state.loading = false;
@@ -94,13 +100,15 @@ async function refresh(): Promise<void> {
 // SSE event(touch existing 不发事件),所以必须靠前端轮询拉新值。
 async function refreshSilently(): Promise<void> {
   try {
-    const [status, clients] = await Promise.all([
+    const [status, clients, recent] = await Promise.all([
       ServerApi.status(),
       ServerApi.clients(),
+      ServerApi.recentSessions(),
     ]);
     state.status = status;
     state.clients = clients.clients;
     state.passiveClients = clients.passive_clients ?? [];
+    state.recentSessions = recent.sessions ?? [];
     state.statusFetchedAtMs = Date.now();
   } catch (_) {
     /* 静默:正式 refresh 已负责报错 */

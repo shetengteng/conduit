@@ -61,13 +61,14 @@ impl TrafficMeter {
     }
 
     /// 启动 1Hz 聚合发射协程: 取出 since-last 增量, publish 一次 traffic_tick。
-    /// 静默期(本秒无任何字节)且上一秒也静默时跳过 publish, 避免空闲打扰 SSE。
+    /// 始终 publish(包含 0 值): 前端 `trafficStore.onTick` 依赖持续到达的
+    /// tick 把数据点 push 进 60 秒滚动窗口, 否则 X 轴不会随时间向前推进,
+    /// 看起来"曲线静止 / 空白不显示"。1 帧 ~80 字节, 静默期带宽可忽略。
     pub fn spawn_emitter(&self, cancel: CancellationToken) -> tokio::task::JoinHandle<()> {
         let inner = self.inner.clone();
         tokio::spawn(async move {
             let mut last_sent: u64 = 0;
             let mut last_recv: u64 = 0;
-            let mut last_nonzero = false;
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => return,
@@ -79,12 +80,6 @@ impl TrafficMeter {
                 let drecv = total_recv.saturating_sub(last_recv);
                 last_sent = total_sent;
                 last_recv = total_recv;
-                let any_nonzero = dsent > 0 || drecv > 0;
-                let should_publish = any_nonzero || last_nonzero;
-                last_nonzero = any_nonzero;
-                if !should_publish {
-                    continue;
-                }
                 let ts = epoch_now();
                 let payload = serde_json::json!({
                     "ts": ts,
@@ -196,27 +191,34 @@ mod tests {
         assert_eq!(evt.payload["total_downlink"].as_u64().unwrap(), 40_960);
     }
 
-    /// 静默期不应刷屏发 0 帧 —— 仅在有流量 OR 上一秒有流量时 publish。
+    /// 静默期也必须 1Hz publish(uplink_bytes/downlink_bytes 均为 0): 前端
+    /// `trafficStore.onTick` 依赖持续 tick 把样本 push 入 60 秒滚动窗口,
+    /// 否则 SVG 路径不更新, 看起来"曲线静止 / 不显示"。
     #[tokio::test]
-    async fn emitter_does_not_publish_when_idle() {
+    async fn emitter_publishes_zero_frame_when_idle() {
         let bus: EventBus<ClientEvent> = EventBus::new(16);
         let mut sub = bus.subscribe();
         let meter = TrafficMeter::new(bus);
         let cancel = CancellationToken::new();
         let h = meter.spawn_emitter(cancel.clone());
-        let res = tokio::time::timeout(Duration::from_millis(2200), async {
+        let evt = tokio::time::timeout(Duration::from_millis(2500), async {
             loop {
                 match sub.recv().await {
-                    Ok(e) if e.kind == "traffic_tick" => return Some(e),
+                    Ok(e) if e.kind == "traffic_tick" => return e,
                     Ok(_) => continue,
                     Err(RecvError::Lagged(_)) => continue,
-                    Err(RecvError::Closed) => return None,
+                    Err(RecvError::Closed) => panic!("event bus closed"),
                 }
             }
         })
-        .await;
+        .await
+        .expect("expected traffic_tick within 2.5s even when idle");
         cancel.cancel();
         let _ = h.await;
-        assert!(res.is_err(), "should not publish when idle");
+        assert_eq!(evt.payload["uplink_bytes"].as_u64().unwrap(), 0);
+        assert_eq!(evt.payload["downlink_bytes"].as_u64().unwrap(), 0);
+        assert_eq!(evt.payload["total_uplink"].as_u64().unwrap(), 0);
+        assert_eq!(evt.payload["total_downlink"].as_u64().unwrap(), 0);
+        assert!(evt.payload["ts"].as_f64().unwrap() > 0.0);
     }
 }

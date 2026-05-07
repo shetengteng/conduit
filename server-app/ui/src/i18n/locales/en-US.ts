@@ -257,6 +257,8 @@ export default {
     emptyDescNoTraffic: "Idle clients below are waiting to make a request",
     emptyDescNoClient: "Share the PAC URL on the right with your teammate",
     passiveSection: "Idle clients · connected but no traffic",
+    recentSection: "Recent sessions · last {n}",
+    recentDuration: "duration {d}",
   },
 
   share: {

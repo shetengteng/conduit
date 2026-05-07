@@ -11,9 +11,10 @@
 //! ```
 //!
 //! 设计要点:
-//! - **零负载早退**: 当快照中所有 peer 当前秒 bps 全 0 且**上一秒也全 0** 时
-//!   不 publish, 避免空闲期不停推 0 帧打扰 SSE 连接。仍保持记账状态以便下次
-//!   有流量时能立刻发出。
+//! - **始终 1Hz publish**(包括所有 peer 全 0 的快照): 前端 `applyTick` 依赖
+//!   持续到达的 tick 推动时间轴,若静默期跳过 publish, UI 流量曲线就不会
+//!   随时间向左滚动, 看起来"曲线静止 / 不前进"。1 帧 ~50 字节,SSE 带宽
+//!   开销可忽略。
 //! - 协程退出条件与 `vpn_detect` 一致: 监听 `cancel` token。
 
 use std::collections::HashMap;
@@ -30,7 +31,6 @@ const TICK_INTERVAL: Duration = Duration::from_secs(1);
 /// 启动 traffic 发射协程。`cancel` 触发时退出。
 pub async fn run(core: ProxyCore, cancel: CancellationToken) {
     let mut prev: HashMap<String, (u64, u64)> = HashMap::new();
-    let mut last_nonzero = false;
     loop {
         tokio::select! {
             _ = cancel.cancelled() => return,
@@ -41,30 +41,18 @@ pub async fn run(core: ProxyCore, cancel: CancellationToken) {
         let dt_sec = TICK_INTERVAL.as_secs_f64();
 
         let mut per_peer = serde_json::Map::with_capacity(snapshot.len());
-        let mut any_nonzero = false;
         for (peer, sent_total, recv_total) in &snapshot {
             let (prev_sent, prev_recv) = prev.get(peer).copied().unwrap_or((0, 0));
             let dsent = sent_total.saturating_sub(prev_sent);
             let drecv = recv_total.saturating_sub(prev_recv);
             let sent_bps = (dsent as f64 / dt_sec).round() as u64;
             let recv_bps = (drecv as f64 / dt_sec).round() as u64;
-            if sent_bps > 0 || recv_bps > 0 {
-                any_nonzero = true;
-            }
             per_peer.insert(
                 peer.clone(),
                 json!({ "sent_bps": sent_bps, "recv_bps": recv_bps }),
             );
         }
         prev = snapshot.into_iter().map(|(p, s, r)| (p, (s, r))).collect();
-
-        // 只在: 有流量 OR 刚从有流量切到 0(让前端 series 收尾画到 0) 时 publish。
-        // 持续静默期不打扰 SSE。
-        let should_publish = any_nonzero || last_nonzero;
-        last_nonzero = any_nonzero;
-        if !should_publish {
-            continue;
-        }
 
         let payload = json!({
             "ts": epoch_secs(),
@@ -128,10 +116,11 @@ mod tests {
         assert!(recv_bps > 0, "recv_bps should be positive, got {recv_bps}");
     }
 
-    /// 完全静默期不该刷屏 publish 0 帧 —— 仅在 peer_totals 为空 / 全 0 时
-    /// 应当不发任何事件。
+    /// 完全静默期(无任何 peer / 全 0 字节)也必须 1Hz publish, 让前端
+    /// `applyTick` 持续推动时间轴, 否则流量曲线 X 轴静止不前进。
+    /// payload.per_peer 在无 peer 时是空对象。
     #[tokio::test]
-    async fn does_not_emit_when_all_peers_idle() {
+    async fn emits_empty_tick_when_idle() {
         let core = ProxyCore::new(ProxyConfig::default());
         let mut rx = core.event_bus().subscribe();
         let cancel = CancellationToken::new();
@@ -140,20 +129,22 @@ mod tests {
         let h = tokio::spawn(async move {
             run(core_clone, cancel_clone).await;
         });
-        // 给 emitter 跑两个 tick 的时间, 期间不应发 traffic_tick。
-        let res = tokio::time::timeout(Duration::from_millis(2200), async {
+        let evt = tokio::time::timeout(Duration::from_millis(2500), async {
             loop {
                 match rx.recv().await {
-                    Ok(e) if e.kind == "traffic_tick" => return Some(e),
+                    Ok(e) if e.kind == "traffic_tick" => return e,
                     Ok(_) => continue,
                     Err(RecvError::Lagged(_)) => continue,
-                    Err(RecvError::Closed) => return None,
+                    Err(RecvError::Closed) => panic!("event bus closed"),
                 }
             }
         })
-        .await;
+        .await
+        .expect("expected traffic_tick within 2.5s even when idle");
         cancel.cancel();
         let _ = h.await;
-        assert!(res.is_err(), "should not emit traffic_tick when idle");
+        let per_peer = evt.payload["per_peer"].as_object().expect("per_peer obj");
+        assert!(per_peer.is_empty(), "idle tick should have empty per_peer");
+        assert!(evt.payload["ts"].as_f64().unwrap() > 0.0);
     }
 }

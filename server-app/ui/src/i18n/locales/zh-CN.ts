@@ -252,6 +252,8 @@ export default {
     emptyDescNoTraffic: "下方「待命」客户端正等着发起请求",
     emptyDescNoClient: "把右侧 PAC URL 分享给同事即可接入",
     passiveSection: "待命客户端 · 已链接但暂无流量",
+    recentSection: "已结束会话 · 最近 {n} 条",
+    recentDuration: "时长 {d}",
   },
 
   share: {

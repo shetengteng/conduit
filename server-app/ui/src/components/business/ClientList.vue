@@ -29,6 +29,7 @@ import {
   RiUserUnfollowLine,
   RiUserStarLine,
   RiPulseLine,
+  RiHistoryLine,
 } from '@remixicon/vue'
 import { proxyStore } from '@/stores/proxy'
 import { trafficStore } from '@/stores/traffic'
@@ -49,6 +50,7 @@ type SortKey =
 
 const clients = computed(() => proxyStore.state.clients)
 const passiveClients = computed(() => proxyStore.state.passiveClients)
+const recentSessions = computed(() => proxyStore.state.recentSessions)
 
 // 表格本身按 session 列展示(可以一个 client 占多行,展示并发会话/不同 target);
 // 顶部统计按 peer_ip 去重,反映"几个独立设备",和 KPI 卡保持一致。
@@ -263,6 +265,63 @@ const columns = computed<Column[]>(() => [
           </div>
         </div>
       </div>
+
+      <!-- 历史会话区: 已结束的最近 N 条 (`/api/sessions/recent`, 倒序最新在前)。 -->
+      <details
+        v-if="recentSessions.length > 0"
+        class="group border-t border-border/40 bg-muted/20"
+      >
+        <summary class="flex cursor-pointer items-center gap-2 px-4 py-3 hover:bg-muted/40">
+          <RiHistoryLine class="size-3.5 text-muted-foreground" />
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {{ t('clientList.recentSection', { n: recentSessions.length }) }}
+          </span>
+        </summary>
+        <div class="max-h-72 overflow-auto border-t border-border/30 bg-background/50">
+          <Table>
+            <TableHeader class="sticky top-0 z-10 bg-card">
+              <TableRow>
+                <TableHead class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ t('clientList.th.peer') }}
+                </TableHead>
+                <TableHead class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ t('clientList.th.proto') }}
+                </TableHead>
+                <TableHead class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ t('clientList.th.target') }}
+                </TableHead>
+                <TableHead class="text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ t('clientList.th.total') }}
+                </TableHead>
+                <TableHead class="text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {{ t('clientList.th.since') }}
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow v-for="row in recentSessions" :key="row.session_id">
+                <TableCell class="font-mono font-medium text-foreground">
+                  {{ row.peer_ip }}
+                </TableCell>
+                <TableCell>
+                  <span class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wide text-foreground">
+                    {{ row.proto }}
+                  </span>
+                </TableCell>
+                <TableCell class="max-w-[280px] truncate font-mono text-xs">
+                  {{ row.target }}
+                </TableCell>
+                <TableCell class="text-right font-mono tabular-nums text-muted-foreground">
+                  {{ formatBytes(row.sent_bytes + row.recv_bytes) }}
+                </TableCell>
+                <TableCell class="text-right font-mono tabular-nums text-muted-foreground">
+                  {{ t('clientList.recentDuration', { d: formatUptimeShort(row.duration_sec) }) }}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </div>
+      </details>
     </CardContent>
   </Card>
 </template>

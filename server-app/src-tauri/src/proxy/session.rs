@@ -11,7 +11,7 @@
 //! 同时实现 [`conduit_core::ProgressSink`]（通过包装类 [`SessionProgressSink`]），
 //! 直接交给 [`conduit_core::bidirectional_relay`] 做透传 + 字节计数。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -26,6 +26,11 @@ use tokio::sync::Mutex;
 /// 必须与 [`http.rs`] 心跳响应里的 `ttl_sec` 字段保持同步,
 /// 否则 client 端的预期 TTL 会与 server 实际清理时机不一致.
 pub const PASSIVE_CLIENT_TTL_SEC: f64 = 30.0;
+
+/// 历史会话环形缓冲容量。session remove 后保留摘要供 UI 展示,
+/// 上限 500 与 v0.1.x Python 版本对齐, 防止历史无界增长占用内存。
+/// 满后 push 会从队首淘汰最旧的一条。
+pub const RECENT_SESSIONS_CAPACITY: usize = 500;
 
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
@@ -49,6 +54,21 @@ pub struct PassiveClient {
     pub last_seen: f64,
 }
 
+/// 已结束会话的不可变摘要快照,session `remove` 时由 [`ConnectionInfo`] 派生而成,
+/// 进入 [`Inner::recent`] 环形缓冲, 容量 [`RECENT_SESSIONS_CAPACITY`]。
+/// 字段精简到 UI 展示所需的最小集, 避免历史 buffer 占内存。
+#[derive(Debug, Clone)]
+pub struct RecentSession {
+    pub session_id: String,
+    pub peer_ip: String,
+    pub proto: &'static str,
+    pub target: String,
+    pub since: f64,
+    pub ended_at: f64,
+    pub sent_bytes: u64,
+    pub recv_bytes: u64,
+}
+
 #[derive(Default)]
 struct Inner {
     next_id: u64,
@@ -60,6 +80,9 @@ struct Inner {
     /// 1) 短连接结束后字节不丢失,下一秒仍能算到 bps;
     /// 2) UI 端 ClientList 的 liveBps(peer) 与流量曲线 series[peer] 都按 peer 索引。
     peer_totals: HashMap<String, (u64, u64)>,
+    /// 已结束会话的环形缓冲, 容量 [`RECENT_SESSIONS_CAPACITY`]。
+    /// 满后从队首淘汰, 最新的在队尾。UI 端按时间倒序展示。
+    recent: VecDeque<RecentSession>,
 }
 
 struct SessionEntry {
@@ -117,7 +140,7 @@ impl SessionRegistry {
         info
     }
 
-    /// 拿走一条会话；返回最终统计快照（若存在）。
+    /// 拿走一条会话；返回最终统计快照（若存在）, 并把摘要追加到历史环形缓冲。
     pub async fn remove(&self, session_id: &str) -> Option<ConnectionInfo> {
         let mut inner = self.inner.lock().await;
         let entry = inner.sessions.remove(session_id)?;
@@ -126,6 +149,22 @@ impl SessionRegistry {
         info.sent_bytes = entry.sent.load(Ordering::Relaxed);
         info.recv_bytes = entry.recv.load(Ordering::Relaxed);
         info.last_seen = epoch_secs();
+
+        // 追加到历史缓冲(队尾), 满则弹队首。容量上限对应"最近 500 条"语义。
+        if inner.recent.len() >= RECENT_SESSIONS_CAPACITY {
+            inner.recent.pop_front();
+        }
+        inner.recent.push_back(RecentSession {
+            session_id: info.session_id.clone(),
+            peer_ip: info.peer_ip.clone(),
+            proto: info.proto,
+            target: info.target.clone(),
+            since: info.since,
+            ended_at: info.last_seen,
+            sent_bytes: info.sent_bytes,
+            recv_bytes: info.recv_bytes,
+        });
+
         Some(info)
     }
 
@@ -166,6 +205,13 @@ impl SessionRegistry {
             .iter()
             .map(|(p, (s, r))| (p.clone(), *s, *r))
             .collect()
+    }
+
+    /// 返回历史会话快照, 按时间倒序(最新的在前)。最多 [`RECENT_SESSIONS_CAPACITY`]
+    /// 条, 由 control_api `/api/sessions/recent` 暴露给 UI。
+    pub async fn recent_sessions(&self) -> Vec<RecentSession> {
+        let inner = self.inner.lock().await;
+        inner.recent.iter().rev().cloned().collect()
     }
 
     /// 把一个 passive client 心跳更新到 registry。
@@ -337,6 +383,46 @@ mod tests {
         let list = reg.passive_clients().await;
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].client_name, "fresh");
+    }
+
+    /// session remove 后摘要会落进 `recent` 环形缓冲, 并按倒序(最新在前)输出。
+    #[tokio::test]
+    async fn remove_session_pushes_to_recent_in_reverse_order() {
+        let reg = SessionRegistry::new();
+        let a = reg.add("10.0.0.1".into(), "http", "a.example:443".into()).await;
+        reg.sink_for(a.session_id.clone()).on_progress(100, 200);
+        let _ = reg.remove(&a.session_id).await;
+
+        let b = reg.add("10.0.0.2".into(), "socks5", "b.example:8080".into()).await;
+        reg.sink_for(b.session_id.clone()).on_progress(300, 400);
+        let _ = reg.remove(&b.session_id).await;
+
+        let recent = reg.recent_sessions().await;
+        assert_eq!(recent.len(), 2);
+        // 倒序: b 是最新, 排第 0
+        assert_eq!(recent[0].session_id, b.session_id);
+        assert_eq!(recent[0].sent_bytes, 300);
+        assert_eq!(recent[0].recv_bytes, 400);
+        assert_eq!(recent[1].session_id, a.session_id);
+        assert_eq!(recent[1].sent_bytes, 100);
+        assert_eq!(recent[1].recv_bytes, 200);
+    }
+
+    /// 历史 buffer 满 [`RECENT_SESSIONS_CAPACITY`] 后, 新条目挤掉最早的一条。
+    #[tokio::test]
+    async fn recent_buffer_caps_at_capacity_and_evicts_oldest() {
+        let reg = SessionRegistry::new();
+        // 灌 CAP+5 条
+        let n = RECENT_SESSIONS_CAPACITY + 5;
+        for _ in 0..n {
+            let info = reg.add("10.0.0.99".into(), "http", "x:1".into()).await;
+            let _ = reg.remove(&info.session_id).await;
+        }
+        let recent = reg.recent_sessions().await;
+        assert_eq!(recent.len(), RECENT_SESSIONS_CAPACITY);
+        // 倒序后第 0 项是最新的 sN, 末尾是 sCAP+5-(CAP-1) = s6
+        assert_eq!(recent[0].session_id, format!("s{}", n));
+        assert_eq!(recent.last().unwrap().session_id, "s6");
     }
 
     #[tokio::test]

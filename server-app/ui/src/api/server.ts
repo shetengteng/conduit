@@ -6,6 +6,7 @@
 import type {
   ClientsResponse,
   HealthzResponse,
+  RecentSessionsResponse,
   ServerStatus,
   TrafficResponse,
 } from "../types/proxy";
@@ -15,6 +16,7 @@ import { apiGet, apiPost } from "./client";
 export const ServerApi = {
   status: () => apiGet<ServerStatus>("/api/status"),
   clients: () => apiGet<ClientsResponse>("/api/clients"),
+  recentSessions: () => apiGet<RecentSessionsResponse>("/api/sessions/recent"),
   traffic: (window = 60, peer?: string) => {
     const qs = new URLSearchParams({ window: String(window) });
     if (peer) qs.set("peer", peer);
