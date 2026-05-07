@@ -6,22 +6,34 @@
 //! - `-setsocksfirewallproxy <svc> ...`   设置 SOCKS 服务器（**需要 admin**）
 //! - `-setsocksfirewallproxystate <svc>`  开/关（**需要 admin**）
 //!
-//! ## 提权策略（2026-05-07 W6 backlog #7）
+//! ## 提权策略（2026-05-07 W6 backlog #7,W6 backlog #11 收敛）
 //!
-//! Tauri sandbox 下普通用户跑 `networksetup -setsocksfirewallproxy*` 经常 exit 14
-//! （"Operation not permitted"）。本模块的策略是：
+//! Tauri sandbox + macOS 13+ 下普通用户跑 `networksetup -setsocksfirewallproxy*`
+//! 经常 exit 14（"Operation not permitted"）。最早的策略是任意 service 失败 → 整批
+//! 走 `osascript ... with administrator privileges`,但 osascript 提权 token 不跨进程
+//! 缓存,导致 **每次 connect 都会弹密码框**,用户体验严重退化。
 //!
-//! 1. 先用普通权限批量跑 `set` + `enable`，一旦**任意一个 service** 失败，
-//! 2. 自动 fallback 到 `osascript -e 'do shell script "..." with administrator privileges'`，
-//!    把"对全部 service 的 set + enable"拼成一个 sh 脚本一次性提权，
-//!    用户会看到 macOS 原生密码弹框（5 分钟 keychain 缓存内不重复）。
+//! 现在采用 **两层降级 + 已设短路** 策略,与 Python 版本(`client-app/core/system_proxy.py`)
+//! 行为对齐:
 //!
-//! 这避免了：
-//! - 重签名 / entitlement 修改（不影响现有 codesign 流程）
-//! - SMJobBless 安装 helper tool（避免引入额外二进制）
-//! - 关闭 sandbox（不影响 App Store 公证规范）
+//! 1. **目标 service 过滤**(`pick_target_services`):
+//!    优先 Wi-Fi / Ethernet 类常用网卡,黑名单排除 Thunderbolt Bridge / iPhone USB /
+//!    Bluetooth PAN / Bluetooth DUN —— 这些虚拟 service 上 `setsocksfirewallproxy`
+//!    通常会失败,且用户不会用它们上网,纯粹拖累成功率。
 //!
-//! 注：Linux/Windows 平台没有这个能力，`enable` / `disable` 直接 noop。
+//! 2. **已设短路**(enable 入口):
+//!    如果**全部目标 service 都已经指向 `host:port` + enabled**,直接 noop 返回。
+//!    "断开 → 重新 connect 同一个 server"的场景下不会再触发任何写操作 → 永不弹密码。
+//!
+//! 3. **无提权批量 set + enable**:对剩余目标 service 跑 networksetup,任何一项失败 →
+//! 4. **fallback 到 osascript admin 一次性提权**(原有兜底),用户会看到 macOS 原生密码框。
+//!
+//! 这样:
+//! - **绝大多数循环 connect/disconnect 不弹密码**(短路命中)
+//! - 首次或换 server 时仍要弹一次,但目标 service 已经被精简,无提权阶段成功率更高
+//! - 极端 sandbox 限制下仍能 fallback 提权,功能不会"默默失效"
+//!
+//! 注:Linux/Windows 平台没有这个能力,`enable` / `disable` 直接 noop。
 
 #[cfg(target_os = "macos")]
 use std::process::Command;
@@ -69,16 +81,38 @@ impl MacSystemProxy {
         false
     }
 
-    /// 把所有可见网络服务的 SOCKS 代理改成指向 `host:port` 并开启。
+    /// 把"目标网卡"的 SOCKS 代理改成指向 `host:port` 并开启。
     ///
-    /// 流程：先无提权批量跑 networksetup；任何一项失败 → fallback 到
-    /// `osascript ... with administrator privileges` 一次性把整个批量再跑一遍
-    /// （macOS 会弹原生密码框，5 分钟 keychain 缓存内不重复）。
+    /// 流程(详见模块 doc):
+    /// 1. `pick_target_services()` 过滤掉 Thunderbolt Bridge / iPhone USB 等虚拟 service
+    /// 2. 全部目标 service 都已经指向 `host:port + enabled` → noop(避免循环 connect 弹密码)
+    /// 3. 无提权批量 `set` + `enable`,任何一项失败 →
+    /// 4. fallback 到 `osascript ... with administrator privileges` 一次性提权
     #[cfg(target_os = "macos")]
     pub fn enable(&self, host: &str, port: u16) -> Result<(), String> {
-        let svcs = list_services()?;
-        if svcs.is_empty() {
+        let all = list_services()?;
+        if all.is_empty() {
             return Err("no network services visible".into());
+        }
+        let svcs = pick_target_services(&all);
+        if svcs.is_empty() {
+            return Err(format!(
+                "no usable network service after filtering (raw={all:?})"
+            ));
+        }
+
+        // 已设短路:全部目标 service 都已指向我们 → 跳过整个写流程,免提权弹框。
+        // get 是只读命令,不需要 admin。失败的 service 当作"未设"处理(保守)。
+        if svcs.iter().all(|svc| {
+            read_socks_state(svc)
+                .map(|s| s.points_to(host, port))
+                .unwrap_or(false)
+        }) {
+            log::info!(
+                "[system_proxy] all {} target services already → {host}:{port}, skip set",
+                svcs.len()
+            );
+            return Ok(());
         }
 
         let mut needs_elevation = false;
@@ -119,13 +153,20 @@ impl MacSystemProxy {
         Err("system_proxy not supported on this platform".into())
     }
 
-    /// 关闭所有可见网络服务的 SOCKS 代理。
+    /// 关闭"目标网卡"的 SOCKS 代理。
     ///
-    /// 与 enable 同样的提权策略：先无提权一轮，全部失败 → osascript 提权一次。
-    /// 单 service 部分失败不算 fatal（设计取舍：disable 的可恢复性比 enable 重要）。
+    /// 与 enable 对称:只对 `pick_target_services` 列表操作,避免对从未被 enable 的虚拟
+    /// service(Thunderbolt Bridge / iPhone USB)发 disable 命令,降低无谓的失败 →
+    /// 减少 osascript 触发概率。
+    ///
+    /// 单 service 部分失败不算 fatal(设计取舍:disable 的可恢复性比 enable 重要)。
     #[cfg(target_os = "macos")]
     pub fn disable(&self) -> Result<(), String> {
-        let svcs = list_services()?;
+        let all = list_services()?;
+        if all.is_empty() {
+            return Ok(());
+        }
+        let svcs = pick_target_services(&all);
         if svcs.is_empty() {
             return Ok(());
         }
@@ -155,6 +196,50 @@ fn try_set_and_enable_unprivileged(svc: &str, host: &str, port: u16) -> Result<(
     set_socks(svc, host, port)?;
     enable_socks(svc)?;
     Ok(())
+}
+
+/// 已知"几乎不会用作上网"的虚拟 service —— 在它们上 set socksfirewallproxy 通常会
+/// 失败(且即使成功也没用),纯粹拖累成功率/触发 osascript 提权。
+///
+/// 关键字匹配(case-insensitive),覆盖常见命名:
+/// - `Thunderbolt Bridge`(雷电桥,虚拟二层桥接)
+/// - `iPhone USB`(iPhone 网络共享)
+/// - `Bluetooth PAN` / `Bluetooth DUN`(蓝牙网络共享)
+const VIRTUAL_SERVICE_BLOCKLIST: &[&str] = &[
+    "thunderbolt bridge",
+    "iphone usb",
+    "bluetooth pan",
+    "bluetooth dun",
+];
+
+/// 从 `list_services()` 全集挑出"用户实际用来上网"的 service。
+///
+/// 策略:
+/// 1. 排除 [`VIRTUAL_SERVICE_BLOCKLIST`] 中的虚拟 service
+/// 2. 剩下的全部保留(笔记本可能 Wi-Fi + USB 网卡同时插)
+/// 3. 如果过滤后空了,返回原列表(保证不会因为命名特殊而完全无法工作)
+///
+/// 与 Python 版本(`active_service`,只挑一个)略有不同:Python 只对一个 service set,
+/// 用户切换网卡时代理就跟丢了。这里保留所有非虚拟 service,**牺牲一点性能换更可靠的体感**:
+/// 比如 Wi-Fi 断开切到以太网时不需要重连 server。
+#[cfg(target_os = "macos")]
+fn pick_target_services(all: &[String]) -> Vec<String> {
+    let filtered: Vec<String> = all
+        .iter()
+        .filter(|svc| {
+            let lower = svc.to_ascii_lowercase();
+            !VIRTUAL_SERVICE_BLOCKLIST
+                .iter()
+                .any(|kw| lower.contains(kw))
+        })
+        .cloned()
+        .collect();
+    if filtered.is_empty() {
+        // 极端兜底:全部 service 都被黑名单命中 → 退回原列表,让 osascript 兜底也比直接 fail 强
+        all.to_vec()
+    } else {
+        filtered
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -362,7 +447,63 @@ mod tests {
     // 提权 fallback 相关 helper 仅 macOS 编译,所以测试也加 cfg。
     #[cfg(target_os = "macos")]
     mod elevation {
-        use super::super::{applescript_string_literal, sh_quote};
+        use super::super::{applescript_string_literal, pick_target_services, sh_quote};
+
+        #[test]
+        fn pick_target_services_drops_known_virtual_services() {
+            // 真机 networksetup -listallnetworkservices 返回的混合列表
+            let raw = vec![
+                "AX88179A".to_string(),
+                "Belkin USB-C LAN".to_string(),
+                "USB 10/100 LAN".to_string(),
+                "Thunderbolt Bridge".to_string(),
+                "Wi-Fi".to_string(),
+                "iPhone USB".to_string(),
+            ];
+            let picked = pick_target_services(&raw);
+            assert!(picked.contains(&"Wi-Fi".to_string()));
+            assert!(picked.contains(&"AX88179A".to_string()));
+            assert!(picked.contains(&"Belkin USB-C LAN".to_string()));
+            assert!(picked.contains(&"USB 10/100 LAN".to_string()));
+            assert!(!picked.contains(&"Thunderbolt Bridge".to_string()));
+            assert!(!picked.contains(&"iPhone USB".to_string()));
+        }
+
+        #[test]
+        fn pick_target_services_is_case_insensitive() {
+            let raw = vec![
+                "THUNDERBOLT BRIDGE".to_string(),
+                "iphone usb".to_string(),
+                "Wi-Fi".to_string(),
+                "Bluetooth PAN".to_string(),
+                "Bluetooth DUN".to_string(),
+            ];
+            let picked = pick_target_services(&raw);
+            assert_eq!(picked, vec!["Wi-Fi".to_string()]);
+        }
+
+        #[test]
+        fn pick_target_services_falls_back_to_full_list_when_all_blocked() {
+            // 极端:全部都被黑名单命中 → 退回原列表,而非完全无法工作
+            let raw = vec![
+                "Thunderbolt Bridge".to_string(),
+                "iPhone USB".to_string(),
+            ];
+            let picked = pick_target_services(&raw);
+            assert_eq!(picked, raw);
+        }
+
+        #[test]
+        fn pick_target_services_keeps_unrelated_naming() {
+            // 用户机器上可能有非标准命名的网卡(USB-C 拓展坞自带 LAN 模块、虚拟网卡等)
+            // 只要不在黑名单关键字里就保留
+            let raw = vec![
+                "Some Random USB Adapter".to_string(),
+                "Wi-Fi".to_string(),
+            ];
+            let picked = pick_target_services(&raw);
+            assert_eq!(picked.len(), 2);
+        }
 
         #[test]
         fn sh_quote_wraps_plain_value_in_single_quotes() {
