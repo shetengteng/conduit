@@ -1081,89 +1081,220 @@ client-app/ui/src/generated/bindings.ts    ← auto-gen
 
 ---
 
-## 附录 C：Cargo.toml 完整版（双端 src-tauri）
+## 附录 C：Cargo.toml 实际依赖（v0.2.0 落地版）
+
+> ⚠ **本附录已于 2026-05-07 与代码 reconcile**。原始 v1.0 草稿（2026-05-06）开列了 hyper / fast-socks5 / netdev / clap / socket2 / anyhow / tracing 套件 / specta 等，
+> 但 W6 阶段做了 5 项有意识的偏离（详见下文 §C.3）。**真实 lock 的依赖以下面 §C.1 / §C.2 为准**，与 `cargo metadata` 100% 对齐。
+
+### C.1 `Cargo.toml`（workspace 根，实际版）
+
+```toml
+[workspace]
+resolver = "2"
+members = [
+    "crates/conduit-core",
+    "server-app/src-tauri",
+    "client-app/src-tauri",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+# 1.84 是 IpAddr::V6 的 is_unique_local / is_unicast_link_local 稳定版本，
+# RouteResolver 的 private-IP 判断需要它们；早于此版本需手写位运算。
+rust-version = "1.84"
+authors = ["TerrellShe"]
+
+[workspace.dependencies]
+# Tauri 壳 + 序列化 + tokio runtime
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-build = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tokio = { version = "1", features = ["sync", "time", "process", "rt-multi-thread", "macros", "net", "io-util"] }
+# step_fetch_pac + healthz：rustls-tls 不引入 OpenSSL，降低交叉编译风险
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# 错误模型 + 日志（暂不用 tracing 套件，规模够用）
+thiserror = "1"
+log = "0.4"
+env_logger = "0.11"
+# 端口分配（pick_unused_ports，conduit_core::ports 包装）
+portpicker = "0.1"
+once_cell = "1"
+libc = "0.2"
+# PAC 引擎平移：CIDR + 域名 glob + regex 解析 5 段 numbered section
+regex = "1"
+globset = "0.4"
+ipnet = "2"
+# 共享 crate
+conduit-core = { path = "crates/conduit-core" }
+# ProxyCore 协作式取消 + JoinHandle 管理
+tokio-util = { version = "0.7", features = ["rt"] }
+# mDNS 广播 / 服务发现
+mdns-sd = "0.13"
+# 检测物理网卡 / LAN IP（替代设计稿的 netdev，更轻）
+local-ip-address = "0.6"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+```
+
+### C.2 双端 `src-tauri/Cargo.toml`（实际版）
 
 ```toml
 # server-app/src-tauri/Cargo.toml
 [package]
 name = "conduit-server"
+description = "Conduit Server desktop application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
 
 [lib]
 name = "conduit_server_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build.workspace = true
 
 [dependencies]
-conduit-core = { path = "../../crates/conduit-core" }
-tauri = { workspace = true, features = ["tray-icon"] }
-tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-hyper.workspace = true
-hyper-util.workspace = true
-http-body-util.workspace = true
-fast-socks5.workspace = true
-mdns-sd.workspace = true
-dashmap.workspace = true
-netdev.workspace = true
-clap.workspace = true
-chrono.workspace = true
-socket2.workspace = true
-anyhow.workspace = true
+tauri.workspace = true
+tauri-plugin-opener.workspace = true
+tokio.workspace = true
 thiserror.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-appender.workspace = true
-specta.workspace = true
+log.workspace = true
+env_logger.workspace = true
+portpicker.workspace = true
+once_cell.workspace = true
+# 内嵌 ProxyCore（HTTP / SOCKS5 / mDNS / 控制 API 全部进程内）
+conduit-core.workspace = true
+tokio-util.workspace = true
+ipnet.workspace = true
+mdns-sd.workspace = true
+local-ip-address.workspace = true
 ```
 
 ```toml
 # client-app/src-tauri/Cargo.toml
 [package]
 name = "conduit-client"
+description = "Conduit Client desktop application (smart local proxy, macOS only in v0.1)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+authors.workspace = true
 
 [lib]
 name = "conduit_client_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build.workspace = true
 
 [dependencies]
-conduit-core = { path = "../../crates/conduit-core" }
-tauri = { workspace = true, features = ["tray-icon"] }
-tauri-plugin-autostart = "2"
-tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-hyper.workspace = true
-hyper-util.workspace = true
-http-body-util.workspace = true
-fast-socks5.workspace = true
-mdns-sd.workspace = true
-dashmap.workspace = true
-moka.workspace = true
-netdev.workspace = true
-clap.workspace = true
-chrono.workspace = true
-socket2.workspace = true
-anyhow.workspace = true
+tauri = { workspace = true, features = ["image-png"] }
+tauri-plugin-opener.workspace = true
+tokio.workspace = true
 thiserror.workspace = true
-tracing.workspace = true
-tracing-subscriber.workspace = true
-tracing-appender.workspace = true
-specta.workspace = true
+log.workspace = true
+env_logger.workspace = true
+portpicker.workspace = true
+once_cell.workspace = true
+# 内嵌 ClientCore（SOCKS5 入口 / 路由决策 / mDNS 发现 / 控制 API 全部进程内）
+conduit-core.workspace = true
+tokio-util.workspace = true
+mdns-sd.workspace = true
+local-ip-address.workspace = true
+ipnet.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+dashmap = "6"
+dirs = "5"
+# step_fetch_pac 拉 PAC 需要的轻量 HTTP client（runtime 依赖）
+reqwest = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["full"] }
 ```
+
+```toml
+# crates/conduit-core/Cargo.toml
+[package]
+name = "conduit-core"
+description = "Shared protocol, types, PAC engine, EventBus and relay primitives for Conduit (server + client)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+regex.workspace = true
+globset.workspace = true
+ipnet.workspace = true
+serde.workspace = true
+# 追加 io-util feature 给 relay 用 copy_bidirectional；workspace 默认未启用
+tokio = { workspace = true, features = ["io-util"] }
+# healthz 模块需要 HTTP client；workspace 已配 rustls-tls，不引入 OpenSSL
+reqwest.workspace = true
+# ports 模块（pick_unused_ports）依赖
+portpicker.workspace = true
+# healthz / 多模块复用 log 宏
+log.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+serde_json.workspace = true
+```
+
+### C.3 与 v1.0 设计稿的偏离一览（5 项有意识决策）
+
+| 设计稿原本要求 | 实际方案 | 决策时点 | 偏离原因 |
+|---|---|---|---|
+| `hyper` + `hyper-util` + `http-body-util` | 手写 HTTP/1.1（`server-app/proxy/http.rs` 1141 行） | W6 C2 | 体积控制：server.dmg 4.3MB（hyper 套件估 +3-5MB）；CONNECT + absolute-URI + heartbeat 已 4 单测覆盖；passive 注册 / URL-decode 等定制 hyper 抽象不友好 |
+| `fast-socks5` | `conduit_core::socks5_proto` 自实现（387 行 + 20 单测） | W6 C1 | fast-socks5 偏 client-side 抽象；server 入口需要更细的 NO-AUTH-only / port allow-list 控制；headless 1MiB roundtrip example 已通过 |
+| `netdev` | `local-ip-address` 0.6 | W2 | 功能等价但更轻量；只用到一个 LAN IP enum，不需要全网卡枚举 |
+| `clap` | 不引入 | W2/W3 | Tauri shell 不暴露 CLI args，所有命令通过 IPC + control_api，`std::env::args` 即可 |
+| `socket2` | tokio `TcpStream` 默认 | 全程 | 没有 raw socket / SO_REUSEPORT 等需求；relay 走标准 tokio I/O |
+| `anyhow` | 全用 `thiserror` | W1 | 业务侧错误（`ConduitError` / `BootError`）需要类型化 + 自定义 `Serialize` 给 UI；anyhow 类型擦除不合适 |
+| `tracing` / `tracing-subscriber` / `tracing-appender` | `log` + `env_logger` | W2 | 当前没有结构化字段需求；规模未到分布式追踪门槛；可观测性升级留 v0.3+ |
+| `chrono` (server) | server 不引入；client 引 | W2 | server 端无人类可读时间戳格式化需求（passive client TTL 直接用 `Instant`）；client 端 history 时间戳要 ISO8601 给 UI 显示 |
+| `specta` | UI 手写 TS（snake_case 对齐 conduit_core serde rename） | S1.5 ⏸ 永久推迟 | 引入 specta 收益小（无 wire 漂移）+ 风险大（build.rs 拖慢 incremental）；v0.3 看实际是否要 Rust→TS 类型联动再评估 |
+
+### C.4 v1.0 设计稿没列、但实际加了的依赖（11 个）
+
+| 依赖 | 用途 | 加入时点 |
+|---|---|---|
+| `portpicker` | `conduit_core::pick_unused_ports`（动态端口分配） | W1 |
+| `tokio-util` | `CancellationToken` / `JoinHandle` 管理 | W2 |
+| `once_cell` | 全局静态初始化（图标 / 配置缓存） | W2 |
+| `log` + `env_logger` | 替代 tracing 套件 | W1 |
+| `ipnet` | PAC 引擎 CIDR 匹配 | W1 (S1.3) |
+| `regex` / `globset` | PAC 引擎规则解析 | W1 (S1.3) |
+| `libc` (mac only) | system_proxy 辅助 | W3 (S3.5) |
+| `tauri-plugin-opener` | 打开外部链接 | W2 |
+| `reqwest` (rustls-tls) | client `step_fetch_pac` + conduit-core healthz | W3 |
+| `dirs` | client `~/Library/Application Support/Conduit/` 路径 | W3 (S3.2/S3.3) |
+| `dashmap` (client) | discoverer / route_cache 并发表 | W3 (S3.2/S3.3) |
+
+> ✅ 全部 11 个新增依赖都是**轻量、单一职责、社区维护活跃**，符合"尽量用成熟第三方"目标。
+> ⚠ 偏离的 9 项（C.3）请在 v0.3 重评估时再讨论是否回填。
 
 ---
 
 **变更记录**：
 - 2026-05-06 v1.0 初稿（基于可行性分析 v1.1 + 不留中间态原则）
+- 2026-05-07 v1.1 附录 C 与 v0.2.0 实际代码 reconcile：替换 server / client / conduit-core Cargo.toml 为 lock 后的实际版本；新增 §C.3 列出与原稿 9 项有意识偏离及决策时点 + 原因；新增 §C.4 列出 11 个原稿没列但实际加入的轻量依赖。
