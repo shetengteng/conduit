@@ -66,17 +66,23 @@ jobs:
       - name: setup rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: cache rust target
+      # 只缓存依赖下载结果（~/.cargo/{registry,git}），故意不缓存
+      # server-app/src-tauri/target 和 client-app/src-tauri/target。
+      # 缓存 target/ 时 GitHub Actions 会把 target/release/bundle/dmg/*.dmg
+      # 一并打进缓存，下次 build 命中缓存后 Tauri bundler 看到 binary
+      # 时间戳没变就跳过 bundle 重建，直接复用上一版的 .dmg，造成版本号
+      # 与 tauri.conf.json 不一致（v0.2.0 release 实际打出 0.1.0 命名的
+      # dmg、体积不缩水就是这么来的）。Rust crate 每次全量编译会增加
+      # 5-10 分钟，但 release 频率低，换来 100% 干净产物，值得。
+      - name: cache cargo registry
         uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            server-app/src-tauri/target
-            client-app/src-tauri/target
-          key: rust-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ matrix.arch }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            rust-${{ matrix.arch }}-
+            cargo-${{ matrix.arch }}-
 
       - name: pnpm install
         run: pnpm install --frozen-lockfile
