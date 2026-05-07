@@ -39,13 +39,37 @@ conduit-core = { path = "crates/conduit-core" }
 tokio-util = { version = "0.7", features = ["rt"] }
 # S2.4 mDNS 广播 / 服务发现
 mdns-sd = "0.13"
-# S2.4 / S2.5 检测物理网卡 / LAN IP
+# S2.4 / S2.5 检测物理网卡 / LAN IP / VPN 隧道 / 默认路由接口。
+# - local-ip-address: 仅返回"通过 default route 出去"的 IP, 拿不到接口元数据。
+# - netdev (新增): cross-platform 网卡 + 默认路由 + InterfaceType 枚举
+#   (Ethernet/Wireless80211/Tunnel/Ppp/Loopback) + is_physical/is_tun helpers,
+#   单一来源替代旧 Python 版 ifconfig + route 子进程解析方案。
 local-ip-address = "0.6"
+netdev = { version = "0.43", default-features = false, features = ["gateway"] }
 # macOS SystemConfiguration framework FFI 支持(system_proxy 走 SCPreferences API
 # + AuthorizationRef session 缓存,实现首次弹 1 次密码、之后进程内 0 次的体验)
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
 system-configuration-sys = "0.6"
+# Authorization Services FFI 由 sys crate 提供常量+类型+函数声明,
+# client-app/system_proxy_sc 不再手写 extern "C"。
+security-framework-sys = "2"
+# RFC 3986 percent-encoding (替代手写 url_decode + hex_nibble),
+# 由 url crate 拆出来的零依赖库,给 server-app heartbeat / check 解析 query string 用。
+percent-encoding = "2"
+# 控制面 API (loopback only) 走 axum 0.8 + tower-http,替代手写 HTTP 解析/路由分发/
+# CORS preflight。axum 0.8 (2026 stable) 与 tokio 1.x 完全兼容。
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "macros", "tokio", "tracing", "query"] }
+tower-http = { version = "0.6", default-features = false, features = ["cors"] }
+# axum 0.8 对应的 tokio_util / streams (SSE 用 BroadcastStream)。
+tokio-stream = { version = "0.1", default-features = false, features = ["sync"] }
+# server-app forward proxy (HTTP/1.1 CONNECT + absolute-URI) 走 hyper 1.x;
+# axum 与 hyper 1 共用同一套 http types,无重复编译。
+hyper = { version = "1", default-features = false, features = ["http1", "server", "client"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio", "server", "client", "client-legacy", "http1"] }
+http = "1"
+http-body-util = "0.1"
+bytes = "1"
 
 [profile.release]
 codegen-units = 1

@@ -14,8 +14,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use conduit_core::time::epoch_secs;
 use conduit_core::ProgressSink;
 use tokio::sync::Mutex;
 
@@ -54,10 +54,19 @@ struct Inner {
     next_id: u64,
     sessions: HashMap<String, Arc<SessionEntry>>,
     passive: HashMap<String, PassiveClient>,
+    /// per-peer 累计字节(monotonic, 不会因 session remove 而回退)。
+    /// (sent_total, recv_total)。供 [`super::traffic_emitter`] 周期 tick
+    /// 取差值算 bps;基于 peer 而非 session 是为了:
+    /// 1) 短连接结束后字节不丢失,下一秒仍能算到 bps;
+    /// 2) UI 端 ClientList 的 liveBps(peer) 与流量曲线 series[peer] 都按 peer 索引。
+    peer_totals: HashMap<String, (u64, u64)>,
 }
 
 struct SessionEntry {
     info: Mutex<ConnectionInfo>,
+    /// 与 `info.peer_ip` 同值,但提到顶层免锁同步读,
+    /// [`SessionProgressSink::on_progress`] 是同步 trait 不能 await。
+    peer_ip: String,
     sent: AtomicU64,
     recv: AtomicU64,
 }
@@ -97,10 +106,14 @@ impl SessionRegistry {
             sid.clone(),
             Arc::new(SessionEntry {
                 info: Mutex::new(info.clone()),
+                peer_ip: info.peer_ip.clone(),
                 sent: AtomicU64::new(0),
                 recv: AtomicU64::new(0),
             }),
         );
+        // 首次见到该 peer 时, 在 peer_totals 表里登记一个 0 起点,
+        // 让 traffic_emitter 在 session 进/出过程中始终能拿到 baseline。
+        inner.peer_totals.entry(info.peer_ip.clone()).or_insert((0, 0));
         info
     }
 
@@ -140,6 +153,19 @@ impl SessionRegistry {
 
     pub async fn active_count(&self) -> usize {
         self.inner.lock().await.sessions.len()
+    }
+
+    /// 当前所有"见过流量"的 peer 累计字节快照, 供 [`super::traffic_emitter`]
+    /// 周期 tick 用差值算 per-peer bps。返回 `(peer_ip, sent_total, recv_total)`。
+    /// 注意:peer_totals 表是单调递增的, session remove 不会回退, 因此即使
+    /// 短连接在 tick 间隔内出生+死亡, 它的字节仍能被下一次 tick 计入。
+    pub async fn peer_totals_snapshot(&self) -> Vec<(String, u64, u64)> {
+        let inner = self.inner.lock().await;
+        inner
+            .peer_totals
+            .iter()
+            .map(|(p, (s, r))| (p.clone(), *s, *r))
+            .collect()
     }
 
     /// 把一个 passive client 心跳更新到 registry。
@@ -214,7 +240,7 @@ impl ProgressSink for SessionProgressSink {
         // 我们用 try_lock 避免阻塞；常态下没竞争（每个 session 只有一个 relay
         // 任务在累计），try_lock 即拿到。极端情况下错过一次累加（统计偏低 64KiB）
         // 是可接受的，下次 chunk 会跟上。
-        if let Ok(inner) = self.registry.inner.try_lock() {
+        if let Ok(mut inner) = self.registry.inner.try_lock() {
             if let Some(entry) = inner.sessions.get(&self.session_id) {
                 if sent_delta > 0 {
                     entry.sent.fetch_add(sent_delta, Ordering::Relaxed);
@@ -222,16 +248,13 @@ impl ProgressSink for SessionProgressSink {
                 if recv_delta > 0 {
                     entry.recv.fetch_add(recv_delta, Ordering::Relaxed);
                 }
+                let peer = entry.peer_ip.clone();
+                let totals = inner.peer_totals.entry(peer).or_insert((0, 0));
+                totals.0 = totals.0.saturating_add(sent_delta);
+                totals.1 = totals.1.saturating_add(recv_delta);
             }
         }
     }
-}
-
-fn epoch_secs() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
 }
 
 #[cfg(test)]

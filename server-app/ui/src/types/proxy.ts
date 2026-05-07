@@ -160,6 +160,8 @@ export interface TrafficTickPayload {
 export interface VpnStateChangedPayload {
   available: boolean;
   iface: string | null;
+  /** 系统默认路由是否走该 VPN 接口(v0.2.2+ 后端真实判定;旧版本可能不带此字段) */
+  default_route_via_vpn?: boolean;
 }
 
 export type ServerEventPayload =

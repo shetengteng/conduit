@@ -58,6 +58,10 @@ use core_foundation_sys::base::CFRelease;
 use core_foundation_sys::dictionary::CFDictionaryRef;
 use core_foundation_sys::propertylist::CFPropertyListRef;
 use core_foundation_sys::string::CFStringRef;
+// Authorization Services FFI 直接使用 security-framework-sys (替代手写 extern "C"),
+// 但仍以 raw AuthorizationRef 喂给 SC API —— security-framework 的高层 wrapper
+// 把 raw handle 设为 private 字段且没有 as_raw,这条路走不通。
+use security_framework_sys::authorization as sf_auth;
 use system_configuration_sys::network_configuration::{
     SCNetworkProtocolGetConfiguration, SCNetworkProtocolSetConfiguration, SCNetworkServiceCopyAll,
     SCNetworkServiceCopyProtocol, SCNetworkServiceGetName, SCNetworkServiceRef,
@@ -108,39 +112,12 @@ fn diag_log_path() -> Option<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// Authorization Services FFI(security-framework crate 的 Authorization 把 raw
-// AuthorizationRef 设为 private 字段且没有 as_raw,我们要喂给 SC API 必须自己
-// extern。只声明用到的 4 个符号 + 2 个 bit flag,代码量极少。)
-
-#[allow(non_camel_case_types)]
-type OSStatus = i32;
-
-#[allow(non_camel_case_types)]
-type AuthorizationFlags = u32;
-
-const ERR_AUTHORIZATION_SUCCESS: OSStatus = 0;
-
-const K_AUTHORIZATION_FLAG_DEFAULTS: AuthorizationFlags = 0;
-const K_AUTHORIZATION_FLAG_INTERACTION_ALLOWED: AuthorizationFlags = 1 << 0;
-const K_AUTHORIZATION_FLAG_EXTEND_RIGHTS: AuthorizationFlags = 1 << 1;
-const K_AUTHORIZATION_FLAG_PRE_AUTHORIZE: AuthorizationFlags = 1 << 4;
-
-const K_AUTHORIZATION_FLAG_DESTROY_RIGHTS: AuthorizationFlags = 1 << 0;
-
-#[link(name = "Security", kind = "framework")]
-extern "C" {
-    fn AuthorizationCreate(
-        rights: *const c_void,
-        environment: *const c_void,
-        flags: AuthorizationFlags,
-        authorization: *mut AuthorizationRef,
-    ) -> OSStatus;
-
-    fn AuthorizationFree(authorization: AuthorizationRef, flags: AuthorizationFlags) -> OSStatus;
-}
-
-// ---------------------------------------------------------------------------
 // 进程级 AuthorizationRef 缓存
+//
+// 之前 (v0.2.2 及更早) 这里手写 extern "C" + 5 个 bit-flag 常量。v0.2.3
+// 起改用 security-framework-sys::authorization 提供的 sys 函数与常量,
+// 不再维护手写 FFI 声明。仍然走 raw AuthorizationRef (传给 SC API 必需),
+// 因为 security-framework 高层 Authorization 把 handle 设为私有字段。
 
 /// 持有 AuthorizationRef 的封装,Drop 时调 AuthorizationFree 释放 token。
 /// 用 `unsafe impl Send/Sync` 因为 AuthorizationRef 是 macOS 提供的 thread-safe
@@ -157,7 +134,10 @@ impl Drop for AuthHolder {
         if !self.raw.is_null() {
             unsafe {
                 // 不传 destroyRights,避免回收时把后续 SC 调用所需的授权也释放。
-                AuthorizationFree(self.raw, K_AUTHORIZATION_FLAG_DEFAULTS);
+                sf_auth::AuthorizationFree(
+                    self.raw as sf_auth::AuthorizationRef,
+                    sf_auth::kAuthorizationFlagDefaults,
+                );
             }
         }
     }
@@ -182,21 +162,25 @@ fn get_or_create_auth() -> Result<AuthorizationRef, String> {
         }
     }
 
-    let mut auth: AuthorizationRef = ptr::null();
     // 三个 flag 一起用是经典组合:extendRights 让 token 可用于 SC API,
     // interactionAllowed 允许必要时弹密码框,preAuthorize 让 OS 在创建时
     // 就完成授权(避免 SCPreferencesCreateWithAuthorization 内部再次触发弹框)。
-    let flags = K_AUTHORIZATION_FLAG_EXTEND_RIGHTS
-        | K_AUTHORIZATION_FLAG_INTERACTION_ALLOWED
-        | K_AUTHORIZATION_FLAG_PRE_AUTHORIZE;
+    let flags = sf_auth::kAuthorizationFlagExtendRights
+        | sf_auth::kAuthorizationFlagInteractionAllowed
+        | sf_auth::kAuthorizationFlagPreAuthorize;
+    let mut sf_handle: sf_auth::AuthorizationRef = ptr::null_mut();
     let status = unsafe {
-        AuthorizationCreate(ptr::null(), ptr::null(), flags, &mut auth as *mut _)
+        sf_auth::AuthorizationCreate(ptr::null(), ptr::null(), flags, &mut sf_handle as *mut _)
     };
-    if status != ERR_AUTHORIZATION_SUCCESS || auth.is_null() {
+    if status != sf_auth::errAuthorizationSuccess || sf_handle.is_null() {
         return Err(format!(
-            "AuthorizationCreate failed: OSStatus={status} (user cancel = -60006, denied = -60005)"
+            "AuthorizationCreate failed: OSStatus={status} (user cancel = {}, denied = {})",
+            sf_auth::errAuthorizationCanceled, sf_auth::errAuthorizationDenied
         ));
     }
+    // SC API 用的 AuthorizationRef 是 *const c_void,sf_auth 用的是 *mut c_void;
+    // 同一个 token 跨 sys crate,只是常量类型签名不同,做个 cast 即可。
+    let auth = sf_handle as AuthorizationRef;
 
     let holder = AuthHolder { raw: auth };
     let raw = holder.raw;
@@ -533,14 +517,15 @@ mod tests {
 
     /// 只测无网络副作用的 helper。SC API + AuthorizationCreate 在测试环境
     /// 会真的调用 macOS 系统服务,无法 mock,留给手工验证。
+    /// 这里 sanity-check 一下 sys crate 提供的常量与 Apple 文档值一致。
     #[test]
     fn flag_constants_match_apple_documented_values() {
-        assert_eq!(K_AUTHORIZATION_FLAG_DEFAULTS, 0);
-        assert_eq!(K_AUTHORIZATION_FLAG_INTERACTION_ALLOWED, 1);
-        assert_eq!(K_AUTHORIZATION_FLAG_EXTEND_RIGHTS, 2);
-        assert_eq!(K_AUTHORIZATION_FLAG_PRE_AUTHORIZE, 16);
-        assert_eq!(K_AUTHORIZATION_FLAG_DESTROY_RIGHTS, 1);
-        assert_eq!(ERR_AUTHORIZATION_SUCCESS, 0);
+        assert_eq!(sf_auth::kAuthorizationFlagDefaults, 0);
+        assert_eq!(sf_auth::kAuthorizationFlagInteractionAllowed, 1);
+        assert_eq!(sf_auth::kAuthorizationFlagExtendRights, 2);
+        assert_eq!(sf_auth::kAuthorizationFlagPreAuthorize, 16);
+        assert_eq!(sf_auth::kAuthorizationFlagDestroyRights, 8);
+        assert_eq!(sf_auth::errAuthorizationSuccess, 0);
     }
 
     #[test]

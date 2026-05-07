@@ -206,11 +206,18 @@ impl ClientCore {
             .map_err(|e| format!("local_proxy start failed: {e}"))?;
         info!("[client_core] local_proxy listening on 127.0.0.1:{port}");
 
-        // 2) 流量计量 sink 接线
+        // 2) 流量计量 sink 接线 + 启动 1Hz 聚合 emitter 协程。
+        //    on_progress 热路径只做 atomic fetch_add(零分配),
+        //    实际 SSE traffic_tick publish 由 emitter 1Hz 聚合发出,
+        //    避免大下载场景每 64KiB chunk 都广播 SSE 拖慢 relay 速率。
         self.inner
             .local_proxy
             .set_progress_sink(Some(self.inner.traffic_meter.clone()))
             .await;
+        let _h_traffic = self
+            .inner
+            .traffic_meter
+            .spawn_emitter(self.inner.cancel.clone());
 
         // 3) Discoverer（mDNS）—— 失败不阻断启动
         if let Err(e) = self.inner.discoverer.start().await {

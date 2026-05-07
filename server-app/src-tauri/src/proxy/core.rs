@@ -18,6 +18,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use conduit_core::time::epoch_secs;
 use conduit_core::{EventBus, PacRules, PAC_TEMPLATE};
 
 use super::config::ProxyConfig;
@@ -45,6 +46,10 @@ pub struct ServerStatus {
     pub vpn_on: bool,
     /// 当前激活的 VPN 接口名（如 `utun5`）；未检测到 VPN 时为 `None`。
     pub vpn_iface: Option<String>,
+    /// 系统**当前默认路由**是否经过 VPN 接口 (Tunnel/Ppp/is_tun)。
+    /// 真实反映"出口流量是否走 VPN", 与 vpn_on (有 VPN 接口) 区分:
+    /// 用户可能开了 VPN 但没切默认路由 (split tunnel) → vpn_on=true, default_via=false。
+    pub default_route_via_vpn: bool,
     /// 当前在线客户端数（passive heartbeat + 进行中会话合并）。
     pub clients_online: usize,
     /// 进行中代理会话数。
@@ -72,6 +77,8 @@ struct CoreInner {
     /// 当前激活的 VPN 接口名（如 `utun5`），由 [`super::vpn_detect`] 周期更新。
     /// `None` 表示未检测到 VPN。
     vpn_iface: Option<String>,
+    /// 系统默认路由是否走 VPN, 由 [`super::vpn_detect`] 周期更新。
+    default_route_via_vpn: bool,
 }
 
 impl ProxyCore {
@@ -93,6 +100,7 @@ impl ProxyCore {
                 handles: Vec::new(),
                 vpn_on: false,
                 vpn_iface: None,
+                default_route_via_vpn: false,
             })),
         }
     }
@@ -184,6 +192,16 @@ impl ProxyCore {
         });
         inner.handles.push(h_vpn);
 
+        // 流量发射协程: 1Hz 拉 SessionRegistry::peer_totals 做差算 per-peer bps,
+        // publish traffic_tick。修复"实时流量窗口不显示数据"+ ClientList 的
+        // 上下行始终为 0 的 bug —— 之前后端从未 publish 过 traffic_tick。
+        let core = self.clone();
+        let cancel = self.cancel.clone();
+        let h_traffic = tokio::spawn(async move {
+            super::traffic_emitter::run(core, cancel).await;
+        });
+        inner.handles.push(h_traffic);
+
         Ok(())
     }
 
@@ -207,13 +225,14 @@ impl ProxyCore {
 
     /// 返回给 UI 显示用的状态快照。
     pub async fn status(&self) -> ServerStatus {
-        let (running, uptime, vpn_on, vpn_iface) = {
+        let (running, uptime, vpn_on, vpn_iface, default_via) = {
             let inner = self.inner.lock().await;
             (
                 inner.started_at.is_some(),
                 inner.started_at.map(|t| t.elapsed().as_secs_f64()).unwrap_or(0.0),
                 inner.vpn_on,
                 inner.vpn_iface.clone(),
+                inner.default_route_via_vpn,
             )
         };
         let active_sessions = self.sessions.active_count().await;
@@ -228,6 +247,7 @@ impl ProxyCore {
             mdns_enabled: self.cfg.mdns_enabled,
             vpn_on,
             vpn_iface,
+            default_route_via_vpn: default_via,
             clients_online: passive + active_sessions,
             active_sessions,
         }
@@ -242,35 +262,37 @@ impl ProxyCore {
 
     /// 由 [`super::vpn_detect`] 周期检测协程调用，刷新 vpn 状态并广播事件。
     ///
-    /// 内部对 (vpn_on, vpn_iface) 二元组做去重：只有任一字段变化才会 publish
-    /// `vpn_state_changed` event，避免每 5s 都发抖动事件。Event 名与 payload
-    /// 字段（`available` / `iface`）严格对齐前端 `VpnStateChangedPayload`。
-    pub async fn update_vpn(&self, vpn_on: bool, vpn_iface: Option<String>) {
+    /// 内部对 (vpn_on, vpn_iface, default_route_via_vpn) 三元组做去重：任一字段
+    /// 变化才会 publish `vpn_state_changed` event，避免每 5s 都发抖动事件。
+    /// Event 名与 payload 字段(`available` / `iface` / `default_route_via_vpn`)
+    /// 严格对齐前端 `VpnStateChangedPayload`(server-app/ui/src/types/proxy.ts)。
+    pub async fn update_vpn(
+        &self,
+        vpn_on: bool,
+        vpn_iface: Option<String>,
+        default_route_via_vpn: bool,
+    ) {
         let mut inner = self.inner.lock().await;
-        if inner.vpn_on == vpn_on && inner.vpn_iface == vpn_iface {
+        if inner.vpn_on == vpn_on
+            && inner.vpn_iface == vpn_iface
+            && inner.default_route_via_vpn == default_route_via_vpn
+        {
             return;
         }
         inner.vpn_on = vpn_on;
         inner.vpn_iface = vpn_iface.clone();
+        inner.default_route_via_vpn = default_route_via_vpn;
         drop(inner);
         self.bus.publish(ServerEvent {
             kind: "vpn_state_changed".into(),
             payload: serde_json::json!({
                 "available": vpn_on,
                 "iface": vpn_iface,
+                "default_route_via_vpn": default_route_via_vpn,
             }),
             ts: epoch_secs(),
         });
     }
-}
-
-#[allow(dead_code)]
-fn epoch_secs() -> f64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
-        .unwrap_or(0.0)
 }
 
 #[cfg(test)]
@@ -317,9 +339,9 @@ mod tests {
     async fn vpn_snapshot_reflects_latest_update() {
         let core = ProxyCore::new(ProxyConfig::default());
         assert_eq!(core.vpn_snapshot().await, (false, None));
-        core.update_vpn(true, Some("utun5".into())).await;
+        core.update_vpn(true, Some("utun5".into()), false).await;
         assert_eq!(core.vpn_snapshot().await, (true, Some("utun5".into())));
-        core.update_vpn(false, None).await;
+        core.update_vpn(false, None, false).await;
         assert_eq!(core.vpn_snapshot().await, (false, None));
     }
 
@@ -327,20 +349,32 @@ mod tests {
     async fn update_vpn_publishes_event_only_on_change() {
         let core = ProxyCore::new(ProxyConfig::default());
         let mut rx = core.event_bus().subscribe();
-        core.update_vpn(true, Some("utun5".into())).await;
+        core.update_vpn(true, Some("utun5".into()), true).await;
         let evt = rx.recv().await.unwrap();
         assert_eq!(evt.kind, "vpn_state_changed");
         assert_eq!(evt.payload["available"], serde_json::Value::Bool(true));
         assert_eq!(evt.payload["iface"], serde_json::Value::String("utun5".into()));
+        assert_eq!(
+            evt.payload["default_route_via_vpn"],
+            serde_json::Value::Bool(true)
+        );
 
-        // 同 (on, iface) 二元组，不应重复 publish
-        core.update_vpn(true, Some("utun5".into())).await;
+        // 同三元组,不应重复 publish
+        core.update_vpn(true, Some("utun5".into()), true).await;
         let again = tokio::time::timeout(std::time::Duration::from_millis(50), rx.recv()).await;
         assert!(again.is_err(), "状态未变时不应再次 publish");
 
-        // iface 变化也算变更
-        core.update_vpn(true, Some("ppp0".into())).await;
+        // iface 变化算变更
+        core.update_vpn(true, Some("ppp0".into()), true).await;
         let evt = rx.recv().await.unwrap();
         assert_eq!(evt.payload["iface"], serde_json::Value::String("ppp0".into()));
+
+        // 仅 default_route_via_vpn 翻转也算变更 (split tunnel 切换场景)。
+        core.update_vpn(true, Some("ppp0".into()), false).await;
+        let evt = rx.recv().await.unwrap();
+        assert_eq!(
+            evt.payload["default_route_via_vpn"],
+            serde_json::Value::Bool(false)
+        );
     }
 }

@@ -22,6 +22,7 @@ pub mod pac;
 pub mod ports;
 pub mod relay;
 pub mod socks5_proto;
+pub mod time;
 pub mod types;
 
 pub use boot_error::{BootError, BootResult};

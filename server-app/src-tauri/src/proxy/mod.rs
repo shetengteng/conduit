@@ -22,6 +22,7 @@ pub mod http;
 pub mod mdns;
 pub mod session;
 pub mod socks5;
+pub mod traffic_emitter;
 pub mod vpn_detect;
 
 pub use config::ProxyConfig;

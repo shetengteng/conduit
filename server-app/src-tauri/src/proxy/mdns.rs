@@ -28,7 +28,52 @@ pub const SERVICE_VERSION: &str = env!("CARGO_PKG_VERSION");
 ///
 /// 也被 `control_api` / `core` / `http` 用来推断 PAC URL / 接入信息里展示的 host：
 /// 当用户没显式指定 `--pac-host` 且 bind 是 `0.0.0.0` 时，单一来源避免三处实现漂移。
+///
+/// 选择策略 (旧 Python 版用 ifconfig 子进程解析,等价 Rust 复现):
+/// 1. 优先取**默认路由出口接口**的 IPv4(若该接口是 Ethernet/Wifi 物理网卡且非 Tunnel),
+///    这与 client 实际"路由器看见我们的 IP"一致。
+/// 2. 否则遍历所有接口,挑第一张物理接口(`is_physical()` 真且非 loopback / 非 tunnel)
+///    的 RFC1918 私有 IPv4。覆盖默认路由走 VPN tunnel 但 LAN 仍可达的场景。
+/// 3. 兜底 `local_ip_address::local_ip()`(可能给到 VPN 接口 IP)。
+/// 4. 最终返回 `127.0.0.1`。
 pub fn detect_lan_ip() -> String {
+    use netdev::interface::types::InterfaceType;
+
+    // 1) 默认路由出口接口
+    if let Ok(iface) = netdev::get_default_interface() {
+        let is_lan_kind = matches!(
+            iface.if_type,
+            InterfaceType::Ethernet | InterfaceType::Wireless80211 | InterfaceType::GigabitEthernet
+        ) && !iface.is_loopback()
+            && !iface.is_tun();
+        if is_lan_kind {
+            if let Some(ipv4) = iface.ipv4.iter().find(|n| n.addr().is_private()) {
+                return ipv4.addr().to_string();
+            }
+            if let Some(ipv4) = iface.ipv4.first() {
+                return ipv4.addr().to_string();
+            }
+        }
+    }
+
+    // 2) 遍历所有接口找物理 LAN 私网 IPv4
+    for iface in netdev::get_interfaces() {
+        if iface.is_loopback() || iface.is_tun() {
+            continue;
+        }
+        let is_lan_kind = matches!(
+            iface.if_type,
+            InterfaceType::Ethernet | InterfaceType::Wireless80211 | InterfaceType::GigabitEthernet
+        );
+        if !is_lan_kind {
+            continue;
+        }
+        if let Some(ipv4) = iface.ipv4.iter().find(|n| n.addr().is_private()) {
+            return ipv4.addr().to_string();
+        }
+    }
+
+    // 3) 兜底
     match local_ip_address::local_ip() {
         Ok(ip) => ip.to_string(),
         Err(e) => {

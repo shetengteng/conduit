@@ -75,7 +75,7 @@ useEvents({
     proxyStore.applyVpnState({
       available: p.available,
       iface: p.iface,
-      default_route_via_vpn: false,
+      default_route_via_vpn: p.default_route_via_vpn ?? false,
     }),
 })
 
