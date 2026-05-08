@@ -22,7 +22,12 @@
 //!    protocol 的 configuration dict → set
 //!    [`kSCPropNetProxiesSOCKSEnable`] / [`kSCPropNetProxiesSOCKSProxy`] /
 //!    [`kSCPropNetProxiesSOCKSPort`] → SetConfiguration → CommitChanges +
-//!    ApplyChanges。
+//!    ApplyChanges。**每次 enable/disable 都重新 create 一个 Preferences
+//!    ref,函数返回时 RAII 自动 release**。早期版本曾把 ref 进程级缓存
+//!    "create once, use forever",但实测多次 commit 后 configd 持有的
+//!    generation 会过期,导致 `SCPreferencesCommitChanges` 反复失败、
+//!    系统代理回滚到 disabled。重建 ref 跟 configd 多一次 80–200ms 握手,
+//!    但 connect/disconnect 是低频路径,可接受。
 //!
 //! 3. **失败处理**:任何一步失败直接返 Err,**不再 fallback osascript**。
 //!    上层 `core.rs::step_switch_endpoint` 会发 `system_proxy_warning` event
@@ -204,9 +209,13 @@ fn reset_auth() {
 
 /// 包装 SCPreferencesRef 的 RAII handle,Drop 时 CFRelease。
 ///
-/// 不再 Drop 时调 `SCPreferencesSynchronize`(语义是"丢弃未提交修改并重读
-/// 盘",commit 之后再 sync 是反作用,会给 configd 内核守护进程串行队列额
-/// 外加压)。
+/// 之前的实现把 `SCPreferencesRef` 进程级缓存"create once, use forever",
+/// 但实测 disconnect→reconnect 几次后 `SCPreferencesCommitChanges` 会反复
+/// 失败(详见 `~/Library/Logs/Conduit/conduit-client.log`),原因是 commit
+/// 之后 ref 内部持有的 generation token 已过期,configd 拒绝再次 commit。
+/// 改为**每次 enable/disable 都新建 ref,函数返回时 RAII 自动 release**,
+/// 即 Apple 文档对 SCPreferences 的标准用法。开销是每次操作多一次跟 configd
+/// 的握手(80-200ms),connect/disconnect 是低频操作,完全可接受。
 struct PrefsHolder {
     raw: SCPreferencesRef,
 }
@@ -224,28 +233,13 @@ impl Drop for PrefsHolder {
     }
 }
 
-/// 进程级 SCPreferences 缓存。**关键**:Apple 官方 sample code 推荐
-/// "create once, use forever" 模式。每次 connect/disconnect 都新建一个
-/// `SCPreferencesRef` 是反模式,会导致:
+/// 新建一个 `SCPreferencesRef`(带授权)并用 RAII holder 包起来,函数返回
+/// 时 holder Drop 自动 `CFRelease`。**不**做进程级缓存。
 ///
-/// - 每次 create 都跟 configd 内核守护进程做一次握手(慢 80-200ms)
-/// - commit_and_apply 之后 Drop CFRelease 跟新 create 形成 race(几次
-///   disconnect/connect 后 configd 内部状态不一致 → SC API hang)
-///
-/// 进程内只创建一次,多次复用同一个 ref,这是 Apple 文档的"标准用法"。
-static PREFS_CACHE: OnceLock<Mutex<Option<PrefsHolder>>> = OnceLock::new();
-
-/// 获取或创建进程级 SCPreferencesRef。首次调用会做一次性的 create(并触
-/// 发底层 configd 验证 AuthorizationRef);之后复用同一个 ref。
-fn get_or_create_prefs(auth: AuthorizationRef) -> Result<SCPreferencesRef, String> {
-    let cell = PREFS_CACHE.get_or_init(|| Mutex::new(None));
-    let mut guard = cell.lock().map_err(|e| format!("prefs cache poisoned: {e}"))?;
-    if let Some(holder) = guard.as_ref() {
-        if !holder.raw.is_null() {
-            return Ok(holder.raw);
-        }
-    }
-
+/// `auth` 仍由 [`get_or_create_auth`] 提供(Authorization token 跨多次
+/// SC 操作复用是安全的,Apple 文档允许;真正不该跨多次操作复用的是
+/// `SCPreferencesRef` 本身)。
+fn create_prefs(auth: AuthorizationRef) -> Result<PrefsHolder, String> {
     let name = CFString::new("com.terrellshe.conduit.client.system_proxy");
     let raw = unsafe {
         SCPreferencesCreateWithAuthorization(
@@ -258,8 +252,7 @@ fn get_or_create_prefs(auth: AuthorizationRef) -> Result<SCPreferencesRef, Strin
     if raw.is_null() {
         return Err("SCPreferencesCreateWithAuthorization returned NULL".into());
     }
-    *guard = Some(PrefsHolder { raw });
-    Ok(raw)
+    Ok(PrefsHolder { raw })
 }
 
 // ---------------------------------------------------------------------------
@@ -287,7 +280,8 @@ pub fn enable_via_sc(
     let auth = get_or_create_auth()?;
     let t_auth = t0.elapsed();
     diag_log(&format!("enable_via_sc auth_done in {t_auth:?}"));
-    let prefs = get_or_create_prefs(auth)?;
+    let prefs_holder = create_prefs(auth)?;
+    let prefs = prefs_holder.raw;
     let t_create = t0.elapsed();
     diag_log(&format!(
         "enable_via_sc prefs_done in {:?} (cumul {t_create:?})",
@@ -333,7 +327,8 @@ pub fn disable_via_sc(target_service_names: &[String]) -> Result<usize, String> 
     let auth = get_or_create_auth()?;
     let t_auth = t0.elapsed();
     diag_log(&format!("disable_via_sc auth_done in {t_auth:?}"));
-    let prefs = get_or_create_prefs(auth)?;
+    let prefs_holder = create_prefs(auth)?;
+    let prefs = prefs_holder.raw;
     let t_create = t0.elapsed();
     diag_log(&format!(
         "disable_via_sc prefs_done in {:?} (cumul {t_create:?})",
