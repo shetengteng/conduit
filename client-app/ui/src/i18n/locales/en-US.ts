@@ -83,6 +83,11 @@ export default {
       "Configure {code} in your browser/app manually, otherwise traffic won't go through Conduit.",
     bodyNoPort:
       "Configure SOCKS5 in your browser/app manually, otherwise traffic won't go through Conduit.",
+    titleOverridden: "System proxy hijacked externally · ",
+    bodyOverriddenWithPort:
+      "Switch succeeded but was immediately overwritten by an enterprise proxy daemon (Zoom/Okta/MDM). Configure {code} in your browser/app to bypass.",
+    bodyOverriddenNoPort:
+      "Switch succeeded but was immediately overwritten by an enterprise proxy daemon (Zoom/Okta/MDM). Configure SOCKS5 in your browser/app to bypass.",
     copy: "Copy config",
     detail: "Details",
     dismissTitle: "Hide for this session",

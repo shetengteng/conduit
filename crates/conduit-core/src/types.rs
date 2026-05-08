@@ -226,6 +226,11 @@ pub struct ConnectionSnapshot {
     pub server: Option<ConnectedServerSummary>,
     pub connected_since: Option<f64>,
     pub system_proxy_active: bool,
+    /// 我们尝试切换系统代理后回查发现 SOCKS 没真正生效（被外部代理 daemon
+    /// 覆盖）。`active=true && overridden=true` 是触发 UI "代理被劫持" 横幅
+    /// 的唯一信号；其它组合都视作正常。默认 false 兼容旧 client 反序列化。
+    #[serde(default)]
+    pub system_proxy_overridden: bool,
     pub heartbeat: Option<ConnectionHeartbeat>,
     pub last_error: Option<String>,
 }

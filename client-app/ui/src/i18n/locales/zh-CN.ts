@@ -77,6 +77,11 @@ export default {
     title: "系统代理未自动切换 · ",
     bodyWithPort: "请手动在浏览器/App 配置 {code},否则浏览不会走 Conduit。",
     bodyNoPort: "请手动在浏览器/App 配置 SOCKS5,否则浏览不会走 Conduit。",
+    titleOverridden: "系统代理被外部劫持 · ",
+    bodyOverriddenWithPort:
+      "切换成功后被企业代理工具(Zoom/Okta/MDM 等)立即覆盖。请手动在浏览器/App 配置 {code} 绕过。",
+    bodyOverriddenNoPort:
+      "切换成功后被企业代理工具(Zoom/Okta/MDM 等)立即覆盖。请手动在浏览器/App 配置 SOCKS5 绕过。",
     copy: "复制配置",
     detail: "查看详情",
     dismissTitle: "本会话隐藏",

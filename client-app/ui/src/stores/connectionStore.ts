@@ -255,6 +255,7 @@ export const connectionStore = {
   connectedServer: computed(() => state.snapshot?.server ?? null),
   connectedSince: computed(() => state.snapshot?.connected_since ?? null),
   systemProxyActive: computed(() => Boolean(state.snapshot?.system_proxy_active)),
+  systemProxyOverridden: computed(() => Boolean(state.snapshot?.system_proxy_overridden)),
   heartbeatTone: computed(() => state.snapshot?.heartbeat?.tone ?? null),
   pendingServerId: computed(() => state.pendingServerId),
   lastError: computed(() => state.lastError),

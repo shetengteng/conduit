@@ -136,6 +136,43 @@ impl MacSystemProxy {
         Err("system_proxy not supported on this platform".into())
     }
 
+    /// 回查 macOS 系统代理是否真正指向我们 `host:port`(用 `networksetup
+    /// -getsocksfirewallproxy` 而不是直接读 plist,因为 plist 路径需要用户
+    /// 知道 service UUID)。
+    ///
+    /// **用途**:`enable_via_sc` 调 SC commit 成功之后,配合本函数再做一次
+    /// "是否真的生效"的 sanity check —— 实测某些环境(企业代理 daemon、
+    /// VPN 客户端、MDM)会监听 SCPreferences 变化并把 `SOCKSEnable` 立即
+    /// 改回 0。这种被覆盖的情况 `enable_via_sc` 自身看不到,只有事后回查
+    /// 才能发现,UI 据此切换提示文案。
+    ///
+    /// 返回:
+    /// - `Ok(true)`:所有目标 service 的 SOCKS 都指向我们 + enabled=1
+    /// - `Ok(false)`:**至少有一个目标 service 上 SOCKS 没生效**(被覆盖、
+    ///   或网卡刚插上还没拿到配置)
+    /// - `Err(_)`:连读都失败(networksetup 异常),保守报告 false 即可
+    #[cfg(target_os = "macos")]
+    pub fn verify_active(&self, host: &str, port: u16) -> Result<bool, String> {
+        let all = list_services()?;
+        if all.is_empty() {
+            return Ok(false);
+        }
+        let svcs = pick_target_services(&all);
+        if svcs.is_empty() {
+            return Ok(false);
+        }
+        Ok(svcs.iter().all(|svc| {
+            read_socks_state(svc)
+                .map(|s| s.points_to(host, port))
+                .unwrap_or(false)
+        }))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    pub fn verify_active(&self, _host: &str, _port: u16) -> Result<bool, String> {
+        Ok(false)
+    }
+
     /// 关闭"目标网卡"的 SOCKS 代理。
     ///
     /// 与 enable 对称:只对 `pick_target_services` 列表操作,避免对从未被 enable 的虚拟

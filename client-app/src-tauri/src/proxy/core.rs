@@ -100,6 +100,12 @@ struct Inner {
     heartbeat: Mutex<Option<Arc<Heartbeat>>>,
     /// 系统代理是否被本进程接管（disconnect 时回滚 → disable）。
     system_proxy_active: Mutex<bool>,
+    /// `enable` 调 SC commit 成功之后回查发现 SOCKS 还不是指向我们 ——
+    /// 通常是企业代理 daemon / MDM / VPN 客户端在监听 SCPreferences 变化
+    /// 并立刻把 SOCKSEnable 改回 0。`active=true + overridden=true` 是
+    /// "我们以为切换成功了但实际没生效"这种唯一信号,UI 据此弹专用
+    /// 横幅提示用户手动配 SOCKS5。
+    system_proxy_overridden: Mutex<bool>,
     system_proxy: MacSystemProxy,
     /// 5 步状态机：当前连接生命周期。
     connection: Mutex<ConnectionRecord>,
@@ -153,6 +159,7 @@ impl ClientCore {
                 traffic_meter,
                 heartbeat: Mutex::new(None),
                 system_proxy_active: Mutex::new(false),
+                system_proxy_overridden: Mutex::new(false),
                 system_proxy: MacSystemProxy,
                 connection: Mutex::new(ConnectionRecord::default()),
                 connect_lock: Mutex::new(()),
@@ -271,6 +278,7 @@ impl ClientCore {
             server: rec.server.as_ref().map(ConnectedServerSummary::from),
             connected_since: rec.connected_since,
             system_proxy_active: *self.inner.system_proxy_active.lock().await,
+            system_proxy_overridden: *self.inner.system_proxy_overridden.lock().await,
             heartbeat: hb_state,
             last_error: rec.last_error,
         }
@@ -695,8 +703,9 @@ impl ClientCore {
         let actual_port = self.inner.local_proxy.actual_port().await;
         let host = self.inner.config.bind_host.clone();
         diag_log("try_enable_system_proxy SPAWN_BLOCKING");
+        let host_for_enable = host.clone();
         let result = tokio::task::spawn_blocking(move || {
-            super::system_proxy::MacSystemProxy.enable(&host, actual_port)
+            super::system_proxy::MacSystemProxy.enable(&host_for_enable, actual_port)
         })
         .await
         .map_err(|e| format!("system_proxy enable task panic: {e}"))?;
@@ -707,6 +716,37 @@ impl ClientCore {
             self.inner.config.bind_host
         );
         *self.inner.system_proxy_active.lock().await = true;
+
+        // 回查:enable_via_sc 的 SC commit OK 不代表 SOCKSEnable=1 真的留住,
+        // 企业代理 daemon (Zoom dev / Okta / MDM 等) 会监听 SCPreferences 变更
+        // 并把 SOCKSEnable 立刻改回 0。这里给它 ~250ms 完成它的写,然后回查。
+        // 任何 verify 错误都不影响 connect 主流程,只用于设置 UI 提示标记。
+        let host_for_verify = host;
+        let verified = tokio::task::spawn_blocking(move || {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+            super::system_proxy::MacSystemProxy.verify_active(&host_for_verify, actual_port)
+        })
+        .await;
+        let overridden = match verified {
+            Ok(Ok(true)) => false,
+            Ok(Ok(false)) => {
+                warn!(
+                    "[client_core] system_proxy verify: SOCKSEnable not active after commit \
+                     — likely overridden by an external proxy daemon (zoomdev / okta / MDM)"
+                );
+                diag_log("try_enable_system_proxy VERIFY_FAILED (overridden externally)");
+                true
+            }
+            Ok(Err(e)) => {
+                warn!("[client_core] system_proxy verify failed: {e}");
+                false
+            }
+            Err(e) => {
+                warn!("[client_core] system_proxy verify task panic: {e}");
+                false
+            }
+        };
+        *self.inner.system_proxy_overridden.lock().await = overridden;
         Ok(())
     }
 
@@ -715,6 +755,7 @@ impl ClientCore {
         let mut active = self.inner.system_proxy_active.lock().await;
         if !*active {
             diag_log("rollback_system_proxy SKIP (not active)");
+            *self.inner.system_proxy_overridden.lock().await = false;
             return;
         }
         diag_log("rollback_system_proxy SPAWN_BLOCKING");
@@ -729,6 +770,7 @@ impl ClientCore {
             Err(e) => warn!("[client_core] system_proxy disable task panic: {e}"),
         }
         *active = false;
+        *self.inner.system_proxy_overridden.lock().await = false;
     }
 
     /// （供 control_api 用）枚举 mDNS 发现到的 server 列表。

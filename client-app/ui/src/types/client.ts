@@ -157,6 +157,13 @@ export interface ConnectionSnapshot {
   server: ConnectedServerSummary | null;
   connected_since: number | null;
   system_proxy_active: boolean;
+  /**
+   * Backend 调 SC commit 成功后回查发现 SOCKSEnable 被改回 0(被 zoomdev /
+   * Okta / MDM 等监听 SCPreferences 变化的 daemon 覆盖)。
+   * 仅在 `system_proxy_active=true` 时有意义;两者都为 true 触发 UI
+   * "代理被外部劫持" 横幅。旧 backend 缺失字段时 fallback 为 false。
+   */
+  system_proxy_overridden?: boolean;
   heartbeat: {
     tone: HeartbeatTone;
     consecutive_failures: number;
